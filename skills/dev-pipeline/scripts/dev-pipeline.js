@@ -1112,6 +1112,33 @@ function cmdRunNextSafe(runFolder) {
   if (!runFolder) fail('Usage: run_next_safe <run_folder>');
   runFolder = safePath(runFolder);
 
+  // Safety guard: run folder must exist
+  const statusPath = path.join(runFolder, 'status.json');
+  if (!fs.existsSync(runFolder) || !fs.existsSync(statusPath)) {
+    ok({
+      action: 'error',
+      current_stage: null,
+      error: `Run folder not found or missing status.json: ${runFolder}`,
+      trace: ['run folder does not exist or has no status.json'],
+    });
+    return;
+  }
+
+  // Safety guard: forbid directory creation inside run_next_safe
+  const origMkdirSync = fs.mkdirSync;
+  fs.mkdirSync = function guardedMkdirSync() {
+    fs.mkdirSync = origMkdirSync; // restore before throwing
+    throw new Error('run_next_safe: directory creation is forbidden');
+  };
+
+  try {
+    return _cmdRunNextSafeInner(runFolder);
+  } finally {
+    fs.mkdirSync = origMkdirSync;
+  }
+}
+
+function _cmdRunNextSafeInner(runFolder) {
   const status = readStatus(runFolder);
   const trace = [];
 

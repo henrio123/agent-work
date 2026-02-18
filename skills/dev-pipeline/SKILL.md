@@ -145,7 +145,45 @@ Safe autopilot: reads current state, performs one idempotent step, and returns a
 | `needs_artifacts` | Artifacts missing or invalid, lists `missing_artifacts` / `invalid_artifacts` |
 | `advanced_and_generated` | Gates passed, advanced to next stage and generated role pack |
 
-Each response includes a `trace` array for audit/debugging.
+**Stable contract fields** (always present in every response):
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `ok` | boolean | Always `true` for run_next_safe responses |
+| `action` | string | One of the action values above, or `error` |
+| `trace` | string[] | Decision steps taken (for audit/debugging) |
+
+Additional fields vary by action (e.g. `required_inputs` for blocked, `missing_artifacts` for needs_artifacts). The `trace` array contents are informational and may change — do not parse trace strings programmatically.
+
+**Example: blocked response**
+
+```json
+{
+  "ok": true,
+  "action": "blocked",
+  "current_stage": "blocked",
+  "blocked_reason": "Need API credentials",
+  "required_inputs": [
+    { "id": "inp-abc", "prompt": "Which API key to use?" }
+  ],
+  "trace": ["blocked: Need API credentials", "pending inputs: 1"]
+}
+```
+
+**Example: needs_artifacts response**
+
+```json
+{
+  "ok": true,
+  "action": "needs_artifacts",
+  "current_stage": "dev-ready",
+  "role": "Dev",
+  "missing_artifacts": ["40-dev-patch.diff", "41-dev-notes.json"],
+  "invalid_artifacts": [],
+  "required_artifacts": ["40-dev-patch.diff", "41-dev-notes.json"],
+  "trace": ["stage: dev-ready, role: Dev", "task file exists: 33-dev-claude-task.txt", "gates fail: 2 missing, 0 invalid"]
+}
+```
 
 #### scaffold_artifacts
 
@@ -240,10 +278,18 @@ QA verification should use **only read-only commands** that do not create runs o
 
 ## Testing
 
+Run all suites at once:
+
 ```bash
-node skills/dev-pipeline/tests/test-scaffold.js        # scaffold + schema tests
-node skills/dev-pipeline/tests/test-state-machine.js   # state machine regression
-node skills/dev-pipeline/tests/test-run-next-safe.js   # run_next_safe autopilot tests
+./tools/test-all.sh
+```
+
+Or individually:
+
+```bash
+node skills/dev-pipeline/tests/test-scaffold.js        # scaffold + schema tests (35 tests)
+node skills/dev-pipeline/tests/test-state-machine.js   # state machine regression (28 tests)
+node skills/dev-pipeline/tests/test-run-next-safe.js   # run_next_safe + safety contract (13 tests)
 ```
 
 ## Security
