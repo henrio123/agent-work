@@ -353,6 +353,101 @@ function cmdStatus(runFolder) {
 }
 
 // ---------------------------------------------------------------------------
+// Stale policy
+// ---------------------------------------------------------------------------
+const STALE_THRESHOLDS = {
+  'intake': 48 * 60 * 60 * 1000,              // 48 hours
+  'task-pack-generated': 7 * 24 * 60 * 60 * 1000, // 7 days
+  'blocked': 7 * 24 * 60 * 60 * 1000,             // 7 days
+};
+
+function getStaleRuns() {
+  const runsDir = safePath('runs');
+  if (!fs.existsSync(runsDir)) return [];
+
+  const entries = fs.readdirSync(runsDir, { withFileTypes: true })
+    .filter((e) => e.isDirectory());
+
+  const nowMs = Date.now();
+  const stale = [];
+
+  for (const entry of entries) {
+    const runFolder = path.join(runsDir, entry.name);
+    const statusPath = path.join(runFolder, 'status.json');
+
+    if (!fs.existsSync(statusPath)) {
+      stale.push({
+        folder: runFolder,
+        ticket_id: null,
+        current_stage: null,
+        updated_at: null,
+        reason: 'status.json missing or unreadable',
+      });
+      continue;
+    }
+
+    try {
+      const s = normalizeStatus(readJSON(statusPath));
+      const threshold = STALE_THRESHOLDS[s.current_stage];
+      if (!threshold) continue;
+
+      const updatedMs = new Date(s.updated_at).getTime();
+      if (nowMs - updatedMs > threshold) {
+        const daysAgo = Math.floor((nowMs - updatedMs) / (24 * 60 * 60 * 1000));
+        stale.push({
+          folder: runFolder,
+          ticket_id: s.ticket_id,
+          current_stage: s.current_stage,
+          updated_at: s.updated_at,
+          reason: `${s.current_stage} for ${daysAgo} days`,
+        });
+      }
+    } catch {
+      stale.push({
+        folder: runFolder,
+        ticket_id: null,
+        current_stage: null,
+        updated_at: null,
+        reason: 'status.json missing or unreadable',
+      });
+    }
+  }
+
+  return stale;
+}
+
+function cmdStaleList() {
+  const stale = getStaleRuns();
+  ok({ stale, count: stale.length });
+}
+
+function cmdStaleDelete(args) {
+  if (!args.includes('--confirm')) {
+    fail('Safety: pass --confirm to actually delete stale runs. Run stale_list first to review.');
+  }
+
+  const stale = getStaleRuns();
+  if (stale.length === 0) {
+    ok({ deleted: [], count: 0 });
+    return;
+  }
+
+  const deleted = [];
+  for (const run of stale) {
+    const folder = safePath(run.folder);
+    // Extra guard: must be inside runs/
+    const runsDir = safePath('runs');
+    if (!folder.startsWith(runsDir + path.sep)) {
+      continue;
+    }
+    fs.rmSync(folder, { recursive: true, force: true });
+    deleted.push({ folder: run.folder, ticket_id: run.ticket_id, reason: run.reason });
+  }
+
+  ok({ deleted, count: deleted.length });
+}
+
+// ---------------------------------------------------------------------------
 // CLI dispatch
 // ---------------------------------------------------------------------------
 const [command, ...args] = process.argv.slice(2);
@@ -377,8 +472,14 @@ try {
     case 'status':
       cmdStatus(args[0]);
       break;
+    case 'stale_list':
+      cmdStaleList();
+      break;
+    case 'stale_delete':
+      cmdStaleDelete(args);
+      break;
     default:
-      fail(`Unknown command: ${command || '(none)'}. Available: create_run, generate_task_pack, block, respond, list, status`);
+      fail(`Unknown command: ${command || '(none)'}. Available: create_run, generate_task_pack, block, respond, list, status, stale_list, stale_delete`);
   }
 } catch (err) {
   fail(err.message);

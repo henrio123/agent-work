@@ -107,6 +107,38 @@ node {baseDir}/scripts/dev-pipeline.js status <run_folder>
 
 **Output:** `{ "ok": true, "run": { ... } }`
 
+### stale_list
+
+List runs considered stale by the cleanup policy.
+
+```bash
+node {baseDir}/scripts/dev-pipeline.js stale_list
+```
+
+**Stale policy:**
+- `intake` with `updated_at` older than 48 hours
+- `task-pack-generated` with `updated_at` older than 7 days
+- `blocked` with `updated_at` older than 7 days
+- Run folder exists but `status.json` is missing or unreadable
+
+**Output:** `{ "ok": true, "stale": [{ "folder": "...", "ticket_id": "...", "current_stage": "...", "updated_at": "...", "reason": "..." }], "count": N }`
+
+### stale_delete
+
+Delete stale runs. Requires `--confirm` flag for safety.
+
+```bash
+# Dry run (will fail with explanation)
+node {baseDir}/scripts/dev-pipeline.js stale_delete
+
+# Actually delete
+node {baseDir}/scripts/dev-pipeline.js stale_delete --confirm
+```
+
+Uses the same stale policy as `stale_list`. Only deletes folders inside `runs/`.
+
+**Output:** `{ "ok": true, "deleted": [{ "folder": "...", "ticket_id": "...", "reason": "..." }], "count": N }`
+
 ## Dashboard
 
 Launch a local web dashboard to view all runs:
