@@ -209,14 +209,26 @@ The goal: Be helpful without being annoying. Check in a few times a day, do usef
 
 ## Ticket Workflow
 
-When starting a new ticket, always use dev-pipeline as the first step:
+When starting a new ticket, always use dev-pipeline:
 
 1. Create a ticket file in `tickets/<ticket_id>.md` with frontmatter (`ticket_id`, `title`, `project`)
 2. `./tools/dp.sh create_run_from_ticket <ticket_id>`
 3. `./tools/dp.sh generate_task_pack <run_folder>`
-4. Work from `<run_folder>/30-dev-claude-task.txt`
-5. If blocked, use `./tools/dp.sh block` and `./tools/dp.sh respond` to track inputs
-6. Use `./tools/dp.sh list` and `./tools/dp.sh status` to check progress
+4. `./tools/run-next.sh <run_folder>` — advances to the next stage and shows what to do
+5. Create the required artifacts, then record each: `./tools/dp.sh record_artifact <run_folder> <path>`
+6. Repeat step 4 until the run reaches `done`
+
+### Role progression
+
+Each run progresses through: `intake → task-pack-generated → pm-ready → arch-ready → dev-ready → qa-ready → review → done`
+
+- **PM** produces `10-pm-brief.json` — scope, acceptance criteria, non-goals
+- **Architect** produces `20-arch-design.json` — components, file changes, constraints
+- **Dev** produces `40-dev-patch.diff` + `41-dev-notes.json` — implementation
+- **QA** produces `50-qa-report.json` — test results
+- **Review** produces `60-review-report.json` — policy compliance check
+
+Artifacts are validated against schemas before stages advance. See `tools/agents.json` for role-to-model mapping.
 
 ## Delegation Rule
 

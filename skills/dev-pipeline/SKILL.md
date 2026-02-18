@@ -81,13 +81,13 @@ Determine the next stage, role, and required artifacts.
 
 #### generate_role_pack
 
-Generate a role-specific task pack and advance to the next stage.
+Generate a role-specific task pack for the **current** stage. Does NOT advance stages.
 
 ```bash
 ./tools/dp.sh generate_role_pack <run_folder>
 ```
 
-Creates the role's task file (e.g. `31-pm-claude-task.txt`) and updates status.
+Creates the role's task file (e.g. `31-pm-claude-task.txt`) for the current stage only. To advance, use `advance --confirm` or `orchestrate_one`.
 
 #### record_artifact
 

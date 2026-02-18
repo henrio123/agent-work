@@ -742,71 +742,41 @@ function cmdGenerateRolePack(runFolder) {
   runFolder = safePath(runFolder);
 
   const status = readStatus(runFolder);
-  const info = getNextStageInfo(runFolder, status);
 
-  if (!info.next_stage || info.next_stage === status.current_stage) {
-    // Still in current stage — generate task for current role
-    const config = STAGE_CONFIG[status.current_stage];
-    if (!config) fail(`No role pack available for stage: ${status.current_stage}`);
-
-    const intake = readJSON(path.join(runFolder, '00-intake.json'));
-    const content = renderTemplate(config.template, {
-      ticket_id: intake.ticket_id,
-      title: intake.title,
-      project: intake.project || intake.project_name,
-      run_folder: runFolder,
-    });
-
-    const taskPath = path.join(runFolder, config.taskFile);
-    fs.writeFileSync(taskPath, content, 'utf8');
-    ok({ role: config.role, task_file: config.taskFile, stage: status.current_stage });
-    return;
+  // generate_role_pack ONLY generates the task file for the current stage.
+  // It does NOT advance stages. Use orchestrate_one or advance --confirm for that.
+  const config = STAGE_CONFIG[status.current_stage];
+  if (!config) {
+    if (status.current_stage === 'task-pack-generated') {
+      fail('Stage is task-pack-generated. Use orchestrate_one or advance --confirm to move to pm-ready first.');
+    }
+    if (status.current_stage === 'done') {
+      fail('Run is complete, no more role packs to generate.');
+    }
+    fail(`No role pack available for stage: ${status.current_stage}`);
   }
-
-  // Advance to next stage and generate its role pack
-  const nextStage = info.next_stage;
-  const nextConfig = STAGE_CONFIG[nextStage];
-  if (!nextConfig) {
-    if (nextStage === 'done') fail('Run is complete, no more role packs to generate');
-    fail(`No role config for stage: ${nextStage}`);
-  }
-
-  const currentTime = now();
-  const currentEntry = status.stage_history.find(
-    (e) => e.stage === status.current_stage && !e.finished_at
-  );
-  if (currentEntry) currentEntry.finished_at = currentTime;
-
-  status.current_stage = nextStage;
-  status.stage_history.push({
-    stage: nextStage,
-    started_at: currentTime,
-    finished_at: null,
-    artifact_paths: [],
-    role: nextConfig.role,
-  });
 
   const intake = readJSON(path.join(runFolder, '00-intake.json'));
-  const content = renderTemplate(nextConfig.template, {
+  const content = renderTemplate(config.template, {
     ticket_id: intake.ticket_id,
     title: intake.title,
     project: intake.project || intake.project_name,
     run_folder: runFolder,
   });
 
-  const taskPath = path.join(runFolder, nextConfig.taskFile);
+  const taskPath = path.join(runFolder, config.taskFile);
   fs.writeFileSync(taskPath, content, 'utf8');
 
   status.next_actions = [
-    { label: `${nextConfig.role}: complete work`, command: `Follow ${nextConfig.taskFile}` },
-    ...nextConfig.requiredArtifacts.map((a) => ({
+    { label: `${config.role}: complete work`, command: `Follow ${config.taskFile}` },
+    ...config.requiredArtifacts.map((a) => ({
       label: `Record artifact: ${a}`,
       command: `./tools/dp.sh record_artifact ${runFolder} ${path.join(runFolder, a)}`,
     })),
   ];
   writeStatus(runFolder, status);
 
-  ok({ role: nextConfig.role, task_file: nextConfig.taskFile, stage: nextStage });
+  ok({ role: config.role, task_file: config.taskFile, stage: status.current_stage });
 }
 
 function cmdRecordArtifact(runFolder, artifactPath) {

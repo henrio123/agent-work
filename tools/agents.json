@@ -1,0 +1,30 @@
+{
+  "description": "Role-to-model mapping for dev-pipeline multi-role orchestration. Used by run-next.sh and documentation; the orchestrator reads this to know which model handles each role.",
+  "roles": {
+    "PM": {
+      "model": "claude-sonnet-4-6",
+      "description": "Product Manager — writes PM briefs, defines scope and acceptance criteria",
+      "constraints": ["Cannot propose code changes"]
+    },
+    "Architect": {
+      "model": "claude-sonnet-4-6",
+      "description": "Architect — designs components, file changes, constraints, risks",
+      "constraints": ["Cannot write implementation code"]
+    },
+    "Dev": {
+      "model": "claude-sonnet-4-6",
+      "description": "Developer — implements code, writes patches and dev notes",
+      "constraints": ["Cannot change scope or acceptance criteria"]
+    },
+    "QA": {
+      "model": "claude-sonnet-4-6",
+      "description": "QA — tests implementation, writes test report",
+      "constraints": ["Cannot change product decisions"]
+    },
+    "Review": {
+      "model": "claude-sonnet-4-6",
+      "description": "Reviewer — checks policy compliance, stage gating, diffs",
+      "constraints": ["Policy enforcement only"]
+    }
+  }
+}

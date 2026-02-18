@@ -46,6 +46,35 @@ Ask how they want to reach you:
 
 Guide them through whichever they pick.
 
+## Dev Pipeline Quickstart
+
+The workspace includes a multi-role orchestration pipeline. To run a ticket through it:
+
+```bash
+# Create ticket file
+cat > tickets/MY-01.md << 'EOF'
+---
+ticket_id: MY-01
+title: My first ticket
+project: agent-work
+---
+Description of what needs to be done.
+EOF
+
+# Create run and generate task pack
+./tools/dp.sh create_run_from_ticket MY-01
+./tools/dp.sh generate_task_pack <run_folder>
+
+# Advance through roles (PM → Architect → Dev → QA → Review)
+./tools/run-next.sh <run_folder>
+
+# Check dashboard
+./tools/dashboard-start.sh
+open http://localhost:18790
+```
+
+See `skills/dev-pipeline/SKILL.md` for full command reference.
+
 ## When You're Done
 
 Delete this file. You don't need a bootstrap script anymore — you're you now.
