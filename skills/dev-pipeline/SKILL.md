@@ -124,6 +124,29 @@ Idempotent single-step orchestrator. Determines and executes the next safe actio
 ./tools/orchestrate-next.sh <run_folder>
 ```
 
+#### run_next_safe
+
+Safe autopilot: reads current state, performs one idempotent step, and returns a machine-readable decision trace. Never creates runs, never overwrites artifacts, never advances without gates passing.
+
+```bash
+./tools/dp.sh run_next_safe <run_folder>
+# or
+./tools/run-next-safe.sh <run_folder>
+```
+
+**Possible actions returned:**
+
+| action | Meaning |
+|--------|---------|
+| `none` | Stage is `done` — nothing to do |
+| `blocked` | Run is blocked, lists pending `required_inputs` |
+| `needs_task_pack` | Stage is `intake`, call `generate_task_pack` first |
+| `generated_role_pack` | Task file was missing, generated it (no advance) |
+| `needs_artifacts` | Artifacts missing or invalid, lists `missing_artifacts` / `invalid_artifacts` |
+| `advanced_and_generated` | Gates passed, advanced to next stage and generated role pack |
+
+Each response includes a `trace` array for audit/debugging.
+
 #### scaffold_artifacts
 
 Create minimal schema-valid JSON files for the current stage's required artifacts. Handles `$ref`, `oneOf`/`anyOf`/`allOf`, `format` (date-time, uuid, uri), `minLength`, `minItems`, `default`, and union types. Skips `.diff` files and never overwrites existing artifacts.
@@ -220,6 +243,7 @@ QA verification should use **only read-only commands** that do not create runs o
 ```bash
 node skills/dev-pipeline/tests/test-scaffold.js        # scaffold + schema tests
 node skills/dev-pipeline/tests/test-state-machine.js   # state machine regression
+node skills/dev-pipeline/tests/test-run-next-safe.js   # run_next_safe autopilot tests
 ```
 
 ## Security

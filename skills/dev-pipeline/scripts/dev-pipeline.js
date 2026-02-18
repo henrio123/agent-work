@@ -1106,6 +1106,130 @@ function cmdOrchestrateOne(runFolder) {
 }
 
 // ---------------------------------------------------------------------------
+// run_next_safe: single safe autopilot step with decision trace
+// ---------------------------------------------------------------------------
+function cmdRunNextSafe(runFolder) {
+  if (!runFolder) fail('Usage: run_next_safe <run_folder>');
+  runFolder = safePath(runFolder);
+
+  const status = readStatus(runFolder);
+  const trace = [];
+
+  // 1. Done — nothing to do
+  if (status.current_stage === 'done') {
+    trace.push('stage is done');
+    ok({ action: 'none', current_stage: 'done', trace });
+    return;
+  }
+
+  // 2. Blocked — report pending inputs
+  if (status.blocked) {
+    const pending = status.required_user_input.filter((i) => i.status === 'pending');
+    trace.push(`blocked: ${status.blocked_reason || 'unknown'}`);
+    trace.push(`pending inputs: ${pending.length}`);
+    ok({
+      action: 'blocked',
+      current_stage: status.current_stage,
+      blocked_reason: status.blocked_reason,
+      required_inputs: pending.map((i) => ({ id: i.id, prompt: i.prompt })),
+      trace,
+    });
+    return;
+  }
+
+  // 3. Intake — needs task pack first
+  if (status.current_stage === 'intake') {
+    trace.push('stage is intake, needs generate_task_pack');
+    ok({
+      action: 'needs_task_pack',
+      current_stage: 'intake',
+      next_command: `./tools/dp.sh generate_task_pack ${runFolder}`,
+      trace,
+    });
+    return;
+  }
+
+  // 4. task-pack-generated — needs orchestrate_one to advance to pm-ready
+  if (status.current_stage === 'task-pack-generated') {
+    trace.push('stage is task-pack-generated, delegating to orchestrate_one');
+    // orchestrate_one handles this stage transition safely
+    cmdOrchestrateOne(runFolder);
+    return; // cmdOrchestrateOne calls process.exit
+  }
+
+  // 5. Role stage — check config
+  const config = STAGE_CONFIG[status.current_stage];
+  if (!config) {
+    trace.push(`unknown stage: ${status.current_stage}`);
+    ok({ action: 'error', current_stage: status.current_stage, error: `Unknown stage: ${status.current_stage}`, trace });
+    return;
+  }
+
+  trace.push(`stage: ${status.current_stage}, role: ${config.role}`);
+
+  // 6. Check if task file exists for current stage
+  const taskFilePath = path.join(runFolder, config.taskFile);
+  if (!fs.existsSync(taskFilePath)) {
+    trace.push(`task file missing: ${config.taskFile}, generating role pack`);
+    // Generate role pack (does not advance stage)
+    const intake = readJSON(path.join(runFolder, '00-intake.json'));
+    const content = renderTemplate(config.template, {
+      ticket_id: intake.ticket_id,
+      title: intake.title,
+      project: intake.project || intake.project_name,
+      run_folder: runFolder,
+    });
+    fs.writeFileSync(taskFilePath, content, 'utf8');
+
+    status.next_actions = [
+      { label: `${config.role}: complete work`, command: `Follow ${config.taskFile}` },
+      ...config.requiredArtifacts.map((a) => ({
+        label: `Record artifact: ${a}`,
+        command: `./tools/dp.sh record_artifact ${runFolder} ${path.join(runFolder, a)}`,
+      })),
+    ];
+    writeStatus(runFolder, status);
+
+    ok({
+      action: 'generated_role_pack',
+      current_stage: status.current_stage,
+      role: config.role,
+      task_file: config.taskFile,
+      required_artifacts: config.requiredArtifacts,
+      trace,
+    });
+    return;
+  }
+
+  trace.push(`task file exists: ${config.taskFile}`);
+
+  // 7. Check artifact gates
+  const info = getNextStageInfo(runFolder, status);
+
+  if (!info.gates_pass) {
+    const missing = info.missing_artifacts || [];
+    const invalid = info.invalid_artifacts || [];
+    trace.push(`gates fail: ${missing.length} missing, ${invalid.length} invalid`);
+    ok({
+      action: 'needs_artifacts',
+      current_stage: status.current_stage,
+      role: config.role,
+      missing_artifacts: missing,
+      invalid_artifacts: invalid,
+      required_artifacts: config.requiredArtifacts,
+      trace,
+    });
+    return;
+  }
+
+  // 8. Gates pass — delegate to orchestrate_one for safe advancement
+  trace.push('gates pass, delegating to orchestrate_one');
+  // orchestrate_one handles the actual advancement + next role pack generation
+  cmdOrchestrateOne(runFolder);
+  // cmdOrchestrateOne calls process.exit, so we won't reach here
+}
+
+// ---------------------------------------------------------------------------
 // Scaffold: create minimal schema-valid JSON artifacts for current stage
 // ---------------------------------------------------------------------------
 
@@ -1288,6 +1412,7 @@ if (require.main === module) {
           '  record_artifact <run_folder> <artifact_path>  Validate and record an artifact',
           '  advance <run_folder> --confirm                Advance to next stage if gates pass',
           '  orchestrate_one <run_folder>                  Idempotent single-step orchestrator',
+          '  run_next_safe <run_folder>                    Safe autopilot: one step with decision trace',
           '  scaffold_artifacts <run_folder>               Create minimal schema-valid JSON for current stage',
           '',
           'Status:',
@@ -1356,8 +1481,11 @@ if (require.main === module) {
       case 'scaffold_artifacts':
         cmdScaffoldArtifacts(args[0]);
         break;
+      case 'run_next_safe':
+        cmdRunNextSafe(args[0]);
+        break;
       default:
-        fail(`Unknown command: ${command || '(none)'}. Available: create_run, create_run_from_ticket, generate_task_pack, generate_role_pack, next_stage, record_artifact, advance, orchestrate_one, scaffold_artifacts, block, respond, list, status, stale_list, stale_delete`);
+        fail(`Unknown command: ${command || '(none)'}. Available: create_run, create_run_from_ticket, generate_task_pack, generate_role_pack, next_stage, record_artifact, advance, orchestrate_one, run_next_safe, scaffold_artifacts, block, respond, list, status, stale_list, stale_delete`);
     }
   } catch (err) {
     fail(err.message);
