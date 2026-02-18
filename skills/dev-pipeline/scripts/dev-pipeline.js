@@ -1682,9 +1682,9 @@ if (require.main === module) {
       }
       case 'run_next_autonomous': {
         const { runAutonomous } = require('./autonomous-runner.js');
-        const optFlags = new Set(['--max_steps', '--max_agent_calls', '--dry_run']);
+        const optFlags = new Set(['--max_steps', '--max_agent_calls', '--dry_run', '--audit_log']);
         const aFolder = args.find((a) => !optFlags.has(a) && !args.some((f, i) => optFlags.has(f) && args[i + 1] === a));
-        if (!aFolder) fail('Usage: run_next_autonomous <run_folder> [--max_steps N] [--max_agent_calls N] [--dry_run]');
+        if (!aFolder) fail('Usage: run_next_autonomous <run_folder> [--max_steps N] [--max_agent_calls N] [--dry_run] [--audit_log]');
         const resolvedFolder = safePath(aFolder);
         const aMaxStepsIdx = args.indexOf('--max_steps');
         const aMaxAgentIdx = args.indexOf('--max_agent_calls');
@@ -1692,6 +1692,7 @@ if (require.main === module) {
           maxSteps: aMaxStepsIdx !== -1 ? parseInt(args[aMaxStepsIdx + 1], 10) : 50,
           maxAgentCalls: aMaxAgentIdx !== -1 ? parseInt(args[aMaxAgentIdx + 1], 10) : 20,
           dryRun: args.includes('--dry_run'),
+          auditLog: args.includes('--audit_log') || process.env.DP_AUDIT_LOG === '1',
         };
         // Safety: snapshot runs/ before
         const aRunsDir = safePath('runs');

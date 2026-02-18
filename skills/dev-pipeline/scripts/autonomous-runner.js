@@ -33,6 +33,33 @@ const {
 
 const DP_PATH = path.resolve(__dirname, 'dev-pipeline.js');
 
+const AUDIT_FILENAME = 'autonomous-audit.jsonl';
+
+// ---------------------------------------------------------------------------
+// Audit logger — append-only JSONL to <run_folder>/autonomous-audit.jsonl
+// ---------------------------------------------------------------------------
+function createAuditLogger(runFolder, enabled) {
+  if (!enabled) return { emit() {} };
+  const logPath = path.join(runFolder, AUDIT_FILENAME);
+  return {
+    emit(step, action, stage, event, detail) {
+      const line = JSON.stringify({
+        ts: new Date().toISOString(),
+        step,
+        action: action || '',
+        stage: stage || '',
+        event,
+        detail: detail || '',
+      });
+      try {
+        fs.appendFileSync(logPath, line + '\n', 'utf8');
+      } catch {
+        // Skip logging silently if folder does not exist or write fails
+      }
+    },
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Call dev-pipeline.js commands via subprocess (maintains safety boundary)
 // ---------------------------------------------------------------------------
@@ -295,6 +322,7 @@ function runAutonomous(runFolder, options = {}) {
   const maxAgentCalls = options.maxAgentCalls || 20;
   const dryRun = options.dryRun || false;
   const agentAdapter = options.agentAdapter || claudeCodeAdapter;
+  const auditLogEnabled = options.auditLog || false;
 
   const trace = [];
   const artifactsWritten = [];
@@ -330,6 +358,9 @@ function runAutonomous(runFolder, options = {}) {
       trace: ['run folder does not exist or missing status.json'],
     };
   }
+
+  // Audit logger — created after folder validation so path is safe
+  const audit = createAuditLogger(resolvedFolder, auditLogEnabled);
 
   // Safety: snapshot runs/ directory
   const runsDir = safePath('runs');
@@ -367,32 +398,40 @@ function runAutonomous(runFolder, options = {}) {
       }
 
       const action = result.json.action;
-      trace.push(`step ${stepsRun}: action=${action}, stage=${result.json.current_stage || 'unknown'}`);
+      const stage = result.json.current_stage || 'unknown';
+      trace.push(`step ${stepsRun}: action=${action}, stage=${stage}`);
+      audit.emit(stepsRun, action, stage, 'step', `action=${action}`);
 
       // Terminal actions
       if (action === 'none') {
         trace.push('run is complete');
+        audit.emit(stepsRun, action, stage, 'stop', 'final_action=none');
         return _result('none', trace, stepsRun, agentCalls, artifactsWritten, artifactsSkipped, maxSteps, maxAgentCalls);
       }
       if (action === 'blocked') {
         trace.push(`blocked: ${result.json.blocked_reason || 'unknown'}`);
+        audit.emit(stepsRun, action, stage, 'stop', `final_action=blocked, reason=${result.json.blocked_reason || 'unknown'}`);
         return _result('blocked', trace, stepsRun, agentCalls, artifactsWritten, artifactsSkipped, maxSteps, maxAgentCalls);
       }
       if (action === 'error') {
         trace.push(`error: ${result.json.error || 'unknown'}`);
+        audit.emit(stepsRun, action, stage, 'stop', `final_action=error, error=${result.json.error || 'unknown'}`);
         return _result('error', trace, stepsRun, agentCalls, artifactsWritten, artifactsSkipped, maxSteps, maxAgentCalls);
       }
       if (action === 'stalled') {
         trace.push('stalled: no state change detected');
+        audit.emit(stepsRun, action, stage, 'stop', 'final_action=stalled');
         return _result('stalled', trace, stepsRun, agentCalls, artifactsWritten, artifactsSkipped, maxSteps, maxAgentCalls);
       }
 
       // Needs task pack — generate it
       if (action === 'needs_task_pack') {
         trace.push('generating task pack');
+        audit.emit(stepsRun, action, stage, 'step', 'generating task pack');
         const tpResult = callDP('generate_task_pack', resolvedFolder);
         if (!tpResult.json || !tpResult.json.ok) {
           trace.push(`generate_task_pack failed: ${tpResult.stderr || 'unknown'}`);
+          audit.emit(stepsRun, action, stage, 'stop', `final_action=error, generate_task_pack failed`);
           return _result('error', trace, stepsRun, agentCalls, artifactsWritten, artifactsSkipped, maxSteps, maxAgentCalls);
         }
         trace.push('task pack generated');
@@ -407,17 +446,19 @@ function runAutonomous(runFolder, options = {}) {
 
       // Needs artifacts — invoke agent
       if (action === 'needs_artifacts') {
-        if (agentCalls >= maxAgentCalls) {
-          trace.push(`max_agent_calls reached (${maxAgentCalls})`);
-          return _result('needs_artifacts', trace, stepsRun, agentCalls, artifactsWritten, artifactsSkipped, maxSteps, maxAgentCalls);
-        }
-
         const role = result.json.role;
         const missingArtifacts = result.json.missing_artifacts || [];
         const currentStage = result.json.current_stage;
 
+        if (agentCalls >= maxAgentCalls) {
+          trace.push(`max_agent_calls reached (${maxAgentCalls})`);
+          audit.emit(stepsRun, action, currentStage, 'stop', `max_agent_calls reached (${maxAgentCalls})`);
+          return _result('needs_artifacts', trace, stepsRun, agentCalls, artifactsWritten, artifactsSkipped, maxSteps, maxAgentCalls);
+        }
+
         if (dryRun) {
           trace.push(`dry_run: would invoke ${role} agent for ${missingArtifacts.join(', ')}`);
+          audit.emit(stepsRun, action, currentStage, 'stop', `dry_run: ${role}: ${missingArtifacts.join(', ')}`);
           return _result('needs_artifacts', trace, stepsRun, agentCalls, artifactsWritten, artifactsSkipped, maxSteps, maxAgentCalls);
         }
 
@@ -433,17 +474,20 @@ function runAutonomous(runFolder, options = {}) {
 
         // Invoke agent
         trace.push(`invoking ${role} agent for: ${missingArtifacts.sort().join(', ')}`);
+        audit.emit(stepsRun, action, currentStage, 'agent_invoke', `${role}: ${missingArtifacts.sort().join(', ')}`);
         let agentResult;
         try {
           agentResult = agentAdapter(context);
         } catch (e) {
           trace.push(`agent error: ${e.message}`);
+          audit.emit(stepsRun, action, currentStage, 'stop', `final_action=error, agent error: ${e.message}`);
           return _result('error', trace, stepsRun, agentCalls, artifactsWritten, artifactsSkipped, maxSteps, maxAgentCalls);
         }
         agentCalls++;
 
         if (!agentResult || !agentResult.drafts || agentResult.drafts.length === 0) {
           trace.push('agent produced no drafts');
+          audit.emit(stepsRun, action, currentStage, 'stop', 'final_action=error, agent produced no drafts');
           return _result('error', trace, stepsRun, agentCalls, artifactsWritten, artifactsSkipped, maxSteps, maxAgentCalls);
         }
 
@@ -454,6 +498,7 @@ function runAutonomous(runFolder, options = {}) {
 
           if (!validation.valid) {
             trace.push(`draft invalid: ${draft.targetArtifact} — ${validation.errors.join('; ')}`);
+            audit.emit(stepsRun, action, currentStage, 'draft_invalid', `${draft.targetArtifact}: ${validation.errors.join('; ')}`);
             allDraftsValid = false;
             // Clean up draft file
             try { fs.unlinkSync(draft.draftPath); } catch {}
@@ -464,6 +509,7 @@ function runAutonomous(runFolder, options = {}) {
           const targetPath = path.join(resolvedFolder, draft.targetArtifact);
           if (fs.existsSync(targetPath)) {
             trace.push(`artifact already exists, skipping: ${draft.targetArtifact}`);
+            audit.emit(stepsRun, action, currentStage, 'artifact_skip', draft.targetArtifact);
             artifactsSkipped.push(draft.targetArtifact);
             try { fs.unlinkSync(draft.draftPath); } catch {}
             continue;
@@ -473,6 +519,7 @@ function runAutonomous(runFolder, options = {}) {
           fs.writeFileSync(targetPath, content, 'utf8');
           artifactsWritten.push(draft.targetArtifact);
           trace.push(`wrote artifact: ${draft.targetArtifact}`);
+          audit.emit(stepsRun, action, currentStage, 'artifact_write', draft.targetArtifact);
 
           // Clean up draft
           try { fs.unlinkSync(draft.draftPath); } catch {}
@@ -500,6 +547,7 @@ function runAutonomous(runFolder, options = {}) {
 
     // Max steps reached
     trace.push(`max_steps reached (${maxSteps})`);
+    audit.emit(stepsRun, '', '', 'stop', `max_steps reached (${maxSteps})`);
     return _result('needs_artifacts', trace, stepsRun, agentCalls, artifactsWritten, artifactsSkipped, maxSteps, maxAgentCalls);
 
   } finally {
@@ -537,4 +585,5 @@ module.exports = {
   draftFileAdapter,
   claudeCodeAdapter,
   validateDraft,
+  AUDIT_FILENAME,
 };

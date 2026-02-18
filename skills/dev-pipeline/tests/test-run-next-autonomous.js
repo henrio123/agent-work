@@ -17,7 +17,7 @@ const WORKSPACE_ROOT = path.resolve(os.homedir(), 'dev', 'agent-work');
 const RUNS_DIR = path.join(WORKSPACE_ROOT, 'runs');
 
 // Import autonomous runner and pipeline for direct function testing
-const { runAutonomous, scaffoldAdapter, validateDraft } = require(path.resolve(__dirname, '..', 'scripts', 'autonomous-runner.js'));
+const { runAutonomous, scaffoldAdapter, validateDraft, AUDIT_FILENAME } = require(path.resolve(__dirname, '..', 'scripts', 'autonomous-runner.js'));
 const dp = require(path.resolve(__dirname, '..', 'scripts', 'dev-pipeline.js'));
 
 let passed = 0;
@@ -385,6 +385,132 @@ test('validateDraft accepts valid JSON draft', () => {
   const result = validateDraft(draftPath, '10-pm-brief.json', absDir);
   if (!result.valid) throw new Error(`should accept valid draft: ${result.errors.join('; ')}`);
   fs.unlinkSync(draftPath);
+});
+
+// -------------------------------------------------------------------------
+// Test 11: audit log — created when auditLog enabled
+// -------------------------------------------------------------------------
+console.log('\n--- audit log ---');
+
+test('audit log is created when auditLog option is true', () => {
+  const { relDir, absDir } = makeTempRun('auto-audit');
+  fs.writeFileSync(path.join(absDir, '31-pm-claude-task.txt'), 'PM task', 'utf8');
+
+  const result = runAutonomous(relDir, {
+    maxSteps: 5,
+    maxAgentCalls: 2,
+    agentAdapter: scaffoldAdapter,
+    auditLog: true,
+  });
+
+  const logPath = path.join(absDir, AUDIT_FILENAME);
+  if (!fs.existsSync(logPath)) throw new Error('audit log file not created');
+
+  const lines = fs.readFileSync(logPath, 'utf8').trim().split('\n');
+  if (lines.length === 0) throw new Error('audit log is empty');
+
+  // Every line must be valid JSON
+  for (const line of lines) {
+    const obj = JSON.parse(line);
+    if (typeof obj.ts !== 'string') throw new Error('missing ts');
+    if (typeof obj.step !== 'number') throw new Error('missing step');
+    if (typeof obj.event !== 'string') throw new Error('missing event');
+    if (typeof obj.action !== 'string') throw new Error('missing action');
+    if (typeof obj.stage !== 'string') throw new Error('missing stage');
+    if (typeof obj.detail !== 'string') throw new Error('missing detail');
+  }
+});
+
+test('audit log is NOT created when auditLog option is false', () => {
+  const { relDir, absDir } = makeTempRun('auto-no-audit');
+  fs.writeFileSync(path.join(absDir, '31-pm-claude-task.txt'), 'PM task', 'utf8');
+
+  runAutonomous(relDir, {
+    maxSteps: 5,
+    maxAgentCalls: 2,
+    agentAdapter: scaffoldAdapter,
+    auditLog: false,
+  });
+
+  const logPath = path.join(absDir, AUDIT_FILENAME);
+  if (fs.existsSync(logPath)) throw new Error('audit log should not exist when disabled');
+});
+
+test('audit log contains agent_invoke and artifact_write events', () => {
+  const { relDir, absDir } = makeTempRun('auto-audit-events');
+  fs.writeFileSync(path.join(absDir, '31-pm-claude-task.txt'), 'PM task', 'utf8');
+
+  runAutonomous(relDir, {
+    maxSteps: 5,
+    maxAgentCalls: 2,
+    agentAdapter: scaffoldAdapter,
+    auditLog: true,
+  });
+
+  const logPath = path.join(absDir, AUDIT_FILENAME);
+  const lines = fs.readFileSync(logPath, 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+
+  const events = lines.map((l) => l.event);
+  if (!events.includes('agent_invoke')) throw new Error('missing agent_invoke event');
+  if (!events.includes('artifact_write')) throw new Error('missing artifact_write event');
+});
+
+test('audit log contains stop event on done stage', () => {
+  const { relDir, absDir } = makeTempRun('auto-audit-done', { current_stage: 'done' });
+
+  runAutonomous(relDir, {
+    maxSteps: 5,
+    agentAdapter: scaffoldAdapter,
+    auditLog: true,
+  });
+
+  const logPath = path.join(absDir, AUDIT_FILENAME);
+  const lines = fs.readFileSync(logPath, 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+
+  const stopLines = lines.filter((l) => l.event === 'stop');
+  if (stopLines.length === 0) throw new Error('missing stop event');
+  if (!stopLines[0].detail.includes('final_action=none')) throw new Error('stop detail should include final_action=none');
+});
+
+test('audit log appends on rerun (does not truncate)', () => {
+  const { relDir, absDir } = makeTempRun('auto-audit-append');
+  fs.writeFileSync(path.join(absDir, '31-pm-claude-task.txt'), 'PM task', 'utf8');
+
+  // First run
+  runAutonomous(relDir, {
+    maxSteps: 5,
+    maxAgentCalls: 2,
+    agentAdapter: scaffoldAdapter,
+    auditLog: true,
+  });
+
+  const logPath = path.join(absDir, AUDIT_FILENAME);
+  const linesAfterFirst = fs.readFileSync(logPath, 'utf8').trim().split('\n').length;
+
+  // Second run (idempotent — artifacts already exist)
+  runAutonomous(relDir, {
+    maxSteps: 5,
+    maxAgentCalls: 2,
+    agentAdapter: scaffoldAdapter,
+    auditLog: true,
+  });
+
+  const linesAfterSecond = fs.readFileSync(logPath, 'utf8').trim().split('\n').length;
+  if (linesAfterSecond <= linesAfterFirst) throw new Error(`expected more lines after second run: ${linesAfterFirst} → ${linesAfterSecond}`);
+});
+
+test('audit log via CLI --audit_log flag', () => {
+  const { relDir, absDir } = makeTempRun('auto-audit-cli', { current_stage: 'done' });
+
+  runCmd('run_next_autonomous', relDir, '--audit_log');
+
+  const logPath = path.join(absDir, AUDIT_FILENAME);
+  if (!fs.existsSync(logPath)) throw new Error('audit log not created via CLI flag');
+  const lines = fs.readFileSync(logPath, 'utf8').trim().split('\n');
+  if (lines.length === 0) throw new Error('audit log is empty via CLI');
+  // Validate first line is valid JSON
+  const first = JSON.parse(lines[0]);
+  if (typeof first.ts !== 'string') throw new Error('invalid log line from CLI');
 });
 
 // -------------------------------------------------------------------------

@@ -238,12 +238,12 @@ Default `--max_steps` is 10. The loop stops when:
 Autonomous multi-agent runner. Drives a run forward by repeatedly: getting the next action, invoking the correct role agent to produce draft artifacts, validating drafts against schemas, writing final artifacts (only if target does not exist), and recording them.
 
 ```bash
-./tools/dp.sh run_next_autonomous <run_folder> [--max_steps N] [--max_agent_calls N] [--dry_run]
+./tools/dp.sh run_next_autonomous <run_folder> [--max_steps N] [--max_agent_calls N] [--dry_run] [--audit_log]
 # or
-./tools/run-next-autonomous.sh <run_folder> [--max_steps N] [--max_agent_calls N] [--dry_run]
+./tools/run-next-autonomous.sh <run_folder> [--max_steps N] [--max_agent_calls N] [--dry_run] [--audit_log]
 ```
 
-Defaults: `--max_steps 50`, `--max_agent_calls 20`. Use `--dry_run` to preview without invoking agents.
+Defaults: `--max_steps 50`, `--max_agent_calls 20`. Use `--dry_run` to preview without invoking agents. Use `--audit_log` (or `DP_AUDIT_LOG=1`) to write an append-only audit log.
 
 **Safety model:**
 - Agents write `.draft` files only — runner validates before writing final artifacts
@@ -296,6 +296,17 @@ Defaults: `--max_steps 50`, `--max_agent_calls 20`. Use `--dry_run` to preview w
   ]
 }
 ```
+
+**Audit log:** When `--audit_log` is passed (or `DP_AUDIT_LOG=1`), the runner appends to `<run_folder>/autonomous-audit.jsonl`. Append-only, never truncates, one JSON object per line.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `ts` | string | ISO 8601 timestamp |
+| `step` | int | Step number within this invocation |
+| `action` | string | The `run_next_safe` action for this step |
+| `stage` | string | `current_stage` at this step |
+| `event` | string | `step`, `agent_invoke`, `artifact_write`, `artifact_skip`, `draft_invalid`, `stop` |
+| `detail` | string | Human-readable detail |
 
 #### scaffold_artifacts
 
@@ -403,7 +414,7 @@ node skills/dev-pipeline/tests/test-scaffold.js        # scaffold + schema tests
 node skills/dev-pipeline/tests/test-state-machine.js   # state machine regression (28 tests)
 node skills/dev-pipeline/tests/test-run-next-safe.js   # run_next_safe + safety contract (13 tests)
 node skills/dev-pipeline/tests/test-run-next-loop.js   # run_next_loop autopilot tests (11 tests)
-node skills/dev-pipeline/tests/test-run-next-autonomous.js  # autonomous runner tests (14 tests)
+node skills/dev-pipeline/tests/test-run-next-autonomous.js  # autonomous runner tests (20 tests)
 ```
 
 ## Security
