@@ -34,6 +34,7 @@ const {
 const DP_PATH = path.resolve(__dirname, 'dev-pipeline.js');
 
 const AUDIT_FILENAME = 'autonomous-audit.jsonl';
+const STOP_FILENAME = '.stop';
 
 // ---------------------------------------------------------------------------
 // Audit logger — append-only JSONL to <run_folder>/autonomous-audit.jsonl
@@ -58,6 +59,28 @@ function createAuditLogger(runFolder, enabled) {
       }
     },
   };
+}
+
+// ---------------------------------------------------------------------------
+// Progress logger — one line per step to stderr (never mixes with JSON stdout)
+// ---------------------------------------------------------------------------
+function createProgressLogger(enabled) {
+  if (!enabled) return { header() {}, step() {} };
+  return {
+    header(runFolder) {
+      process.stderr.write(`autonomous: ${runFolder}\n`);
+    },
+    step(stepNum, action, stage, agentCalls, artifactsWrittenCount) {
+      process.stderr.write(`  [${stepNum}] ${action} | ${stage} | agents:${agentCalls} | artifacts:${artifactsWrittenCount}\n`);
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Stop signal — file-based cooperative stop at step boundaries
+// ---------------------------------------------------------------------------
+function checkStopSignal(resolvedFolder) {
+  return fs.existsSync(path.join(resolvedFolder, STOP_FILENAME));
 }
 
 // ---------------------------------------------------------------------------
@@ -323,6 +346,7 @@ function runAutonomous(runFolder, options = {}) {
   const dryRun = options.dryRun || false;
   const agentAdapter = options.agentAdapter || claudeCodeAdapter;
   const auditLogEnabled = options.auditLog || false;
+  const progressEnabled = options.progress !== false; // on by default for CLI
 
   const trace = [];
   const artifactsWritten = [];
@@ -362,6 +386,10 @@ function runAutonomous(runFolder, options = {}) {
   // Audit logger — created after folder validation so path is safe
   const audit = createAuditLogger(resolvedFolder, auditLogEnabled);
 
+  // Progress logger
+  const progress = createProgressLogger(progressEnabled);
+  progress.header(runFolder);
+
   // Safety: snapshot runs/ directory
   const runsDir = safePath('runs');
   const runsDirsBefore = snapshotDir(runsDir);
@@ -390,6 +418,14 @@ function runAutonomous(runFolder, options = {}) {
     for (let step = 0; step < maxSteps; step++) {
       stepsRun++;
 
+      // Check for stop signal at step boundary
+      if (checkStopSignal(resolvedFolder)) {
+        trace.push(`step ${stepsRun}: stop signal detected`);
+        audit.emit(stepsRun, '', '', 'stop', 'stop signal (.stop file)');
+        progress.step(stepsRun, 'stopped', '', agentCalls, artifactsWritten.length);
+        return _result('stopped', trace, stepsRun, agentCalls, artifactsWritten, artifactsSkipped, maxSteps, maxAgentCalls);
+      }
+
       // Get current state via run_next_safe
       const result = callDP('run_next_safe', resolvedFolder);
       if (!result.json) {
@@ -401,6 +437,7 @@ function runAutonomous(runFolder, options = {}) {
       const stage = result.json.current_stage || 'unknown';
       trace.push(`step ${stepsRun}: action=${action}, stage=${stage}`);
       audit.emit(stepsRun, action, stage, 'step', `action=${action}`);
+      progress.step(stepsRun, action, stage, agentCalls, artifactsWritten.length);
 
       // Terminal actions
       if (action === 'none') {
@@ -586,4 +623,5 @@ module.exports = {
   claudeCodeAdapter,
   validateDraft,
   AUDIT_FILENAME,
+  STOP_FILENAME,
 };

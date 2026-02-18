@@ -17,7 +17,7 @@ const WORKSPACE_ROOT = path.resolve(os.homedir(), 'dev', 'agent-work');
 const RUNS_DIR = path.join(WORKSPACE_ROOT, 'runs');
 
 // Import autonomous runner and pipeline for direct function testing
-const { runAutonomous, scaffoldAdapter, validateDraft, AUDIT_FILENAME } = require(path.resolve(__dirname, '..', 'scripts', 'autonomous-runner.js'));
+const { runAutonomous, scaffoldAdapter, validateDraft, AUDIT_FILENAME, STOP_FILENAME } = require(path.resolve(__dirname, '..', 'scripts', 'autonomous-runner.js'));
 const dp = require(path.resolve(__dirname, '..', 'scripts', 'dev-pipeline.js'));
 
 let passed = 0;
@@ -511,6 +511,168 @@ test('audit log via CLI --audit_log flag', () => {
   // Validate first line is valid JSON
   const first = JSON.parse(lines[0]);
   if (typeof first.ts !== 'string') throw new Error('invalid log line from CLI');
+});
+
+// -------------------------------------------------------------------------
+// Test 12: stop signal — .stop file triggers stopped
+// -------------------------------------------------------------------------
+console.log('\n--- stop signal ---');
+
+test('stop signal triggers final_action stopped', () => {
+  const { relDir, absDir } = makeTempRun('auto-stop');
+  fs.writeFileSync(path.join(absDir, '31-pm-claude-task.txt'), 'PM task', 'utf8');
+
+  // Create .stop before running
+  fs.writeFileSync(path.join(absDir, STOP_FILENAME), '', 'utf8');
+
+  const result = runAutonomous(relDir, {
+    maxSteps: 10,
+    maxAgentCalls: 5,
+    agentAdapter: scaffoldAdapter,
+    progress: false,
+  });
+
+  if (result.final_action !== 'stopped') throw new Error(`expected stopped, got ${result.final_action}`);
+  if (result.agent_calls !== 0) throw new Error('no agent calls expected when stopped');
+  if (!result.trace.some((t) => t.includes('stop signal'))) throw new Error('missing stop signal trace');
+});
+
+test('stop signal emits audit log stop event', () => {
+  const { relDir, absDir } = makeTempRun('auto-stop-audit');
+  fs.writeFileSync(path.join(absDir, '31-pm-claude-task.txt'), 'PM task', 'utf8');
+  fs.writeFileSync(path.join(absDir, STOP_FILENAME), '', 'utf8');
+
+  runAutonomous(relDir, {
+    maxSteps: 5,
+    agentAdapter: scaffoldAdapter,
+    auditLog: true,
+    progress: false,
+  });
+
+  const logPath = path.join(absDir, AUDIT_FILENAME);
+  const lines = fs.readFileSync(logPath, 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+  const stopLines = lines.filter((l) => l.event === 'stop');
+  if (stopLines.length === 0) throw new Error('missing stop event in audit log');
+  if (!stopLines[0].detail.includes('.stop')) throw new Error('stop event should mention .stop file');
+});
+
+test('stop signal exits 0 via CLI', () => {
+  const { relDir, absDir } = makeTempRun('auto-stop-cli');
+  fs.writeFileSync(path.join(absDir, STOP_FILENAME), '', 'utf8');
+
+  const r = runCmd('run_next_autonomous', relDir);
+  if (r.exitCode !== 0) throw new Error(`expected exit 0, got ${r.exitCode}`);
+  if (r.json.final_action !== 'stopped') throw new Error(`expected stopped, got ${r.json.final_action}`);
+});
+
+// -------------------------------------------------------------------------
+// Test 13: resume — .stop removed, runner continues
+// -------------------------------------------------------------------------
+console.log('\n--- resume ---');
+
+test('resume after stop removal continues from current state', () => {
+  const { relDir, absDir } = makeTempRun('auto-resume');
+  fs.writeFileSync(path.join(absDir, '31-pm-claude-task.txt'), 'PM task', 'utf8');
+
+  // First run: stopped
+  fs.writeFileSync(path.join(absDir, STOP_FILENAME), '', 'utf8');
+  const r1 = runAutonomous(relDir, {
+    maxSteps: 5,
+    agentAdapter: scaffoldAdapter,
+    progress: false,
+  });
+  if (r1.final_action !== 'stopped') throw new Error(`first run should be stopped, got ${r1.final_action}`);
+
+  // Remove stop signal (resume)
+  fs.unlinkSync(path.join(absDir, STOP_FILENAME));
+
+  // Second run: continues and writes artifacts
+  const r2 = runAutonomous(relDir, {
+    maxSteps: 10,
+    maxAgentCalls: 5,
+    agentAdapter: scaffoldAdapter,
+    progress: false,
+  });
+  if (r2.final_action === 'stopped') throw new Error('second run should not be stopped');
+  if (r2.agent_calls < 1) throw new Error('expected agent calls after resume');
+});
+
+// -------------------------------------------------------------------------
+// Test 14: progress output goes to stderr, not stdout
+// -------------------------------------------------------------------------
+console.log('\n--- progress output ---');
+
+test('progress output does not appear in JSON stdout via CLI', () => {
+  const { relDir, absDir } = makeTempRun('auto-progress', { current_stage: 'done' });
+
+  const r = runCmd('run_next_autonomous', relDir);
+  // stdout must be valid JSON (the ok() wrapper)
+  if (!r.json) throw new Error('stdout is not valid JSON');
+  if (r.json.action !== 'autonomous_complete') throw new Error('unexpected action');
+  // progress lines go to stderr, not stdout — so stdout should be clean JSON
+  const lines = r.stdout.trim().split('\n');
+  // First line should start with { (JSON)
+  if (!lines[0].trim().startsWith('{')) throw new Error(`stdout first line is not JSON: ${lines[0]}`);
+});
+
+// -------------------------------------------------------------------------
+// Test 15: dashboard summary — last_autonomous_* fields in status.json
+// -------------------------------------------------------------------------
+console.log('\n--- dashboard summary ---');
+
+test('status.json updated with last_autonomous_* after CLI run', () => {
+  const { relDir, absDir } = makeTempRun('auto-dashboard', { current_stage: 'done' });
+
+  runCmd('run_next_autonomous', relDir);
+
+  const status = JSON.parse(fs.readFileSync(path.join(absDir, 'status.json'), 'utf8'));
+  if (typeof status.last_autonomous_run_at !== 'string') throw new Error('missing last_autonomous_run_at');
+  if (!status.last_autonomous_summary) throw new Error('missing last_autonomous_summary');
+  if (status.last_autonomous_summary.final_action !== 'none') {
+    throw new Error(`expected final_action=none in summary, got ${status.last_autonomous_summary.final_action}`);
+  }
+  if (typeof status.last_autonomous_summary.steps_run !== 'number') throw new Error('missing steps_run in summary');
+});
+
+test('last_autonomous_summary does not break status command', () => {
+  const { relDir, absDir } = makeTempRun('auto-dashboard-compat', { current_stage: 'done' });
+
+  // Run autonomous to write dashboard fields
+  runCmd('run_next_autonomous', relDir);
+
+  // Status command should still work
+  const r = runCmd('status', relDir);
+  if (!r.json || !r.json.ok) throw new Error(`status command failed: ${r.stderr}`);
+});
+
+// -------------------------------------------------------------------------
+// Test 16: stop/resume shell helpers
+// -------------------------------------------------------------------------
+console.log('\n--- stop/resume helpers ---');
+
+test('run-next-stop.sh creates .stop file', () => {
+  const { relDir, absDir } = makeTempRun('auto-stop-helper');
+  const stopPath = path.join(absDir, STOP_FILENAME);
+
+  execFileSync('bash', [path.join(WORKSPACE_ROOT, 'tools', 'run-next-stop.sh'), absDir], {
+    encoding: 'utf8',
+    timeout: 5000,
+  });
+
+  if (!fs.existsSync(stopPath)) throw new Error('.stop file not created by helper');
+});
+
+test('run-next-resume.sh removes .stop file', () => {
+  const { relDir, absDir } = makeTempRun('auto-resume-helper');
+  const stopPath = path.join(absDir, STOP_FILENAME);
+  fs.writeFileSync(stopPath, '', 'utf8');
+
+  execFileSync('bash', [path.join(WORKSPACE_ROOT, 'tools', 'run-next-resume.sh'), absDir], {
+    encoding: 'utf8',
+    timeout: 5000,
+  });
+
+  if (fs.existsSync(stopPath)) throw new Error('.stop file not removed by helper');
 });
 
 // -------------------------------------------------------------------------

@@ -1707,6 +1707,23 @@ if (require.main === module) {
         if (JSON.stringify(aRunsBefore) !== JSON.stringify(aRunsAfter)) {
           fail('run_next_autonomous: runs/ directory changed during execution');
         }
+        // Dashboard: write summary to status.json (end of invocation only)
+        try {
+          const statusPath = path.join(resolvedFolder, 'status.json');
+          if (fs.existsSync(statusPath)) {
+            const status = readStatus(aFolder);
+            status.last_autonomous_run_at = now();
+            status.last_autonomous_summary = {
+              final_action: result.final_action,
+              steps_run: result.steps_run,
+              agent_calls: result.agent_calls,
+              artifacts_written: result.artifacts_written,
+            };
+            writeStatus(aFolder, status);
+          }
+        } catch {
+          // Non-fatal: dashboard summary write failure should not affect result
+        }
         ok(result);
         break;
       }

@@ -263,7 +263,7 @@ Defaults: `--max_steps 50`, `--max_agent_calls 20`. Use `--dry_run` to preview w
 |-------|------|-------------|
 | `ok` | boolean | Always `true` |
 | `action` | string | Always `autonomous_complete` |
-| `final_action` | string | `none`, `blocked`, `needs_artifacts`, `error`, `stalled` |
+| `final_action` | string | `none`, `blocked`, `needs_artifacts`, `error`, `stalled`, `stopped` |
 | `steps_run` | int | Total orchestration steps |
 | `agent_calls` | int | Number of agent invocations |
 | `artifacts_written` | string[] | Artifacts successfully written |
@@ -307,6 +307,50 @@ Defaults: `--max_steps 50`, `--max_agent_calls 20`. Use `--dry_run` to preview w
 | `stage` | string | `current_stage` at this step |
 | `event` | string | `step`, `agent_invoke`, `artifact_write`, `artifact_skip`, `draft_invalid`, `stop` |
 | `detail` | string | Human-readable detail |
+
+**Terminal output:** Progress lines go to stderr (one per step). JSON summary goes to stdout. Parse stdout for machine use.
+
+```
+stderr: autonomous: runs/20260218_150000_TICKET-1
+stderr:   [1] needs_task_pack | intake | agents:0 | artifacts:0
+stderr:   [2] advanced_and_generated | pm-ready | agents:0 | artifacts:0
+stderr:   [3] needs_artifacts | pm-ready | agents:0 | artifacts:0
+stdout: { "ok": true, "action": "autonomous_complete", ... }
+```
+
+**Stop and resume:**
+
+```bash
+# Stop: create .stop file — runner exits at next step boundary
+./tools/run-next-stop.sh <run_folder>
+
+# Resume: remove .stop file — runner continues on next invocation
+./tools/run-next-resume.sh <run_folder>
+```
+
+When the runner detects `.stop` it exits with `final_action: "stopped"` and exit code 0. Rerun the autonomous command after removing `.stop` to continue.
+
+**Example: stop and resume session**
+
+```bash
+# Start a run
+$ ./tools/run-next-autonomous.sh runs/20260218_150000_TICKET-1 --audit_log &
+
+# Stop it
+$ ./tools/run-next-stop.sh runs/20260218_150000_TICKET-1
+# Runner exits with final_action: "stopped"
+
+# Resume
+$ ./tools/run-next-resume.sh runs/20260218_150000_TICKET-1
+$ ./tools/run-next-autonomous.sh runs/20260218_150000_TICKET-1 --audit_log
+# Continues from where it left off, skips existing artifacts
+```
+
+**Dashboard integration:** After each invocation, `status.json` is updated with:
+- `last_autonomous_run_at` — ISO 8601 timestamp of this invocation
+- `last_autonomous_summary` — `{ final_action, steps_run, agent_calls, artifacts_written }`
+
+These fields are written once at the end of invocation, never during steps.
 
 #### scaffold_artifacts
 
@@ -414,7 +458,7 @@ node skills/dev-pipeline/tests/test-scaffold.js        # scaffold + schema tests
 node skills/dev-pipeline/tests/test-state-machine.js   # state machine regression (28 tests)
 node skills/dev-pipeline/tests/test-run-next-safe.js   # run_next_safe + safety contract (13 tests)
 node skills/dev-pipeline/tests/test-run-next-loop.js   # run_next_loop autopilot tests (11 tests)
-node skills/dev-pipeline/tests/test-run-next-autonomous.js  # autonomous runner tests (20 tests)
+node skills/dev-pipeline/tests/test-run-next-autonomous.js  # autonomous runner tests (29 tests)
 ```
 
 ## Security
