@@ -1073,6 +1073,73 @@ function cmdOrchestrateOne(runFolder) {
 }
 
 // ---------------------------------------------------------------------------
+// Scaffold: create minimal schema-valid JSON artifacts for current stage
+// ---------------------------------------------------------------------------
+function generateMinimalValue(schema) {
+  if (!schema || !schema.type) return null;
+
+  const types = Array.isArray(schema.type) ? schema.type : [schema.type];
+  const type = types[0];
+
+  if (type === 'string') {
+    if (schema.enum) return schema.enum[0];
+    return '';
+  }
+  if (type === 'number') return 0;
+  if (type === 'boolean') return false;
+  if (type === 'null') return null;
+  if (type === 'array') return [];
+  if (type === 'object') {
+    const obj = {};
+    if (schema.required && schema.properties) {
+      for (const key of schema.required) {
+        const propSchema = schema.properties[key];
+        obj[key] = propSchema ? generateMinimalValue(propSchema) : null;
+      }
+    }
+    return obj;
+  }
+  return null;
+}
+
+function cmdScaffoldArtifacts(runFolder) {
+  if (!runFolder) fail('Usage: scaffold_artifacts <run_folder>');
+  runFolder = safePath(runFolder);
+
+  const status = readStatus(runFolder);
+  const config = STAGE_CONFIG[status.current_stage];
+  if (!config) fail(`No artifacts to scaffold for stage: ${status.current_stage}`);
+
+  const scaffolded = [];
+  for (const artifact of config.requiredArtifacts) {
+    // Skip .diff files — only scaffold JSON
+    if (artifact.endsWith('.diff')) continue;
+
+    const artifactPath = path.join(runFolder, artifact);
+    if (fs.existsSync(artifactPath)) {
+      continue; // don't overwrite existing artifacts
+    }
+
+    const schema = loadArtifactSchema(artifact);
+    if (!schema) {
+      // No schema — create empty object with ticket_id
+      writeJSON(artifactPath, { ticket_id: status.ticket_id });
+      scaffolded.push(artifact);
+      continue;
+    }
+
+    const minimal = generateMinimalValue(schema);
+    if (minimal && typeof minimal === 'object' && !Array.isArray(minimal)) {
+      minimal.ticket_id = status.ticket_id;
+    }
+    writeJSON(artifactPath, minimal);
+    scaffolded.push(artifact);
+  }
+
+  ok({ stage: status.current_stage, role: config.role, scaffolded, skipped_diff: config.requiredArtifacts.filter((a) => a.endsWith('.diff')) });
+}
+
+// ---------------------------------------------------------------------------
 // CLI dispatch
 // ---------------------------------------------------------------------------
 const [command, ...args] = process.argv.slice(2);
@@ -1121,8 +1188,11 @@ try {
     case 'orchestrate_one':
       cmdOrchestrateOne(args[0]);
       break;
+    case 'scaffold_artifacts':
+      cmdScaffoldArtifacts(args[0]);
+      break;
     default:
-      fail(`Unknown command: ${command || '(none)'}. Available: create_run, create_run_from_ticket, generate_task_pack, generate_role_pack, next_stage, record_artifact, advance, orchestrate_one, block, respond, list, status, stale_list, stale_delete`);
+      fail(`Unknown command: ${command || '(none)'}. Available: create_run, create_run_from_ticket, generate_task_pack, generate_role_pack, next_stage, record_artifact, advance, orchestrate_one, scaffold_artifacts, block, respond, list, status, stale_list, stale_delete`);
   }
 } catch (err) {
   fail(err.message);

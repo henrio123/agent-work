@@ -115,6 +115,16 @@ Idempotent single-step orchestrator. Determines and executes the next safe actio
 ./tools/orchestrate-next.sh <run_folder>
 ```
 
+#### scaffold_artifacts
+
+Create empty but schema-valid JSON files for the current stage's required artifacts. Skips `.diff` files and does not overwrite existing artifacts.
+
+```bash
+./tools/dp.sh scaffold_artifacts <run_folder>
+```
+
+**Output:** `{ "ok": true, "stage": "dev-ready", "role": "Dev", "scaffolded": ["41-dev-notes.json"], "skipped_diff": ["40-dev-patch.diff"] }`
+
 ### Status & Cleanup
 
 #### list / status
