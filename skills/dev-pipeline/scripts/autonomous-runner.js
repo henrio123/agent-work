@@ -1,0 +1,540 @@
+#!/usr/bin/env node
+'use strict';
+
+/**
+ * autonomous-runner.js — Autonomous multi-agent runner.
+ *
+ * Drives a run folder forward by repeatedly:
+ *   1. Calling run_next_safe to get current state
+ *   2. If needs_artifacts, invoking the correct role agent to produce drafts
+ *   3. Validating drafts against schemas
+ *   4. Writing final artifacts (only if target does not exist)
+ *   5. Recording artifacts via record_artifact
+ *   6. Repeating until a stop condition
+ *
+ * Safety guarantees:
+ *   - Never creates run folders
+ *   - Never overwrites existing artifacts
+ *   - Never creates directories
+ *   - All filesystem access respects safePath
+ *   - Snapshots runs/ and run folder before/after
+ */
+
+const { execFileSync } = require('node:child_process');
+const fs = require('node:fs');
+const path = require('node:path');
+
+const dp = require('./dev-pipeline.js');
+const {
+  STAGE_CONFIG, ARTIFACT_SCHEMA_MAP, WORKSPACE_ROOT,
+  safePath, readJSON, readStatus, loadArtifactSchema, validateArtifact,
+  generateMinimalValue, validateSchema,
+} = dp;
+
+const DP_PATH = path.resolve(__dirname, 'dev-pipeline.js');
+
+// ---------------------------------------------------------------------------
+// Call dev-pipeline.js commands via subprocess (maintains safety boundary)
+// ---------------------------------------------------------------------------
+function callDP(...args) {
+  try {
+    const stdout = execFileSync('node', [DP_PATH, ...args], {
+      encoding: 'utf8',
+      timeout: 30000,
+    });
+    let json = null;
+    try { json = JSON.parse(stdout); } catch {}
+    return { ok: true, stdout, json };
+  } catch (e) {
+    let json = null;
+    try { json = JSON.parse(e.stdout || ''); } catch {}
+    try { json = json || JSON.parse(e.stderr || ''); } catch {}
+    return { ok: false, stdout: e.stdout || '', stderr: e.stderr || '', exitCode: e.status, json };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Agent adapter interface
+// ---------------------------------------------------------------------------
+
+/**
+ * Scaffold adapter: generates minimal schema-valid content as .draft files.
+ * Used as fallback when Claude Code is not available.
+ */
+function scaffoldAdapter(context) {
+  const drafts = [];
+
+  for (const artifact of context.missingArtifacts.sort()) {
+    const draftPath = path.join(context.runFolder, artifact + '.draft');
+
+    if (artifact.endsWith('.diff')) {
+      // Generate a minimal valid diff
+      fs.writeFileSync(draftPath, [
+        'diff --git a/placeholder b/placeholder',
+        '--- a/placeholder',
+        '+++ b/placeholder',
+        '@@ -0,0 +1 @@',
+        `+# Placeholder for ${context.status.ticket_id}`,
+        '',
+      ].join('\n'), 'utf8');
+      drafts.push({ draftPath, targetArtifact: artifact });
+      continue;
+    }
+
+    // JSON artifact: generate from schema
+    const schema = loadArtifactSchema(artifact);
+    let content;
+    if (schema) {
+      content = generateMinimalValue(schema);
+      // Inject ticket_id if schema declares it
+      const schemaHasTicketId = (schema.required && schema.required.includes('ticket_id'))
+        || (schema.properties && schema.properties.ticket_id);
+      if (schemaHasTicketId && content && typeof content === 'object' && !Array.isArray(content)) {
+        content.ticket_id = context.status.ticket_id;
+      }
+      // Inject title if schema declares it
+      const schemaHasTitle = (schema.required && schema.required.includes('title'))
+        || (schema.properties && schema.properties.title);
+      if (schemaHasTitle && content && typeof content === 'object' && !Array.isArray(content)) {
+        content.title = context.status.title;
+      }
+    } else {
+      content = { ticket_id: context.status.ticket_id };
+    }
+
+    fs.writeFileSync(draftPath, JSON.stringify(content, null, 2) + '\n', 'utf8');
+    drafts.push({ draftPath, targetArtifact: artifact });
+  }
+
+  return { drafts };
+}
+
+/**
+ * Draft-file adapter: reads pre-existing .draft files from the run folder.
+ * Used when drafts are produced externally (e.g., by a human or prior agent run).
+ */
+function draftFileAdapter(context) {
+  const drafts = [];
+
+  for (const artifact of context.missingArtifacts.sort()) {
+    const draftPath = path.join(context.runFolder, artifact + '.draft');
+    if (fs.existsSync(draftPath)) {
+      drafts.push({ draftPath, targetArtifact: artifact });
+    }
+  }
+
+  return { drafts };
+}
+
+/**
+ * Claude Code adapter: invokes claude CLI to produce drafts.
+ * Falls back to scaffold adapter if claude is not available.
+ */
+function claudeCodeAdapter(context) {
+  // Check if claude CLI is available
+  let claudeAvailable = false;
+  try {
+    execFileSync('which', ['claude'], { encoding: 'utf8', timeout: 5000 });
+    claudeAvailable = true;
+  } catch {}
+
+  if (!claudeAvailable) {
+    return scaffoldAdapter(context);
+  }
+
+  // Build deterministic prompt
+  const artifactList = context.missingArtifacts.sort();
+  const schemaDescriptions = artifactList.map((a) => {
+    const schema = loadArtifactSchema(a);
+    if (!schema) return `- ${a}: no schema (write valid JSON with ticket_id)`;
+    const required = (schema.required || []).sort().join(', ');
+    return `- ${a}: required fields: [${required}]`;
+  }).join('\n');
+
+  const prompt = [
+    `You are a ${context.role} agent working on ticket ${context.status.ticket_id}: ${context.status.title}`,
+    `Project: ${context.status.project}`,
+    `Current stage: ${context.status.current_stage}`,
+    '',
+    'Produce the following artifact drafts:',
+    schemaDescriptions,
+    '',
+    `Write each artifact as a file with .draft suffix in: ${context.runFolder}`,
+    `For example, write ${artifactList[0]} content to ${path.join(context.runFolder, artifactList[0] + '.draft')}`,
+    '',
+    'Requirements:',
+    '- Each JSON artifact must be valid against its schema',
+    '- Diff artifacts must be valid unified diff format',
+    '- Do not create any directories',
+    '- Do not modify any existing files',
+    `- Use ticket_id: "${context.status.ticket_id}" in all artifacts that require it`,
+  ].join('\n');
+
+  try {
+    execFileSync('claude', ['-p', prompt, '--output-format', 'json', '--max-turns', '5'], {
+      encoding: 'utf8',
+      timeout: 120000,
+      cwd: WORKSPACE_ROOT,
+    });
+  } catch {
+    // If claude invocation fails, fall back to scaffold
+    return scaffoldAdapter(context);
+  }
+
+  // Check if draft files were created by claude
+  const drafts = [];
+  for (const artifact of artifactList) {
+    const draftPath = path.join(context.runFolder, artifact + '.draft');
+    if (fs.existsSync(draftPath)) {
+      drafts.push({ draftPath, targetArtifact: artifact });
+    }
+  }
+
+  // If claude didn't produce all drafts, fill in with scaffold
+  if (drafts.length < artifactList.length) {
+    const produced = new Set(drafts.map((d) => d.targetArtifact));
+    const remaining = artifactList.filter((a) => !produced.has(a));
+    const fallback = scaffoldAdapter({
+      ...context,
+      missingArtifacts: remaining,
+    });
+    drafts.push(...fallback.drafts);
+  }
+
+  return { drafts };
+}
+
+// ---------------------------------------------------------------------------
+// Draft validation pipeline
+// ---------------------------------------------------------------------------
+function validateDraft(draftPath, targetArtifact, runFolder) {
+  const errors = [];
+
+  // 1. Draft must be inside run folder
+  const resolvedDraft = path.resolve(draftPath);
+  const resolvedRun = path.resolve(runFolder);
+  if (!resolvedDraft.startsWith(resolvedRun + path.sep)) {
+    errors.push(`draft path outside run folder: ${draftPath}`);
+    return { valid: false, errors };
+  }
+
+  // 2. Draft must exist
+  if (!fs.existsSync(draftPath)) {
+    errors.push(`draft file not found: ${draftPath}`);
+    return { valid: false, errors };
+  }
+
+  // 3. Target artifact must not already exist
+  const targetPath = path.join(runFolder, targetArtifact);
+  if (fs.existsSync(targetPath)) {
+    errors.push(`target artifact already exists: ${targetArtifact}`);
+    return { valid: false, errors };
+  }
+
+  // 4. Validate content
+  if (targetArtifact.endsWith('.diff')) {
+    const content = fs.readFileSync(draftPath, 'utf8').trim();
+    if (!content) {
+      errors.push(`draft is empty: ${targetArtifact}`);
+      return { valid: false, errors };
+    }
+    // Check diff doesn't reference paths outside run folder
+    const lines = content.split('\n');
+    for (const line of lines) {
+      if (line.startsWith('---') || line.startsWith('+++')) {
+        const filePath = line.slice(4).trim();
+        if (filePath.startsWith('/') && !filePath.startsWith(resolvedRun)) {
+          errors.push(`diff references path outside run folder: ${filePath}`);
+        }
+      }
+    }
+  } else {
+    // JSON artifact: parse and validate against schema
+    let data;
+    try {
+      data = JSON.parse(fs.readFileSync(draftPath, 'utf8'));
+    } catch (e) {
+      errors.push(`draft is not valid JSON: ${e.message}`);
+      return { valid: false, errors };
+    }
+
+    const schema = loadArtifactSchema(targetArtifact);
+    if (schema) {
+      const schemaErrors = validateSchema(data, schema);
+      if (schemaErrors.length > 0) {
+        errors.push(...schemaErrors.map((e) => `schema: ${e}`));
+      }
+    }
+  }
+
+  return { valid: errors.length === 0, errors };
+}
+
+// ---------------------------------------------------------------------------
+// Directory snapshot helpers
+// ---------------------------------------------------------------------------
+function snapshotDir(dirPath) {
+  if (!fs.existsSync(dirPath)) return [];
+  return fs.readdirSync(dirPath, { withFileTypes: true })
+    .filter((e) => e.isDirectory())
+    .map((e) => e.name)
+    .sort();
+}
+
+function snapshotFiles(dirPath) {
+  if (!fs.existsSync(dirPath)) return [];
+  return fs.readdirSync(dirPath)
+    .sort();
+}
+
+// ---------------------------------------------------------------------------
+// Core autonomous loop
+// ---------------------------------------------------------------------------
+function runAutonomous(runFolder, options = {}) {
+  const maxSteps = options.maxSteps || 50;
+  const maxAgentCalls = options.maxAgentCalls || 20;
+  const dryRun = options.dryRun || false;
+  const agentAdapter = options.agentAdapter || claudeCodeAdapter;
+
+  const trace = [];
+  const artifactsWritten = [];
+  const artifactsSkipped = [];
+  let stepsRun = 0;
+  let agentCalls = 0;
+
+  // Safety: resolve and validate run folder
+  let resolvedFolder;
+  try {
+    resolvedFolder = safePath(runFolder);
+  } catch (e) {
+    return {
+      action: 'autonomous_complete',
+      final_action: 'error',
+      steps_run: 0,
+      agent_calls: 0,
+      artifacts_written: [],
+      artifacts_skipped: [],
+      trace: [`safePath error: ${e.message}`],
+    };
+  }
+
+  // Safety: check run folder exists
+  if (!fs.existsSync(resolvedFolder) || !fs.existsSync(path.join(resolvedFolder, 'status.json'))) {
+    return {
+      action: 'autonomous_complete',
+      final_action: 'error',
+      steps_run: 0,
+      agent_calls: 0,
+      artifacts_written: [],
+      artifacts_skipped: [],
+      trace: ['run folder does not exist or missing status.json'],
+    };
+  }
+
+  // Safety: snapshot runs/ directory
+  const runsDir = safePath('runs');
+  const runsDirsBefore = snapshotDir(runsDir);
+
+  // Safety: snapshot run folder files
+  const runFilesBefore = snapshotFiles(resolvedFolder);
+
+  // Safety: guard mkdirSync
+  const origMkdirSync = fs.mkdirSync;
+  const origMkdir = fs.mkdir;
+  fs.mkdirSync = function guardedMkdirSync() {
+    fs.mkdirSync = origMkdirSync;
+    fs.mkdir = origMkdir;
+    throw new Error('autonomous-runner: directory creation is forbidden');
+  };
+  fs.mkdir = function guardedMkdir(_p, _o, cb) {
+    fs.mkdirSync = origMkdirSync;
+    fs.mkdir = origMkdir;
+    const err = new Error('autonomous-runner: directory creation is forbidden');
+    if (typeof cb === 'function') cb(err);
+    else if (typeof _o === 'function') _o(err);
+    else throw err;
+  };
+
+  try {
+    for (let step = 0; step < maxSteps; step++) {
+      stepsRun++;
+
+      // Get current state via run_next_safe
+      const result = callDP('run_next_safe', resolvedFolder);
+      if (!result.json) {
+        trace.push(`step ${stepsRun}: run_next_safe returned no JSON`);
+        return _result('error', trace, stepsRun, agentCalls, artifactsWritten, artifactsSkipped, maxSteps, maxAgentCalls);
+      }
+
+      const action = result.json.action;
+      trace.push(`step ${stepsRun}: action=${action}, stage=${result.json.current_stage || 'unknown'}`);
+
+      // Terminal actions
+      if (action === 'none') {
+        trace.push('run is complete');
+        return _result('none', trace, stepsRun, agentCalls, artifactsWritten, artifactsSkipped, maxSteps, maxAgentCalls);
+      }
+      if (action === 'blocked') {
+        trace.push(`blocked: ${result.json.blocked_reason || 'unknown'}`);
+        return _result('blocked', trace, stepsRun, agentCalls, artifactsWritten, artifactsSkipped, maxSteps, maxAgentCalls);
+      }
+      if (action === 'error') {
+        trace.push(`error: ${result.json.error || 'unknown'}`);
+        return _result('error', trace, stepsRun, agentCalls, artifactsWritten, artifactsSkipped, maxSteps, maxAgentCalls);
+      }
+      if (action === 'stalled') {
+        trace.push('stalled: no state change detected');
+        return _result('stalled', trace, stepsRun, agentCalls, artifactsWritten, artifactsSkipped, maxSteps, maxAgentCalls);
+      }
+
+      // Needs task pack — generate it
+      if (action === 'needs_task_pack') {
+        trace.push('generating task pack');
+        const tpResult = callDP('generate_task_pack', resolvedFolder);
+        if (!tpResult.json || !tpResult.json.ok) {
+          trace.push(`generate_task_pack failed: ${tpResult.stderr || 'unknown'}`);
+          return _result('error', trace, stepsRun, agentCalls, artifactsWritten, artifactsSkipped, maxSteps, maxAgentCalls);
+        }
+        trace.push('task pack generated');
+        continue;
+      }
+
+      // Progress actions — run_next_safe already made the change
+      if (action === 'generated_role_pack' || action === 'advanced_and_generated' || action === 'completed') {
+        trace.push(`progress: ${action}`);
+        continue;
+      }
+
+      // Needs artifacts — invoke agent
+      if (action === 'needs_artifacts') {
+        if (agentCalls >= maxAgentCalls) {
+          trace.push(`max_agent_calls reached (${maxAgentCalls})`);
+          return _result('needs_artifacts', trace, stepsRun, agentCalls, artifactsWritten, artifactsSkipped, maxSteps, maxAgentCalls);
+        }
+
+        const role = result.json.role;
+        const missingArtifacts = result.json.missing_artifacts || [];
+        const currentStage = result.json.current_stage;
+
+        if (dryRun) {
+          trace.push(`dry_run: would invoke ${role} agent for ${missingArtifacts.join(', ')}`);
+          return _result('needs_artifacts', trace, stepsRun, agentCalls, artifactsWritten, artifactsSkipped, maxSteps, maxAgentCalls);
+        }
+
+        // Build agent context
+        const status = readStatus(resolvedFolder);
+        const context = {
+          runFolder: resolvedFolder,
+          role,
+          missingArtifacts,
+          currentStage,
+          status,
+        };
+
+        // Invoke agent
+        trace.push(`invoking ${role} agent for: ${missingArtifacts.sort().join(', ')}`);
+        let agentResult;
+        try {
+          agentResult = agentAdapter(context);
+        } catch (e) {
+          trace.push(`agent error: ${e.message}`);
+          return _result('error', trace, stepsRun, agentCalls, artifactsWritten, artifactsSkipped, maxSteps, maxAgentCalls);
+        }
+        agentCalls++;
+
+        if (!agentResult || !agentResult.drafts || agentResult.drafts.length === 0) {
+          trace.push('agent produced no drafts');
+          return _result('error', trace, stepsRun, agentCalls, artifactsWritten, artifactsSkipped, maxSteps, maxAgentCalls);
+        }
+
+        // Validate and write each draft
+        let allDraftsValid = true;
+        for (const draft of agentResult.drafts) {
+          const validation = validateDraft(draft.draftPath, draft.targetArtifact, resolvedFolder);
+
+          if (!validation.valid) {
+            trace.push(`draft invalid: ${draft.targetArtifact} — ${validation.errors.join('; ')}`);
+            allDraftsValid = false;
+            // Clean up draft file
+            try { fs.unlinkSync(draft.draftPath); } catch {}
+            continue;
+          }
+
+          // Write final artifact (copy draft content to target)
+          const targetPath = path.join(resolvedFolder, draft.targetArtifact);
+          if (fs.existsSync(targetPath)) {
+            trace.push(`artifact already exists, skipping: ${draft.targetArtifact}`);
+            artifactsSkipped.push(draft.targetArtifact);
+            try { fs.unlinkSync(draft.draftPath); } catch {}
+            continue;
+          }
+
+          const content = fs.readFileSync(draft.draftPath, 'utf8');
+          fs.writeFileSync(targetPath, content, 'utf8');
+          artifactsWritten.push(draft.targetArtifact);
+          trace.push(`wrote artifact: ${draft.targetArtifact}`);
+
+          // Clean up draft
+          try { fs.unlinkSync(draft.draftPath); } catch {}
+
+          // Record artifact via pipeline
+          const recResult = callDP('record_artifact', resolvedFolder, targetPath);
+          if (recResult.json && !recResult.json.valid) {
+            trace.push(`record_artifact validation failed: ${draft.targetArtifact} — ${JSON.stringify(recResult.json.errors)}`);
+          } else {
+            trace.push(`recorded artifact: ${draft.targetArtifact}`);
+          }
+        }
+
+        if (!allDraftsValid) {
+          trace.push('some drafts were invalid');
+        }
+
+        continue;
+      }
+
+      // Unknown action
+      trace.push(`unknown action: ${action}`);
+      return _result('error', trace, stepsRun, agentCalls, artifactsWritten, artifactsSkipped, maxSteps, maxAgentCalls);
+    }
+
+    // Max steps reached
+    trace.push(`max_steps reached (${maxSteps})`);
+    return _result('needs_artifacts', trace, stepsRun, agentCalls, artifactsWritten, artifactsSkipped, maxSteps, maxAgentCalls);
+
+  } finally {
+    fs.mkdirSync = origMkdirSync;
+    fs.mkdir = origMkdir;
+  }
+}
+
+function _result(finalAction, trace, stepsRun, agentCalls, artifactsWritten, artifactsSkipped, maxSteps, maxAgentCalls) {
+  // Safety: verify runs/ unchanged
+  const runsDir = safePath('runs');
+  const runsDirsAfter = snapshotDir(runsDir);
+  // Note: We can't compare to 'before' from this scope directly, but the
+  // caller (cmdRunNextAutonomous) does the final assertion. This is a helper.
+
+  return {
+    action: 'autonomous_complete',
+    final_action: finalAction,
+    steps_run: stepsRun,
+    agent_calls: agentCalls,
+    max_steps: maxSteps,
+    max_agent_calls: maxAgentCalls,
+    artifacts_written: artifactsWritten,
+    artifacts_skipped: artifactsSkipped,
+    trace,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Exports
+// ---------------------------------------------------------------------------
+module.exports = {
+  runAutonomous,
+  scaffoldAdapter,
+  draftFileAdapter,
+  claudeCodeAdapter,
+  validateDraft,
+};

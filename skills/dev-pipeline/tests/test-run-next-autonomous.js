@@ -1,0 +1,397 @@
+#!/usr/bin/env node
+'use strict';
+
+/**
+ * Tests for run_next_autonomous command.
+ * Uses child_process to invoke CLI and a fake agent adapter for artifact generation.
+ * Run: node skills/dev-pipeline/tests/test-run-next-autonomous.js
+ */
+
+const { execFileSync } = require('node:child_process');
+const fs = require('node:fs');
+const path = require('node:path');
+const os = require('node:os');
+
+const DP = path.resolve(__dirname, '..', 'scripts', 'dev-pipeline.js');
+const WORKSPACE_ROOT = path.resolve(os.homedir(), 'dev', 'agent-work');
+const RUNS_DIR = path.join(WORKSPACE_ROOT, 'runs');
+
+// Import autonomous runner and pipeline for direct function testing
+const { runAutonomous, scaffoldAdapter, validateDraft } = require(path.resolve(__dirname, '..', 'scripts', 'autonomous-runner.js'));
+const dp = require(path.resolve(__dirname, '..', 'scripts', 'dev-pipeline.js'));
+
+let passed = 0;
+let failed = 0;
+const tmpDirs = [];
+
+function test(label, fn) {
+  try {
+    fn();
+    passed++;
+    console.log(`  PASS  ${label}`);
+  } catch (e) {
+    failed++;
+    console.log(`  FAIL  ${label}`);
+    console.log(`         ${e.message}`);
+  }
+}
+
+function runCmd(command, ...extraArgs) {
+  try {
+    const stdout = execFileSync('node', [DP, command, ...extraArgs], {
+      encoding: 'utf8',
+      timeout: 30000,
+    });
+    let json = null;
+    try { json = JSON.parse(stdout); } catch {}
+    return { stdout, stderr: '', exitCode: 0, json };
+  } catch (e) {
+    let json = null;
+    try { json = JSON.parse(e.stdout || ''); } catch {}
+    try { json = json || JSON.parse(e.stderr || ''); } catch {}
+    return { stdout: e.stdout || '', stderr: e.stderr || '', exitCode: e.status, json };
+  }
+}
+
+function makeTempRun(name, statusOverrides = {}) {
+  const folderName = `_test_${name}_${Date.now()}`;
+  const absDir = path.join(RUNS_DIR, folderName);
+  fs.mkdirSync(absDir, { recursive: true });
+  tmpDirs.push(absDir);
+
+  const relDir = `runs/${folderName}`;
+
+  fs.writeFileSync(path.join(absDir, '00-intake.json'), JSON.stringify({
+    ticket_id: 'TEST-AUTO',
+    title: 'Test autonomous runner',
+    project: 'test',
+    created_at: '2026-01-01T00:00:00.000Z',
+    source: 'test',
+  }, null, 2), 'utf8');
+
+  const status = {
+    ticket_id: 'TEST-AUTO',
+    title: 'Test autonomous runner',
+    project: 'test',
+    created_at: '2026-01-01T00:00:00.000Z',
+    updated_at: '2026-01-01T00:00:00.000Z',
+    current_stage: 'pm-ready',
+    blocked: false,
+    blocked_reason: null,
+    required_user_input: [],
+    stage_history: [
+      { stage: 'intake', started_at: '2026-01-01T00:00:00.000Z', finished_at: '2026-01-01T00:00:01.000Z', artifact_paths: ['00-intake.json'] },
+      { stage: 'task-pack-generated', started_at: '2026-01-01T00:00:01.000Z', finished_at: '2026-01-01T00:00:02.000Z', artifact_paths: ['30-dev-claude-task.txt'] },
+      { stage: 'pm-ready', started_at: '2026-01-01T00:00:02.000Z', finished_at: null, artifact_paths: [], role: 'PM' },
+    ],
+    next_actions: [],
+    ...statusOverrides,
+  };
+  fs.writeFileSync(path.join(absDir, 'status.json'), JSON.stringify(status, null, 2), 'utf8');
+
+  return { relDir, absDir };
+}
+
+function cleanup() {
+  for (const dir of tmpDirs) {
+    try { fs.rmSync(dir, { recursive: true, force: true }); } catch {}
+  }
+}
+process.on('exit', cleanup);
+
+// -------------------------------------------------------------------------
+// Test 1: non-existent folder
+// -------------------------------------------------------------------------
+console.log('\n--- non-existent folder ---');
+
+test('non-existent folder returns final_action error, creates nothing', () => {
+  const ghostFolder = `runs/_test_auto_ghost_${Date.now()}`;
+  const absGhost = path.join(WORKSPACE_ROOT, ghostFolder);
+
+  const before = fs.readdirSync(RUNS_DIR, { withFileTypes: true })
+    .filter((e) => e.isDirectory()).map((e) => e.name).sort();
+
+  const r = runCmd('run_next_autonomous', ghostFolder);
+
+  const after = fs.readdirSync(RUNS_DIR, { withFileTypes: true })
+    .filter((e) => e.isDirectory()).map((e) => e.name).sort();
+
+  if (!r.json) throw new Error(`No JSON: ${r.stdout} ${r.stderr}`);
+  if (r.json.action !== 'autonomous_complete') throw new Error(`expected autonomous_complete, got ${r.json.action}`);
+  if (r.json.final_action !== 'error') throw new Error(`expected error, got ${r.json.final_action}`);
+  if (r.json.steps_run !== 0) throw new Error(`expected steps_run=0, got ${r.json.steps_run}`);
+  if (fs.existsSync(absGhost)) {
+    fs.rmSync(absGhost, { recursive: true, force: true });
+    throw new Error('ghost folder was created');
+  }
+  if (JSON.stringify(before) !== JSON.stringify(after)) throw new Error('directory listing changed');
+});
+
+// -------------------------------------------------------------------------
+// Test 2: done stage
+// -------------------------------------------------------------------------
+console.log('\n--- done stage ---');
+
+test('done stage stops immediately with final_action none', () => {
+  const { relDir, absDir } = makeTempRun('auto-done', { current_stage: 'done' });
+  const filesBefore = fs.readdirSync(absDir).sort();
+
+  const r = runCmd('run_next_autonomous', relDir);
+  if (r.json.final_action !== 'none') throw new Error(`expected none, got ${r.json.final_action}`);
+  if (r.json.steps_run !== 1) throw new Error(`expected 1 step`);
+  if (r.json.agent_calls !== 0) throw new Error(`expected 0 agent calls`);
+  if (r.json.artifacts_written.length !== 0) throw new Error('unexpected artifacts written');
+
+  // No file changes
+  const filesAfter = fs.readdirSync(absDir).sort();
+  if (JSON.stringify(filesBefore) !== JSON.stringify(filesAfter)) throw new Error('files changed in done run');
+});
+
+// -------------------------------------------------------------------------
+// Test 3: intake → task-pack → pm-ready → needs_artifacts (via direct call)
+// -------------------------------------------------------------------------
+console.log('\n--- intake with scaffold adapter ---');
+
+test('intake stage generates task pack then stops at needs_artifacts', () => {
+  const { relDir, absDir } = makeTempRun('auto-intake', {
+    current_stage: 'intake',
+    stage_history: [
+      { stage: 'intake', started_at: '2026-01-01T00:00:00.000Z', finished_at: null, artifact_paths: ['00-intake.json'] },
+    ],
+  });
+
+  // Use direct function call with scaffold adapter to avoid Claude Code dependency
+  const result = runAutonomous(relDir, {
+    maxSteps: 10,
+    maxAgentCalls: 5,
+    agentAdapter: scaffoldAdapter,
+  });
+
+  if (result.final_action === 'error') throw new Error(`error: ${result.trace.join('; ')}`);
+
+  // Should have generated task pack and advanced to pm-ready, then produced PM artifact
+  if (!result.trace.some((t) => t.includes('generating task pack'))) {
+    throw new Error('did not generate task pack');
+  }
+  if (result.agent_calls < 1) throw new Error(`expected at least 1 agent call, got ${result.agent_calls}`);
+  if (!result.artifacts_written.includes('10-pm-brief.json')) {
+    throw new Error(`expected 10-pm-brief.json written, got: ${result.artifacts_written.join(', ')}`);
+  }
+
+  // Verify artifact file actually exists
+  if (!fs.existsSync(path.join(absDir, '10-pm-brief.json'))) {
+    throw new Error('10-pm-brief.json not on disk');
+  }
+});
+
+// -------------------------------------------------------------------------
+// Test 4: needs_artifacts with scaffold adapter — writes artifacts and advances
+// -------------------------------------------------------------------------
+console.log('\n--- needs_artifacts with scaffold adapter ---');
+
+test('pm-ready with task file: scaffold adapter writes PM brief and advances', () => {
+  const { relDir, absDir } = makeTempRun('auto-pm');
+  // Create task file so run_next_safe returns needs_artifacts
+  fs.writeFileSync(path.join(absDir, '31-pm-claude-task.txt'), 'PM task content', 'utf8');
+
+  const result = runAutonomous(relDir, {
+    maxSteps: 10,
+    maxAgentCalls: 5,
+    agentAdapter: scaffoldAdapter,
+  });
+
+  if (result.final_action === 'error') throw new Error(`error: ${result.trace.join('; ')}`);
+  if (!result.artifacts_written.includes('10-pm-brief.json')) {
+    throw new Error(`expected 10-pm-brief.json in artifacts_written`);
+  }
+  if (result.agent_calls < 1) throw new Error('expected at least 1 agent call');
+
+  // Should have advanced beyond pm-ready
+  const status = JSON.parse(fs.readFileSync(path.join(absDir, 'status.json'), 'utf8'));
+  if (status.current_stage === 'pm-ready') {
+    throw new Error('still at pm-ready after writing artifact');
+  }
+});
+
+test('dev-ready: scaffold adapter writes diff and notes, advances to qa-ready', () => {
+  const { relDir, absDir } = makeTempRun('auto-dev', {
+    current_stage: 'dev-ready',
+    stage_history: [
+      { stage: 'intake', started_at: '2026-01-01T00:00:00.000Z', finished_at: '2026-01-01T00:00:01.000Z', artifact_paths: ['00-intake.json'] },
+      { stage: 'dev-ready', started_at: '2026-01-01T00:00:02.000Z', finished_at: null, artifact_paths: [], role: 'Dev' },
+    ],
+  });
+  fs.writeFileSync(path.join(absDir, '33-dev-claude-task.txt'), 'Dev task content', 'utf8');
+
+  const result = runAutonomous(relDir, {
+    maxSteps: 10,
+    maxAgentCalls: 5,
+    agentAdapter: scaffoldAdapter,
+  });
+
+  if (result.final_action === 'error') throw new Error(`error: ${result.trace.join('; ')}`);
+  if (!result.artifacts_written.includes('40-dev-patch.diff')) throw new Error('missing diff');
+  if (!result.artifacts_written.includes('41-dev-notes.json')) throw new Error('missing notes');
+
+  const status = JSON.parse(fs.readFileSync(path.join(absDir, 'status.json'), 'utf8'));
+  if (status.current_stage === 'dev-ready') {
+    throw new Error('still at dev-ready');
+  }
+});
+
+// -------------------------------------------------------------------------
+// Test 5: dry_run mode
+// -------------------------------------------------------------------------
+console.log('\n--- dry_run ---');
+
+test('dry_run returns needs_artifacts without invoking agent', () => {
+  const { relDir, absDir } = makeTempRun('auto-dry');
+  fs.writeFileSync(path.join(absDir, '31-pm-claude-task.txt'), 'PM task', 'utf8');
+
+  const r = runCmd('run_next_autonomous', relDir, '--dry_run');
+  if (r.json.final_action !== 'needs_artifacts') throw new Error(`expected needs_artifacts, got ${r.json.final_action}`);
+  if (r.json.agent_calls !== 0) throw new Error('agent should not be called in dry_run');
+  if (!r.json.trace.some((t) => t.includes('dry_run'))) throw new Error('missing dry_run trace');
+  // No artifact files should exist
+  if (fs.existsSync(path.join(absDir, '10-pm-brief.json'))) throw new Error('artifact created in dry_run');
+});
+
+// -------------------------------------------------------------------------
+// Test 6: blocked stage
+// -------------------------------------------------------------------------
+console.log('\n--- blocked ---');
+
+test('blocked stage stops with final_action blocked', () => {
+  const { relDir } = makeTempRun('auto-blocked', {
+    current_stage: 'blocked',
+    blocked: true,
+    blocked_reason: 'need answer',
+    required_user_input: [
+      { id: 'inp-1', prompt: 'What?', options: null, default: null, status: 'pending', answer: null },
+    ],
+  });
+  const result = runAutonomous(relDir, { maxSteps: 5, agentAdapter: scaffoldAdapter });
+  if (result.final_action !== 'blocked') throw new Error(`expected blocked, got ${result.final_action}`);
+  if (result.agent_calls !== 0) throw new Error('no agent calls on blocked');
+});
+
+// -------------------------------------------------------------------------
+// Test 7: safety — no new directories under runs/
+// -------------------------------------------------------------------------
+console.log('\n--- safety ---');
+
+test('autonomous runner does not create any new run directories', () => {
+  const before = fs.readdirSync(RUNS_DIR, { withFileTypes: true })
+    .filter((e) => e.isDirectory())
+    .map((e) => e.name);
+  const nonTestBefore = before.filter((n) => !n.startsWith('_test_'));
+
+  // Run on a pm-ready with scaffold adapter
+  const { relDir, absDir } = makeTempRun('auto-safety');
+  fs.writeFileSync(path.join(absDir, '31-pm-claude-task.txt'), 'task', 'utf8');
+  runAutonomous(relDir, { maxSteps: 10, maxAgentCalls: 3, agentAdapter: scaffoldAdapter });
+
+  const after = fs.readdirSync(RUNS_DIR, { withFileTypes: true })
+    .filter((e) => e.isDirectory())
+    .map((e) => e.name);
+  const nonTestAfter = after.filter((n) => !n.startsWith('_test_'));
+
+  if (nonTestBefore.length !== nonTestAfter.length) {
+    throw new Error(`non-test run count changed: ${nonTestBefore.length} → ${nonTestAfter.length}`);
+  }
+});
+
+test('no new run folders created outside test dirs', () => {
+  const allRuns = fs.readdirSync(RUNS_DIR, { withFileTypes: true })
+    .filter((e) => e.isDirectory())
+    .map((e) => e.name);
+  const nonTest = allRuns.filter((n) => !n.startsWith('_test_'));
+  const originals = nonTest.filter((n) => n.includes('OC-07') || n.includes('OC-08'));
+  if (originals.length !== nonTest.length) {
+    throw new Error(`unexpected non-test runs: ${nonTest.filter(n => !n.includes('OC-07') && !n.includes('OC-08')).join(', ')}`);
+  }
+});
+
+// -------------------------------------------------------------------------
+// Test 8: idempotency — rerun does not rewrite artifacts
+// -------------------------------------------------------------------------
+console.log('\n--- idempotency ---');
+
+test('rerun after artifacts exist skips them and does not overwrite', () => {
+  const { relDir, absDir } = makeTempRun('auto-idemp');
+  fs.writeFileSync(path.join(absDir, '31-pm-claude-task.txt'), 'task', 'utf8');
+
+  // First run writes artifact
+  const r1 = runAutonomous(relDir, { maxSteps: 5, maxAgentCalls: 2, agentAdapter: scaffoldAdapter });
+  if (!r1.artifacts_written.includes('10-pm-brief.json')) throw new Error('first run did not write artifact');
+
+  // Record the content
+  const content1 = fs.readFileSync(path.join(absDir, '10-pm-brief.json'), 'utf8');
+
+  // Second run should not overwrite
+  const r2 = runAutonomous(relDir, { maxSteps: 5, maxAgentCalls: 2, agentAdapter: scaffoldAdapter });
+  const content2 = fs.readFileSync(path.join(absDir, '10-pm-brief.json'), 'utf8');
+
+  if (content1 !== content2) throw new Error('artifact was overwritten');
+  if (r2.artifacts_written.includes('10-pm-brief.json')) throw new Error('artifact should not appear in second run artifacts_written');
+});
+
+// -------------------------------------------------------------------------
+// Test 9: output schema contract
+// -------------------------------------------------------------------------
+console.log('\n--- output schema contract ---');
+
+test('output has all stable contract fields', () => {
+  const { relDir } = makeTempRun('auto-contract', { current_stage: 'done' });
+  const r = runCmd('run_next_autonomous', relDir);
+  if (typeof r.json.ok !== 'boolean') throw new Error('missing ok');
+  if (r.json.action !== 'autonomous_complete') throw new Error('missing action=autonomous_complete');
+  if (typeof r.json.final_action !== 'string') throw new Error('missing final_action');
+  if (typeof r.json.steps_run !== 'number') throw new Error('missing steps_run');
+  if (typeof r.json.agent_calls !== 'number') throw new Error('missing agent_calls');
+  if (!Array.isArray(r.json.artifacts_written)) throw new Error('missing artifacts_written');
+  if (!Array.isArray(r.json.artifacts_skipped)) throw new Error('missing artifacts_skipped');
+  if (!Array.isArray(r.json.trace)) throw new Error('missing trace');
+});
+
+// -------------------------------------------------------------------------
+// Test 10: draft validation
+// -------------------------------------------------------------------------
+console.log('\n--- draft validation ---');
+
+test('validateDraft rejects draft outside run folder', () => {
+  const { absDir } = makeTempRun('auto-val-outside');
+  const result = validateDraft('/tmp/evil.draft', '10-pm-brief.json', absDir);
+  if (result.valid) throw new Error('should reject draft outside run folder');
+});
+
+test('validateDraft rejects when target already exists', () => {
+  const { absDir } = makeTempRun('auto-val-exists');
+  const draftPath = path.join(absDir, '10-pm-brief.json.draft');
+  fs.writeFileSync(draftPath, '{"ticket_id":"X"}', 'utf8');
+  fs.writeFileSync(path.join(absDir, '10-pm-brief.json'), '{}', 'utf8');
+  const result = validateDraft(draftPath, '10-pm-brief.json', absDir);
+  if (result.valid) throw new Error('should reject when target exists');
+  fs.unlinkSync(draftPath);
+});
+
+test('validateDraft accepts valid JSON draft', () => {
+  const { absDir } = makeTempRun('auto-val-ok');
+  const schema = dp.loadArtifactSchema('10-pm-brief.json');
+  const content = dp.generateMinimalValue(schema);
+  content.ticket_id = 'TEST-AUTO';
+  const draftPath = path.join(absDir, '10-pm-brief.json.draft');
+  fs.writeFileSync(draftPath, JSON.stringify(content, null, 2), 'utf8');
+  const result = validateDraft(draftPath, '10-pm-brief.json', absDir);
+  if (!result.valid) throw new Error(`should accept valid draft: ${result.errors.join('; ')}`);
+  fs.unlinkSync(draftPath);
+});
+
+// -------------------------------------------------------------------------
+// Summary
+// -------------------------------------------------------------------------
+console.log(`\n${'='.repeat(40)}`);
+console.log(`  ${passed} passed, ${failed} failed`);
+console.log('='.repeat(40));
+
+process.exit(failed > 0 ? 1 : 0);

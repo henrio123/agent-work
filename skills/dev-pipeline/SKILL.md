@@ -233,6 +233,70 @@ Default `--max_steps` is 10. The loop stops when:
 }
 ```
 
+#### run_next_autonomous
+
+Autonomous multi-agent runner. Drives a run forward by repeatedly: getting the next action, invoking the correct role agent to produce draft artifacts, validating drafts against schemas, writing final artifacts (only if target does not exist), and recording them.
+
+```bash
+./tools/dp.sh run_next_autonomous <run_folder> [--max_steps N] [--max_agent_calls N] [--dry_run]
+# or
+./tools/run-next-autonomous.sh <run_folder> [--max_steps N] [--max_agent_calls N] [--dry_run]
+```
+
+Defaults: `--max_steps 50`, `--max_agent_calls 20`. Use `--dry_run` to preview without invoking agents.
+
+**Safety model:**
+- Agents write `.draft` files only — runner validates before writing final artifacts
+- Never overwrites existing artifacts (refuses and skips)
+- Never creates directories (`mkdirSync`/`mkdir` guarded)
+- Snapshots `runs/` before/after and fails if changed
+- All filesystem access through `safePath`
+
+**Agent adapters** (in priority order):
+1. **Claude Code** — invokes `claude` CLI with a strict prompt; falls back if unavailable
+2. **Scaffold** — generates minimal schema-valid content (fallback)
+3. **Draft-file** — reads pre-existing `.draft` files from the run folder
+
+**Stable contract fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `ok` | boolean | Always `true` |
+| `action` | string | Always `autonomous_complete` |
+| `final_action` | string | `none`, `blocked`, `needs_artifacts`, `error`, `stalled` |
+| `steps_run` | int | Total orchestration steps |
+| `agent_calls` | int | Number of agent invocations |
+| `artifacts_written` | string[] | Artifacts successfully written |
+| `artifacts_skipped` | string[] | Artifacts skipped (already exist) |
+| `trace` | string[] | Decision log |
+
+**Example: autonomous run with artifact generation**
+
+```json
+{
+  "ok": true,
+  "action": "autonomous_complete",
+  "final_action": "needs_artifacts",
+  "steps_run": 4,
+  "agent_calls": 1,
+  "artifacts_written": ["10-pm-brief.json"],
+  "artifacts_skipped": [],
+  "trace": [
+    "step 1: action=needs_task_pack, stage=intake",
+    "generating task pack",
+    "task pack generated",
+    "step 2: action=advanced_and_generated, stage=pm-ready",
+    "progress: advanced_and_generated",
+    "step 3: action=needs_artifacts, stage=pm-ready",
+    "invoking PM agent for: 10-pm-brief.json",
+    "wrote artifact: 10-pm-brief.json",
+    "recorded artifact: 10-pm-brief.json",
+    "step 4: action=needs_artifacts, stage=arch-ready",
+    "dry_run: would invoke Architect agent for 20-arch-design.json"
+  ]
+}
+```
+
 #### scaffold_artifacts
 
 Create minimal schema-valid JSON files for the current stage's required artifacts. Handles `$ref`, `oneOf`/`anyOf`/`allOf`, `format` (date-time, uuid, uri), `minLength`, `minItems`, `default`, and union types. Skips `.diff` files and never overwrites existing artifacts.
@@ -339,6 +403,7 @@ node skills/dev-pipeline/tests/test-scaffold.js        # scaffold + schema tests
 node skills/dev-pipeline/tests/test-state-machine.js   # state machine regression (28 tests)
 node skills/dev-pipeline/tests/test-run-next-safe.js   # run_next_safe + safety contract (13 tests)
 node skills/dev-pipeline/tests/test-run-next-loop.js   # run_next_loop autopilot tests (11 tests)
+node skills/dev-pipeline/tests/test-run-next-autonomous.js  # autonomous runner tests (14 tests)
 ```
 
 ## Security

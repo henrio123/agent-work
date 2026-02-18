@@ -1566,9 +1566,11 @@ function cmdScaffoldArtifacts(runFolder) {
 // ---------------------------------------------------------------------------
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
-    TOOL_VERSION, STAGE_CONFIG, ARTIFACT_SCHEMA_MAP,
+    TOOL_VERSION, STAGE_CONFIG, ARTIFACT_SCHEMA_MAP, WORKSPACE_ROOT,
     generateMinimalValue, validateSchema, resolveRef,
     getNextStageInfo, normalizeStatus, getGitHead,
+    safePath, readJSON, writeJSON, readStatus, loadArtifactSchema, validateArtifact,
+    _runNextSafeCore,
   };
 }
 
@@ -1599,6 +1601,7 @@ if (require.main === module) {
           '  orchestrate_one <run_folder>                  Idempotent single-step orchestrator',
           '  run_next_safe <run_folder>                    Safe autopilot: one step with decision trace',
           '  run_next_loop <run_folder> [--max_steps N]   Loop autopilot: repeat run_next_safe until stop',
+          '  run_next_autonomous <run_folder> [opts]       Autonomous multi-agent runner with draft-safe writes',
           '  scaffold_artifacts <run_folder>               Create minimal schema-valid JSON for current stage',
           '',
           'Status:',
@@ -1677,8 +1680,37 @@ if (require.main === module) {
         cmdRunNextLoop(folder, maxSteps);
         break;
       }
+      case 'run_next_autonomous': {
+        const { runAutonomous } = require('./autonomous-runner.js');
+        const optFlags = new Set(['--max_steps', '--max_agent_calls', '--dry_run']);
+        const aFolder = args.find((a) => !optFlags.has(a) && !args.some((f, i) => optFlags.has(f) && args[i + 1] === a));
+        if (!aFolder) fail('Usage: run_next_autonomous <run_folder> [--max_steps N] [--max_agent_calls N] [--dry_run]');
+        const resolvedFolder = safePath(aFolder);
+        const aMaxStepsIdx = args.indexOf('--max_steps');
+        const aMaxAgentIdx = args.indexOf('--max_agent_calls');
+        const opts = {
+          maxSteps: aMaxStepsIdx !== -1 ? parseInt(args[aMaxStepsIdx + 1], 10) : 50,
+          maxAgentCalls: aMaxAgentIdx !== -1 ? parseInt(args[aMaxAgentIdx + 1], 10) : 20,
+          dryRun: args.includes('--dry_run'),
+        };
+        // Safety: snapshot runs/ before
+        const aRunsDir = safePath('runs');
+        const aRunsBefore = fs.existsSync(aRunsDir)
+          ? fs.readdirSync(aRunsDir, { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => e.name).sort()
+          : [];
+        const result = runAutonomous(aFolder, opts);
+        // Safety: verify runs/ unchanged
+        const aRunsAfter = fs.existsSync(aRunsDir)
+          ? fs.readdirSync(aRunsDir, { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => e.name).sort()
+          : [];
+        if (JSON.stringify(aRunsBefore) !== JSON.stringify(aRunsAfter)) {
+          fail('run_next_autonomous: runs/ directory changed during execution');
+        }
+        ok(result);
+        break;
+      }
       default:
-        fail(`Unknown command: ${command || '(none)'}. Available: create_run, create_run_from_ticket, generate_task_pack, generate_role_pack, next_stage, record_artifact, advance, orchestrate_one, run_next_safe, run_next_loop, scaffold_artifacts, block, respond, list, status, stale_list, stale_delete`);
+        fail(`Unknown command: ${command || '(none)'}. Available: create_run, create_run_from_ticket, generate_task_pack, generate_role_pack, next_stage, record_artifact, advance, orchestrate_one, run_next_safe, run_next_loop, run_next_autonomous, scaffold_artifacts, block, respond, list, status, stale_list, stale_delete`);
     }
   } catch (err) {
     fail(err.message);
