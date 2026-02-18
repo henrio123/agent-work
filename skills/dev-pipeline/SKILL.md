@@ -149,6 +149,13 @@ node {baseDir}/scripts/dashboard.js
 
 Opens at `http://localhost:18790` (override with `--port=NNNN`). Auto-refreshes every 5 seconds. Shows color-coded stage badges, expandable inputs and history.
 
+Helper scripts for quick start/stop:
+
+```bash
+./tools/dashboard-start.sh   # start (idempotent, prints URL)
+./tools/dashboard-stop.sh    # stop (safe if nothing running)
+```
+
 ## Security
 
 - All paths are resolved and validated to stay within `~/dev/agent-work/`

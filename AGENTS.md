@@ -207,6 +207,16 @@ Think of it like a human reviewing their journal and updating their mental model
 
 The goal: Be helpful without being annoying. Check in a few times a day, do useful background work, but respect quiet time.
 
+## Ticket Workflow
+
+When starting a new ticket, always use dev-pipeline as the first step:
+
+1. `node skills/dev-pipeline/scripts/dev-pipeline.js create_run <ticket_id> "<title>" "<project>"`
+2. `node skills/dev-pipeline/scripts/dev-pipeline.js generate_task_pack <run_folder>`
+3. Work from `<run_folder>/30-dev-claude-task.txt`
+4. If blocked, use `block` and `respond` commands to track inputs
+5. Use `list` and `status` to check progress
+
 ## Delegation Rule
 
 Reegel: Kui ülesanne on masinaga teostatav ja ei vaja tingimata inimese otsustamist, siis ChatGPT annab mulle professionaalse Claude Code taski või prompti, mille saan otse kopeerida ja käivitada. Kui on vaja inimese sisendit, siis ChatGPT ütleb selgelt, milline üks konkreetne sisend on puudu ja miks see on vajalik.
