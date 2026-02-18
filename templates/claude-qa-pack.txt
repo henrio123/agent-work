@@ -28,9 +28,15 @@ STEPS
 1. Read the PM brief to understand acceptance criteria.
 2. Read the dev patch and notes to understand what was implemented.
 3. Verify each acceptance criterion is met.
-4. Run any available tests.
+4. Run verification commands that do NOT create new runs or modify state:
+   - ./tools/dp.sh list
+   - ./tools/dp.sh status {{RUN_FOLDER}}
+   - ./tools/dp.sh next_stage {{RUN_FOLDER}}
+   - Validate existing artifacts: ./tools/dp.sh record_artifact {{RUN_FOLDER}} <artifact_path>
 5. Document issues found with severity levels.
 6. Assign a verdict: pass, fail, or conditional.
+
+IMPORTANT: Do NOT use create_run or create_run_from_ticket during QA. Only use read-only commands.
 
 VERIFICATION
 The QA report must validate against the qa-report schema.

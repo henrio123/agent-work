@@ -117,13 +117,15 @@ Idempotent single-step orchestrator. Determines and executes the next safe actio
 
 #### scaffold_artifacts
 
-Create empty but schema-valid JSON files for the current stage's required artifacts. Skips `.diff` files and does not overwrite existing artifacts.
+Create minimal schema-valid JSON files for the current stage's required artifacts. Handles `$ref`, `oneOf`/`anyOf`/`allOf`, `format` (date-time, uuid, uri), `minLength`, `minItems`, `default`, and union types. Skips `.diff` files and never overwrites existing artifacts.
 
 ```bash
 ./tools/dp.sh scaffold_artifacts <run_folder>
 ```
 
 **Output:** `{ "ok": true, "stage": "dev-ready", "role": "Dev", "scaffolded": ["41-dev-notes.json"], "skipped_diff": ["40-dev-patch.diff"] }`
+
+**Warning:** Scaffolded files are a starting point with minimal placeholder values. You must edit them with real content before running `record_artifact` in production work.
 
 ### Status & Cleanup
 

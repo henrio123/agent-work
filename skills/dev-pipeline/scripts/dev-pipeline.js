@@ -1075,26 +1075,103 @@ function cmdOrchestrateOne(runFolder) {
 // ---------------------------------------------------------------------------
 // Scaffold: create minimal schema-valid JSON artifacts for current stage
 // ---------------------------------------------------------------------------
-function generateMinimalValue(schema) {
-  if (!schema || !schema.type) return null;
+
+// Resolve $ref within a root schema's $defs/definitions
+function resolveRef(ref, rootSchema) {
+  if (!ref || !ref.startsWith('#/')) return null;
+  const parts = ref.slice(2).split('/');
+  let node = rootSchema;
+  for (const p of parts) {
+    if (!node || typeof node !== 'object') return null;
+    node = node[p];
+  }
+  return node || null;
+}
+
+function generateMinimalValue(schema, rootSchema) {
+  rootSchema = rootSchema || schema;
+  if (!schema) return null;
+
+  // $ref resolution
+  if (schema.$ref) {
+    const resolved = resolveRef(schema.$ref, rootSchema);
+    if (resolved) return generateMinimalValue(resolved, rootSchema);
+    return null;
+  }
+
+  // allOf: merge into one object schema
+  if (schema.allOf) {
+    const merged = {};
+    for (const sub of schema.allOf) {
+      const resolved = sub.$ref ? resolveRef(sub.$ref, rootSchema) : sub;
+      if (!resolved) continue;
+      if (resolved.properties) merged.properties = { ...merged.properties, ...resolved.properties };
+      if (resolved.required) merged.required = [...(merged.required || []), ...resolved.required];
+      if (resolved.type && !merged.type) merged.type = resolved.type;
+    }
+    // Copy over any top-level schema keys not in allOf
+    if (schema.type && !merged.type) merged.type = schema.type;
+    if (schema.properties) merged.properties = { ...merged.properties, ...schema.properties };
+    if (schema.required) merged.required = [...(merged.required || []), ...schema.required];
+    return generateMinimalValue(merged, rootSchema);
+  }
+
+  // oneOf / anyOf: pick first option
+  if (schema.oneOf) return generateMinimalValue(schema.oneOf[0], rootSchema);
+  if (schema.anyOf) return generateMinimalValue(schema.anyOf[0], rootSchema);
+
+  // default value takes priority
+  if (schema.default !== undefined) return schema.default;
+
+  if (!schema.type) {
+    // No type but has properties — treat as object
+    if (schema.properties || schema.required) {
+      return generateMinimalValue({ ...schema, type: 'object' }, rootSchema);
+    }
+    return null;
+  }
 
   const types = Array.isArray(schema.type) ? schema.type : [schema.type];
-  const type = types[0];
+  // Pick first non-null type if possible
+  const type = types.find((t) => t !== 'null') || types[0];
 
   if (type === 'string') {
     if (schema.enum) return schema.enum[0];
+    // format-aware defaults
+    if (schema.format === 'date-time') return '1970-01-01T00:00:00.000Z';
+    if (schema.format === 'date') return '1970-01-01';
+    if (schema.format === 'uuid') return '00000000-0000-0000-0000-000000000000';
+    if (schema.format === 'uri' || schema.format === 'uri-reference') return 'https://example.com';
+    if (schema.format === 'email') return 'user@example.com';
+    // minLength
+    if (schema.minLength && schema.minLength > 0) return '_'.repeat(schema.minLength);
     return '';
   }
-  if (type === 'number') return 0;
+  if (type === 'integer' || type === 'number') {
+    if (schema.minimum !== undefined) return schema.minimum;
+    return 0;
+  }
   if (type === 'boolean') return false;
   if (type === 'null') return null;
-  if (type === 'array') return [];
+  if (type === 'array') {
+    const min = schema.minItems || 0;
+    if (min === 0) return [];
+    const arr = [];
+    for (let i = 0; i < min; i++) {
+      arr.push(schema.items ? generateMinimalValue(schema.items, rootSchema) : null);
+    }
+    return arr;
+  }
   if (type === 'object') {
     const obj = {};
     if (schema.required && schema.properties) {
       for (const key of schema.required) {
         const propSchema = schema.properties[key];
-        obj[key] = propSchema ? generateMinimalValue(propSchema) : null;
+        obj[key] = propSchema ? generateMinimalValue(propSchema, rootSchema) : null;
+      }
+    } else if (schema.required) {
+      for (const key of schema.required) {
+        obj[key] = null;
       }
     }
     return obj;
@@ -1129,7 +1206,10 @@ function cmdScaffoldArtifacts(runFolder) {
     }
 
     const minimal = generateMinimalValue(schema);
-    if (minimal && typeof minimal === 'object' && !Array.isArray(minimal)) {
+    // Only inject ticket_id if the schema declares it
+    const schemaHasTicketId = (schema.required && schema.required.includes('ticket_id'))
+      || (schema.properties && schema.properties.ticket_id);
+    if (schemaHasTicketId && minimal && typeof minimal === 'object' && !Array.isArray(minimal)) {
       minimal.ticket_id = status.ticket_id;
     }
     writeJSON(artifactPath, minimal);
@@ -1140,60 +1220,69 @@ function cmdScaffoldArtifacts(runFolder) {
 }
 
 // ---------------------------------------------------------------------------
+// Exports for testing
+// ---------------------------------------------------------------------------
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = { generateMinimalValue, validateSchema, resolveRef, ARTIFACT_SCHEMA_MAP };
+}
+
+// ---------------------------------------------------------------------------
 // CLI dispatch
 // ---------------------------------------------------------------------------
-const [command, ...args] = process.argv.slice(2);
+if (require.main === module) {
+  const [command, ...args] = process.argv.slice(2);
 
-try {
-  switch (command) {
-    case 'create_run':
-      cmdCreateRun(args[0], args[1], args[2]);
-      break;
-    case 'generate_task_pack':
-      cmdGenerateTaskPack(args[0]);
-      break;
-    case 'block':
-      cmdBlock(args[0], args[1], ...args.slice(2));
-      break;
-    case 'respond':
-      cmdRespond(args[0], args[1], args[2]);
-      break;
-    case 'list':
-      cmdList();
-      break;
-    case 'status':
-      cmdStatus(args[0]);
-      break;
-    case 'create_run_from_ticket':
-      cmdCreateRunFromTicket(args[0]);
-      break;
-    case 'stale_list':
-      cmdStaleList();
-      break;
-    case 'stale_delete':
-      cmdStaleDelete(args);
-      break;
-    case 'next_stage':
-      cmdNextStage(args[0]);
-      break;
-    case 'generate_role_pack':
-      cmdGenerateRolePack(args[0]);
-      break;
-    case 'record_artifact':
-      cmdRecordArtifact(args[0], args[1]);
-      break;
-    case 'advance':
-      cmdAdvance(args[0], args.slice(1));
-      break;
-    case 'orchestrate_one':
-      cmdOrchestrateOne(args[0]);
-      break;
-    case 'scaffold_artifacts':
-      cmdScaffoldArtifacts(args[0]);
-      break;
-    default:
-      fail(`Unknown command: ${command || '(none)'}. Available: create_run, create_run_from_ticket, generate_task_pack, generate_role_pack, next_stage, record_artifact, advance, orchestrate_one, scaffold_artifacts, block, respond, list, status, stale_list, stale_delete`);
+  try {
+    switch (command) {
+      case 'create_run':
+        cmdCreateRun(args[0], args[1], args[2]);
+        break;
+      case 'generate_task_pack':
+        cmdGenerateTaskPack(args[0]);
+        break;
+      case 'block':
+        cmdBlock(args[0], args[1], ...args.slice(2));
+        break;
+      case 'respond':
+        cmdRespond(args[0], args[1], args[2]);
+        break;
+      case 'list':
+        cmdList();
+        break;
+      case 'status':
+        cmdStatus(args[0]);
+        break;
+      case 'create_run_from_ticket':
+        cmdCreateRunFromTicket(args[0]);
+        break;
+      case 'stale_list':
+        cmdStaleList();
+        break;
+      case 'stale_delete':
+        cmdStaleDelete(args);
+        break;
+      case 'next_stage':
+        cmdNextStage(args[0]);
+        break;
+      case 'generate_role_pack':
+        cmdGenerateRolePack(args[0]);
+        break;
+      case 'record_artifact':
+        cmdRecordArtifact(args[0], args[1]);
+        break;
+      case 'advance':
+        cmdAdvance(args[0], args.slice(1));
+        break;
+      case 'orchestrate_one':
+        cmdOrchestrateOne(args[0]);
+        break;
+      case 'scaffold_artifacts':
+        cmdScaffoldArtifacts(args[0]);
+        break;
+      default:
+        fail(`Unknown command: ${command || '(none)'}. Available: create_run, create_run_from_ticket, generate_task_pack, generate_role_pack, next_stage, record_artifact, advance, orchestrate_one, scaffold_artifacts, block, respond, list, status, stale_list, stale_delete`);
+    }
+  } catch (err) {
+    fail(err.message);
   }
-} catch (err) {
-  fail(err.message);
 }
