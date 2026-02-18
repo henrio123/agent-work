@@ -185,6 +185,54 @@ Additional fields vary by action (e.g. `required_inputs` for blocked, `missing_a
 }
 ```
 
+#### run_next_loop
+
+Loop autopilot: repeatedly calls `run_next_safe` until a stop condition is reached. Same safety guarantees — never creates runs, never overwrites artifacts, never creates directories.
+
+```bash
+./tools/dp.sh run_next_loop <run_folder> [--max_steps N]
+# or
+./tools/run-next-loop.sh <run_folder> [--max_steps N]
+```
+
+Default `--max_steps` is 10. The loop stops when:
+- A **stop action** is reached: `none`, `blocked`, `needs_artifacts`, `needs_task_pack`, `error`, `completed`
+- **Stall detected**: fingerprint (stage + blocked + artifact count + history length) is identical between consecutive non-stop iterations
+- **max_steps** exhausted
+
+**Stable contract fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `ok` | boolean | Always `true` |
+| `action` | string | Always `loop_complete` |
+| `final_action` | string | The action that stopped the loop |
+| `steps_run` | int | Number of steps executed |
+| `max_steps` | int | Configured limit |
+| `steps` | array | Each step's full result (action, current_stage, trace, etc.) |
+| `trace` | string[] | Loop-level decision log |
+
+**Example: needs_artifacts after multi-step progression**
+
+```json
+{
+  "ok": true,
+  "action": "loop_complete",
+  "final_action": "needs_artifacts",
+  "steps_run": 2,
+  "max_steps": 10,
+  "steps": [
+    { "action": "advanced_and_generated", "advanced_to": "pm-ready", "role": "PM", "..." : "..." },
+    { "action": "needs_artifacts", "current_stage": "pm-ready", "missing_artifacts": ["10-pm-brief.json"], "..." : "..." }
+  ],
+  "trace": [
+    "step 1: action=advanced_and_generated, stage=pm-ready",
+    "step 2: action=needs_artifacts, stage=pm-ready",
+    "stopping: needs_artifacts"
+  ]
+}
+```
+
 #### scaffold_artifacts
 
 Create minimal schema-valid JSON files for the current stage's required artifacts. Handles `$ref`, `oneOf`/`anyOf`/`allOf`, `format` (date-time, uuid, uri), `minLength`, `minItems`, `default`, and union types. Skips `.diff` files and never overwrites existing artifacts.
@@ -290,6 +338,7 @@ Or individually:
 node skills/dev-pipeline/tests/test-scaffold.js        # scaffold + schema tests (35 tests)
 node skills/dev-pipeline/tests/test-state-machine.js   # state machine regression (28 tests)
 node skills/dev-pipeline/tests/test-run-next-safe.js   # run_next_safe + safety contract (13 tests)
+node skills/dev-pipeline/tests/test-run-next-loop.js   # run_next_loop autopilot tests (11 tests)
 ```
 
 ## Security

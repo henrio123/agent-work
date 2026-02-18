@@ -10,6 +10,7 @@ SUITES=(
   "$TESTS_DIR/test-scaffold.js"
   "$TESTS_DIR/test-state-machine.js"
   "$TESTS_DIR/test-run-next-safe.js"
+  "$TESTS_DIR/test-run-next-loop.js"
 )
 
 total_passed=0

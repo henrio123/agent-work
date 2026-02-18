@@ -1106,7 +1106,176 @@ function cmdOrchestrateOne(runFolder) {
 }
 
 // ---------------------------------------------------------------------------
-// run_next_safe: single safe autopilot step with decision trace
+// Shared advance helper: closes current stage, opens nextStage, generates
+// role pack if applicable.  Returns a result object (no process.exit).
+// ---------------------------------------------------------------------------
+function _doAdvance(runFolder, status, nextStage, trace) {
+  const currentTime = now();
+  const currentEntry = status.stage_history.find(
+    (e) => e.stage === status.current_stage && !e.finished_at
+  );
+  if (currentEntry) currentEntry.finished_at = currentTime;
+
+  status.current_stage = nextStage;
+
+  if (nextStage === 'done') {
+    status.stage_history.push({
+      stage: 'done', started_at: currentTime, finished_at: currentTime, artifact_paths: [],
+    });
+    status.next_actions = [];
+    writeStatus(runFolder, status);
+    trace.push('advanced to done');
+    return { action: 'completed', advanced_to: 'done', current_stage: 'done', trace };
+  }
+
+  const nextConfig = STAGE_CONFIG[nextStage];
+  status.stage_history.push({
+    stage: nextStage, started_at: currentTime, finished_at: null,
+    artifact_paths: [], role: nextConfig ? nextConfig.role : null,
+  });
+
+  if (nextConfig) {
+    const intake = readJSON(path.join(runFolder, '00-intake.json'));
+    const content = renderTemplate(nextConfig.template, {
+      ticket_id: intake.ticket_id, title: intake.title,
+      project: intake.project || intake.project_name, run_folder: runFolder,
+    });
+    fs.writeFileSync(path.join(runFolder, nextConfig.taskFile), content, 'utf8');
+    status.next_actions = [
+      { label: `${nextConfig.role}: complete work`, command: `Follow ${nextConfig.taskFile}` },
+      ...nextConfig.requiredArtifacts.map((a) => ({
+        label: `Record: ${a}`,
+        command: `./tools/dp.sh record_artifact ${runFolder} ${path.join(runFolder, a)}`,
+      })),
+    ];
+  }
+
+  writeStatus(runFolder, status);
+  trace.push(`advanced to ${nextStage}`);
+  return {
+    action: 'advanced_and_generated',
+    advanced_to: nextStage,
+    current_stage: nextStage,
+    role: nextConfig ? nextConfig.role : null,
+    task_file: nextConfig ? nextConfig.taskFile : null,
+    required_artifacts: nextConfig ? nextConfig.requiredArtifacts : [],
+    trace,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// run_next_safe core: returns a result object (no process.exit, no stdout).
+// Used by both cmdRunNextSafe (single step) and cmdRunNextLoop (loop).
+// ---------------------------------------------------------------------------
+function _runNextSafeCore(runFolder) {
+  const status = readStatus(runFolder);
+  const trace = [];
+
+  // 1. Done — nothing to do
+  if (status.current_stage === 'done') {
+    trace.push('stage is done');
+    return { action: 'none', current_stage: 'done', trace };
+  }
+
+  // 2. Blocked — report pending inputs
+  if (status.blocked) {
+    const pending = status.required_user_input.filter((i) => i.status === 'pending');
+    trace.push(`blocked: ${status.blocked_reason || 'unknown'}`);
+    trace.push(`pending inputs: ${pending.length}`);
+    return {
+      action: 'blocked',
+      current_stage: status.current_stage,
+      blocked_reason: status.blocked_reason,
+      required_inputs: pending.map((i) => ({ id: i.id, prompt: i.prompt })),
+      trace,
+    };
+  }
+
+  // 3. Intake — needs task pack first
+  if (status.current_stage === 'intake') {
+    trace.push('stage is intake, needs generate_task_pack');
+    return {
+      action: 'needs_task_pack',
+      current_stage: 'intake',
+      next_command: `./tools/dp.sh generate_task_pack ${runFolder}`,
+      trace,
+    };
+  }
+
+  // 4. task-pack-generated — advance to pm-ready
+  if (status.current_stage === 'task-pack-generated') {
+    trace.push('stage is task-pack-generated, advancing to pm-ready');
+    return _doAdvance(runFolder, status, 'pm-ready', trace);
+  }
+
+  // 5. Role stage — check config
+  const config = STAGE_CONFIG[status.current_stage];
+  if (!config) {
+    trace.push(`unknown stage: ${status.current_stage}`);
+    return { action: 'error', current_stage: status.current_stage, error: `Unknown stage: ${status.current_stage}`, trace };
+  }
+
+  trace.push(`stage: ${status.current_stage}, role: ${config.role}`);
+
+  // 6. Check if task file exists for current stage
+  const taskFilePath = path.join(runFolder, config.taskFile);
+  if (!fs.existsSync(taskFilePath)) {
+    trace.push(`task file missing: ${config.taskFile}, generating role pack`);
+    const intake = readJSON(path.join(runFolder, '00-intake.json'));
+    const content = renderTemplate(config.template, {
+      ticket_id: intake.ticket_id,
+      title: intake.title,
+      project: intake.project || intake.project_name,
+      run_folder: runFolder,
+    });
+    fs.writeFileSync(taskFilePath, content, 'utf8');
+
+    status.next_actions = [
+      { label: `${config.role}: complete work`, command: `Follow ${config.taskFile}` },
+      ...config.requiredArtifacts.map((a) => ({
+        label: `Record artifact: ${a}`,
+        command: `./tools/dp.sh record_artifact ${runFolder} ${path.join(runFolder, a)}`,
+      })),
+    ];
+    writeStatus(runFolder, status);
+
+    return {
+      action: 'generated_role_pack',
+      current_stage: status.current_stage,
+      role: config.role,
+      task_file: config.taskFile,
+      required_artifacts: config.requiredArtifacts,
+      trace,
+    };
+  }
+
+  trace.push(`task file exists: ${config.taskFile}`);
+
+  // 7. Check artifact gates
+  const info = getNextStageInfo(runFolder, status);
+
+  if (!info.gates_pass) {
+    const missing = info.missing_artifacts || [];
+    const invalid = info.invalid_artifacts || [];
+    trace.push(`gates fail: ${missing.length} missing, ${invalid.length} invalid`);
+    return {
+      action: 'needs_artifacts',
+      current_stage: status.current_stage,
+      role: config.role,
+      missing_artifacts: missing,
+      invalid_artifacts: invalid,
+      required_artifacts: config.requiredArtifacts,
+      trace,
+    };
+  }
+
+  // 8. Gates pass — advance to next stage
+  trace.push('gates pass, advancing');
+  return _doAdvance(runFolder, status, info.next_stage, trace);
+}
+
+// ---------------------------------------------------------------------------
+// run_next_safe: single safe autopilot step with decision trace (CLI command)
 // ---------------------------------------------------------------------------
 function cmdRunNextSafe(runFolder) {
   if (!runFolder) fail('Usage: run_next_safe <run_folder>');
@@ -1132,128 +1301,117 @@ function cmdRunNextSafe(runFolder) {
   };
 
   try {
-    return _cmdRunNextSafeInner(runFolder);
+    const result = _runNextSafeCore(runFolder);
+    ok(result);
   } finally {
     fs.mkdirSync = origMkdirSync;
   }
 }
 
-function _cmdRunNextSafeInner(runFolder) {
+// ---------------------------------------------------------------------------
+// run_next_loop: repeatedly call run_next_safe until a stop condition
+// ---------------------------------------------------------------------------
+function _computeFingerprint(runFolder) {
   const status = readStatus(runFolder);
-  const trace = [];
-
-  // 1. Done — nothing to do
-  if (status.current_stage === 'done') {
-    trace.push('stage is done');
-    ok({ action: 'none', current_stage: 'done', trace });
-    return;
-  }
-
-  // 2. Blocked — report pending inputs
-  if (status.blocked) {
-    const pending = status.required_user_input.filter((i) => i.status === 'pending');
-    trace.push(`blocked: ${status.blocked_reason || 'unknown'}`);
-    trace.push(`pending inputs: ${pending.length}`);
-    ok({
-      action: 'blocked',
-      current_stage: status.current_stage,
-      blocked_reason: status.blocked_reason,
-      required_inputs: pending.map((i) => ({ id: i.id, prompt: i.prompt })),
-      trace,
-    });
-    return;
-  }
-
-  // 3. Intake — needs task pack first
-  if (status.current_stage === 'intake') {
-    trace.push('stage is intake, needs generate_task_pack');
-    ok({
-      action: 'needs_task_pack',
-      current_stage: 'intake',
-      next_command: `./tools/dp.sh generate_task_pack ${runFolder}`,
-      trace,
-    });
-    return;
-  }
-
-  // 4. task-pack-generated — needs orchestrate_one to advance to pm-ready
-  if (status.current_stage === 'task-pack-generated') {
-    trace.push('stage is task-pack-generated, delegating to orchestrate_one');
-    // orchestrate_one handles this stage transition safely
-    cmdOrchestrateOne(runFolder);
-    return; // cmdOrchestrateOne calls process.exit
-  }
-
-  // 5. Role stage — check config
   const config = STAGE_CONFIG[status.current_stage];
-  if (!config) {
-    trace.push(`unknown stage: ${status.current_stage}`);
-    ok({ action: 'error', current_stage: status.current_stage, error: `Unknown stage: ${status.current_stage}`, trace });
-    return;
+  let artifactCount = 0;
+  if (config) {
+    for (const a of config.requiredArtifacts) {
+      if (fs.existsSync(path.join(runFolder, a))) artifactCount++;
+    }
   }
+  return `${status.current_stage}|${status.blocked}|${artifactCount}|${status.stage_history.length}`;
+}
 
-  trace.push(`stage: ${status.current_stage}, role: ${config.role}`);
+const LOOP_STOP_ACTIONS = new Set(['none', 'blocked', 'needs_artifacts', 'needs_task_pack', 'error', 'completed']);
 
-  // 6. Check if task file exists for current stage
-  const taskFilePath = path.join(runFolder, config.taskFile);
-  if (!fs.existsSync(taskFilePath)) {
-    trace.push(`task file missing: ${config.taskFile}, generating role pack`);
-    // Generate role pack (does not advance stage)
-    const intake = readJSON(path.join(runFolder, '00-intake.json'));
-    const content = renderTemplate(config.template, {
-      ticket_id: intake.ticket_id,
-      title: intake.title,
-      project: intake.project || intake.project_name,
-      run_folder: runFolder,
-    });
-    fs.writeFileSync(taskFilePath, content, 'utf8');
+function cmdRunNextLoop(runFolder, maxSteps) {
+  if (!runFolder) fail('Usage: run_next_loop <run_folder> [--max_steps N]');
+  runFolder = safePath(runFolder);
+  maxSteps = maxSteps || 10;
 
-    status.next_actions = [
-      { label: `${config.role}: complete work`, command: `Follow ${config.taskFile}` },
-      ...config.requiredArtifacts.map((a) => ({
-        label: `Record artifact: ${a}`,
-        command: `./tools/dp.sh record_artifact ${runFolder} ${path.join(runFolder, a)}`,
-      })),
-    ];
-    writeStatus(runFolder, status);
+  const loopTrace = [];
+  const steps = [];
 
+  // Safety guard: run folder must exist
+  const statusPath = path.join(runFolder, 'status.json');
+  if (!fs.existsSync(runFolder) || !fs.existsSync(statusPath)) {
     ok({
-      action: 'generated_role_pack',
-      current_stage: status.current_stage,
-      role: config.role,
-      task_file: config.taskFile,
-      required_artifacts: config.requiredArtifacts,
-      trace,
+      action: 'loop_complete',
+      final_action: 'error',
+      steps_run: 0,
+      max_steps: maxSteps,
+      steps: [],
+      trace: ['run folder does not exist or has no status.json'],
     });
     return;
   }
 
-  trace.push(`task file exists: ${config.taskFile}`);
+  // Snapshot runs/ directory before loop
+  const runsDir = safePath('runs');
+  const runsBefore = fs.existsSync(runsDir)
+    ? fs.readdirSync(runsDir, { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => e.name).sort()
+    : [];
 
-  // 7. Check artifact gates
-  const info = getNextStageInfo(runFolder, status);
+  // Safety guard: forbid directory creation inside loop
+  const origMkdirSync = fs.mkdirSync;
+  fs.mkdirSync = function guardedMkdirSync() {
+    fs.mkdirSync = origMkdirSync;
+    throw new Error('run_next_loop: directory creation is forbidden');
+  };
 
-  if (!info.gates_pass) {
-    const missing = info.missing_artifacts || [];
-    const invalid = info.invalid_artifacts || [];
-    trace.push(`gates fail: ${missing.length} missing, ${invalid.length} invalid`);
-    ok({
-      action: 'needs_artifacts',
-      current_stage: status.current_stage,
-      role: config.role,
-      missing_artifacts: missing,
-      invalid_artifacts: invalid,
-      required_artifacts: config.requiredArtifacts,
-      trace,
-    });
-    return;
+  let prevFingerprint = null;
+
+  try {
+    for (let i = 0; i < maxSteps; i++) {
+      const result = _runNextSafeCore(runFolder);
+      steps.push(result);
+      loopTrace.push(`step ${i + 1}: action=${result.action}, stage=${result.current_stage || 'unknown'}`);
+
+      // Immediate stop actions
+      if (LOOP_STOP_ACTIONS.has(result.action)) {
+        loopTrace.push(`stopping: ${result.action}`);
+        break;
+      }
+
+      // Stall detection: compute fingerprint after state change
+      const fingerprint = _computeFingerprint(runFolder);
+      if (fingerprint === prevFingerprint) {
+        loopTrace.push('no state change detected, stopping');
+        // Mark the last step as stalled
+        steps[steps.length - 1] = { ...result, action: 'stalled', _original_action: result.action };
+        break;
+      }
+      prevFingerprint = fingerprint;
+    }
+  } finally {
+    fs.mkdirSync = origMkdirSync;
   }
 
-  // 8. Gates pass — delegate to orchestrate_one for safe advancement
-  trace.push('gates pass, delegating to orchestrate_one');
-  // orchestrate_one handles the actual advancement + next role pack generation
-  cmdOrchestrateOne(runFolder);
-  // cmdOrchestrateOne calls process.exit, so we won't reach here
+  // Safety: verify runs/ unchanged
+  const runsAfter = fs.existsSync(runsDir)
+    ? fs.readdirSync(runsDir, { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => e.name).sort()
+    : [];
+
+  if (JSON.stringify(runsBefore) !== JSON.stringify(runsAfter)) {
+    fail('run_next_loop: runs/ directory changed during execution');
+  }
+
+  const lastStep = steps[steps.length - 1];
+  const finalAction = lastStep ? lastStep.action : 'none';
+
+  if (steps.length >= maxSteps && !LOOP_STOP_ACTIONS.has(finalAction) && finalAction !== 'stalled') {
+    loopTrace.push(`max_steps reached (${maxSteps})`);
+  }
+
+  ok({
+    action: 'loop_complete',
+    final_action: finalAction,
+    steps_run: steps.length,
+    max_steps: maxSteps,
+    steps,
+    trace: loopTrace,
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -1440,6 +1598,7 @@ if (require.main === module) {
           '  advance <run_folder> --confirm                Advance to next stage if gates pass',
           '  orchestrate_one <run_folder>                  Idempotent single-step orchestrator',
           '  run_next_safe <run_folder>                    Safe autopilot: one step with decision trace',
+          '  run_next_loop <run_folder> [--max_steps N]   Loop autopilot: repeat run_next_safe until stop',
           '  scaffold_artifacts <run_folder>               Create minimal schema-valid JSON for current stage',
           '',
           'Status:',
@@ -1511,8 +1670,15 @@ if (require.main === module) {
       case 'run_next_safe':
         cmdRunNextSafe(args[0]);
         break;
+      case 'run_next_loop': {
+        const maxIdx = args.indexOf('--max_steps');
+        const maxSteps = maxIdx !== -1 ? parseInt(args[maxIdx + 1], 10) : 10;
+        const folder = args.find((a) => a !== '--max_steps' && (maxIdx === -1 || a !== args[maxIdx + 1]));
+        cmdRunNextLoop(folder, maxSteps);
+        break;
+      }
       default:
-        fail(`Unknown command: ${command || '(none)'}. Available: create_run, create_run_from_ticket, generate_task_pack, generate_role_pack, next_stage, record_artifact, advance, orchestrate_one, run_next_safe, scaffold_artifacts, block, respond, list, status, stale_list, stale_delete`);
+        fail(`Unknown command: ${command || '(none)'}. Available: create_run, create_run_from_ticket, generate_task_pack, generate_role_pack, next_stage, record_artifact, advance, orchestrate_one, run_next_safe, run_next_loop, scaffold_artifacts, block, respond, list, status, stale_list, stale_delete`);
     }
   } catch (err) {
     fail(err.message);
