@@ -354,6 +354,50 @@ $ ./tools/run-next-autonomous.sh runs/20260218_150000_TICKET-1 --audit_log
 
 These fields are written once at the end of invocation, never during steps.
 
+#### watch
+
+Read-only watcher for a run folder. Polls `status.json` for changes, optionally tails `autonomous-audit.jsonl`. Emits JSONL events to stdout. Never mutates the filesystem.
+
+```bash
+./tools/run-next-watch.sh runs/<run_folder> [--follow_audit] [--poll_ms N] [--max_events N]
+```
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--follow_audit` | off | Also tail `autonomous-audit.jsonl` |
+| `--poll_ms` | 500 | Poll interval in milliseconds |
+| `--max_events` | 0 (unlimited) | Stop after N events (for scripting/tests) |
+
+**Events emitted:**
+
+| Event | When |
+|-------|------|
+| `status_snapshot` | Initial status on start |
+| `status_changed` | `status.json` mtime or content changed |
+| `audit_line` | New line in `autonomous-audit.jsonl` |
+| `audit_missing` | Audit file not present (emitted once) |
+| `stop_signal_present` | `.stop` file detected |
+
+**Example: watch alongside a running autonomous session**
+
+```bash
+# Terminal 1: run
+./tools/run-next-autonomous.sh runs/20260218_150000_TICKET-1 --audit_log
+
+# Terminal 2: watch
+./tools/run-next-watch.sh runs/20260218_150000_TICKET-1 --follow_audit
+```
+
+Output (one JSON object per line):
+
+```jsonl
+{"ts":"...","event":"status_snapshot","run_folder":"runs/...","status":{...}}
+{"ts":"...","event":"audit_line","line":{"step":1,"action":"needs_task_pack",...}}
+{"ts":"...","event":"status_changed","run_folder":"runs/...","status":{...}}
+```
+
+Use for dashboards, CI integration, or piping into `jq` for filtering.
+
 #### scaffold_artifacts
 
 Create minimal schema-valid JSON files for the current stage's required artifacts. Handles `$ref`, `oneOf`/`anyOf`/`allOf`, `format` (date-time, uuid, uri), `minLength`, `minItems`, `default`, and union types. Skips `.diff` files and never overwrites existing artifacts.
@@ -461,6 +505,7 @@ node skills/dev-pipeline/tests/test-state-machine.js   # state machine regressio
 node skills/dev-pipeline/tests/test-run-next-safe.js   # run_next_safe + safety contract (13 tests)
 node skills/dev-pipeline/tests/test-run-next-loop.js   # run_next_loop autopilot tests (11 tests)
 node skills/dev-pipeline/tests/test-run-next-autonomous.js  # autonomous runner tests (33 tests)
+node skills/dev-pipeline/tests/test-run-next-watch.js      # watch mode tests (17 tests)
 ```
 
 ## Security
