@@ -291,7 +291,76 @@ test('shell helper --dry_run outputs valid JSON', () => {
 });
 
 // -------------------------------------------------------------------------
-// Test 8: Read-only safety
+// Test 8: Quiet mode (JSON-only stdout)
+// -------------------------------------------------------------------------
+console.log('\n--- quiet mode ---');
+
+test('CLI stdout starts with { (JSON-only, no progress lines)', () => {
+  const stdout = execFileSync('node', [DRIVE_SCRIPT, '--dry_run', '--max_steps', '1'], {
+    encoding: 'utf8',
+    timeout: 30000,
+  });
+  const trimmed = stdout.trimStart();
+  if (!trimmed.startsWith('{')) throw new Error(`stdout starts with: ${trimmed.slice(0, 40)}`);
+  // Verify no "autonomous:" prefix lines in stdout
+  if (stdout.includes('autonomous:')) throw new Error('stdout contains progress prefix');
+  if (/\[\d+\]/.test(stdout.split('{')[0])) throw new Error('stdout contains step lines before JSON');
+});
+
+test('CLI stderr is empty in quiet mode (default)', () => {
+  try {
+    const result = require('node:child_process').execFileSync('node', [DRIVE_SCRIPT, '--dry_run', '--max_steps', '1'], {
+      encoding: 'utf8',
+      timeout: 30000,
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+  } catch (e) {
+    // Even if it fails, check stderr
+    if (e.stderr && e.stderr.includes('autonomous:')) throw new Error('stderr has progress in quiet mode');
+  }
+  // If it succeeded, we can't easily get stderr from execFileSync return value,
+  // but we verified stdout is clean above. Use spawnSync for stderr check.
+  const { spawnSync } = require('node:child_process');
+  const r = spawnSync('node', [DRIVE_SCRIPT, '--dry_run', '--max_steps', '1'], {
+    encoding: 'utf8',
+    timeout: 30000,
+  });
+  if (r.stderr && r.stderr.includes('autonomous:')) throw new Error('stderr has progress in quiet mode');
+  if (r.stderr && /\[\d+\]/.test(r.stderr)) throw new Error('stderr has step lines in quiet mode');
+});
+
+test('--verbose restores progress lines to stderr', () => {
+  const { spawnSync } = require('node:child_process');
+  const r = spawnSync('node', [DRIVE_SCRIPT, '--verbose', '--dry_run', '--max_steps', '1'], {
+    encoding: 'utf8',
+    timeout: 30000,
+  });
+  if (r.status !== 0) throw new Error(`exit ${r.status}: ${r.stderr}`);
+  // stdout should still be valid JSON
+  const parsed = JSON.parse(r.stdout);
+  if (!parsed.ok) throw new Error('stdout not valid JSON result');
+  // stderr should have progress lines
+  if (!r.stderr.includes('autonomous:')) throw new Error('stderr missing progress header in verbose mode');
+});
+
+test('quiet mode does not change selection or summary', () => {
+  // Run quiet and verbose with same params, compare pick result
+  const { spawnSync } = require('node:child_process');
+  const quietR = spawnSync('node', [DRIVE_SCRIPT, '--dry_run', '--max_steps', '1'], {
+    encoding: 'utf8', timeout: 30000,
+  });
+  const verboseR = spawnSync('node', [DRIVE_SCRIPT, '--verbose', '--dry_run', '--max_steps', '1'], {
+    encoding: 'utf8', timeout: 30000,
+  });
+  const quietResult = JSON.parse(quietR.stdout);
+  const verboseResult = JSON.parse(verboseR.stdout);
+  if (quietResult.action !== verboseResult.action) throw new Error('action differs between quiet/verbose');
+  if (quietResult.picked.run_folder !== verboseResult.picked.run_folder) throw new Error('picked run_folder differs');
+  if (quietResult.autonomous.final_action !== verboseResult.autonomous.final_action) throw new Error('final_action differs');
+});
+
+// -------------------------------------------------------------------------
+// Test 9: Read-only safety
 // -------------------------------------------------------------------------
 console.log('\n--- read-only safety ---');
 

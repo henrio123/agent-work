@@ -10,8 +10,11 @@
  *
  * Never backgrounds anything, never loops, never creates run folders.
  *
+ * Stdout is JSON-only by default (quiet mode). Use --verbose for human-readable
+ * progress on stderr.
+ *
  * Usage (via CLI):
- *   node run-next-drive.js [--max_steps N] [--max_agent_calls N] [--dry_run] [--audit_log]
+ *   node run-next-drive.js [--max_steps N] [--max_agent_calls N] [--dry_run] [--audit_log] [--verbose]
  *
  * Or require() for programmatic use:
  *   const { driveOnce } = require('./run-next-drive.js');
@@ -43,6 +46,7 @@ function driveOnce(options = {}) {
   const maxAgentCalls = options.maxAgentCalls || 20;
   const dryRun = options.dryRun || false;
   const auditLog = options.auditLog || false;
+  const quiet = options.quiet !== false; // quiet by default
   const agentAdapter = options.agentAdapter || undefined;
 
   // Step 1: Pick
@@ -68,7 +72,7 @@ function driveOnce(options = {}) {
     : [];
 
   // Step 3: Run autonomous
-  const autoOpts = { maxSteps, maxAgentCalls, dryRun, auditLog };
+  const autoOpts = { maxSteps, maxAgentCalls, dryRun, auditLog, progress: !quiet };
   if (agentAdapter) autoOpts.agentAdapter = agentAdapter;
   const autoResult = runAutonomous(runFolder, autoOpts);
 
@@ -120,11 +124,13 @@ if (require.main === module) {
   const maxStepsIdx = args.indexOf('--max_steps');
   const maxAgentIdx = args.indexOf('--max_agent_calls');
 
+  const verbose = args.includes('--verbose');
   const opts = {
     maxSteps: maxStepsIdx !== -1 ? parseInt(args[maxStepsIdx + 1], 10) : 50,
     maxAgentCalls: maxAgentIdx !== -1 ? parseInt(args[maxAgentIdx + 1], 10) : 20,
     dryRun: args.includes('--dry_run'),
     auditLog: args.includes('--audit_log') || process.env.DP_AUDIT_LOG === '1',
+    quiet: !verbose,
   };
 
   const result = driveOnce(opts);

@@ -457,12 +457,14 @@ If nothing eligible: `{ "ok": true, "action": "no_eligible_runs", "reason": "all
 
 Skips: stopped (`.stop`), blocked, done runs. Within a bucket, earliest `run_folder` ASC wins.
 
-**One-shot drive:**
+**One-shot drive (JSON-only by default):**
 
 ```bash
-./tools/run-next-drive.sh [--max_steps N] [--max_agent_calls N] [--dry_run] [--audit_log]
+./tools/run-next-drive.sh [--max_steps N] [--max_agent_calls N] [--dry_run] [--audit_log] [--verbose]
 ./tools/run-next-drive.sh --audit_log | jq
 ```
+
+Stdout is JSON-only by default — no progress lines, safe for `| jq`. Use `--verbose` to restore human-readable progress on stderr for manual debugging.
 
 Output: `{ "ok": true, "action": "drive_complete", "picked": {...}, "autonomous": {...} }`
 
@@ -580,7 +582,7 @@ node skills/dev-pipeline/tests/test-run-next-autonomous.js  # autonomous runner 
 node skills/dev-pipeline/tests/test-run-next-watch.js      # watch mode tests (17 tests)
 node skills/dev-pipeline/tests/test-run-index.js           # global run index tests (19 tests)
 node skills/dev-pipeline/tests/test-run-next-pick.js       # scheduler pick tests (18 tests)
-node skills/dev-pipeline/tests/test-run-next-drive.js      # scheduler drive tests (10 tests)
+node skills/dev-pipeline/tests/test-run-next-drive.js      # scheduler drive tests (14 tests)
 ```
 
 ## Security
