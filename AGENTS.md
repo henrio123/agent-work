@@ -211,11 +211,12 @@ The goal: Be helpful without being annoying. Check in a few times a day, do usef
 
 When starting a new ticket, always use dev-pipeline as the first step:
 
-1. `node skills/dev-pipeline/scripts/dev-pipeline.js create_run <ticket_id> "<title>" "<project>"`
-2. `node skills/dev-pipeline/scripts/dev-pipeline.js generate_task_pack <run_folder>`
-3. Work from `<run_folder>/30-dev-claude-task.txt`
-4. If blocked, use `block` and `respond` commands to track inputs
-5. Use `list` and `status` to check progress
+1. Create a ticket file in `tickets/<ticket_id>.md` with frontmatter (`ticket_id`, `title`, `project`)
+2. `./tools/dp.sh create_run_from_ticket <ticket_id>`
+3. `./tools/dp.sh generate_task_pack <run_folder>`
+4. Work from `<run_folder>/30-dev-claude-task.txt`
+5. If blocked, use `./tools/dp.sh block` and `./tools/dp.sh respond` to track inputs
+6. Use `./tools/dp.sh list` and `./tools/dp.sh status` to check progress
 
 ## Delegation Rule
 

@@ -36,6 +36,20 @@ function readJSON(filePath) {
   return JSON.parse(fs.readFileSync(filePath, 'utf8'));
 }
 
+function parseFrontmatter(text) {
+  const match = text.match(/^---\r?\n([\s\S]*?)\r?\n---/);
+  if (!match) return {};
+  const fields = {};
+  for (const line of match[1].split('\n')) {
+    const idx = line.indexOf(':');
+    if (idx === -1) continue;
+    const key = line.slice(0, idx).trim();
+    const val = line.slice(idx + 1).trim();
+    fields[key] = val;
+  }
+  return fields;
+}
+
 function writeJSON(filePath, data) {
   fs.writeFileSync(filePath, JSON.stringify(data, null, 2) + '\n', 'utf8');
 }
@@ -352,6 +366,75 @@ function cmdStatus(runFolder) {
   ok({ run: status });
 }
 
+function cmdCreateRunFromTicket(ticketId) {
+  if (!ticketId) fail('Usage: create_run_from_ticket <ticket_id>');
+
+  // safePath prevents traversal in ticket_id (e.g. ../foo)
+  const ticketPath = safePath(path.join('tickets', `${ticketId}.md`));
+  if (!fs.existsSync(ticketPath)) {
+    fail(`Ticket file not found: tickets/${ticketId}.md`);
+  }
+
+  const text = fs.readFileSync(ticketPath, 'utf8');
+  const fm = parseFrontmatter(text);
+
+  if (!fm.ticket_id) fail('Missing required frontmatter field: ticket_id');
+  if (!fm.title) fail('Missing required frontmatter field: title');
+  if (!fm.project) fail('Missing required frontmatter field: project');
+
+  const ts = timestamp();
+  const folderName = `${ts}_${fm.ticket_id}`;
+  const runFolder = safePath(path.join('runs', folderName));
+
+  fs.mkdirSync(runFolder, { recursive: true });
+
+  const createdAt = now();
+
+  const intake = {
+    ticket_id: fm.ticket_id,
+    title: fm.title,
+    project: fm.project,
+    created_at: createdAt,
+    source: 'ticket',
+  };
+  writeJSON(path.join(runFolder, '00-intake.json'), intake);
+
+  const status = {
+    ticket_id: fm.ticket_id,
+    title: fm.title,
+    project: fm.project,
+    created_at: createdAt,
+    updated_at: createdAt,
+    current_stage: 'intake',
+    blocked: false,
+    blocked_reason: null,
+    required_user_input: [],
+    stage_history: [
+      {
+        stage: 'intake',
+        started_at: createdAt,
+        finished_at: null,
+        artifact_paths: ['00-intake.json'],
+      },
+    ],
+    next_actions: [
+      {
+        label: 'Generate task pack',
+        command: `node {baseDir}/scripts/dev-pipeline.js generate_task_pack ${runFolder}`,
+      },
+    ],
+  };
+  writeJSON(path.join(runFolder, 'status.json'), status);
+
+  ok({
+    run_folder: runFolder,
+    status: 'intake',
+    ticket_id: fm.ticket_id,
+    title: fm.title,
+    project: fm.project,
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Stale policy
 // ---------------------------------------------------------------------------
@@ -472,6 +555,9 @@ try {
     case 'status':
       cmdStatus(args[0]);
       break;
+    case 'create_run_from_ticket':
+      cmdCreateRunFromTicket(args[0]);
+      break;
     case 'stale_list':
       cmdStaleList();
       break;
@@ -479,7 +565,7 @@ try {
       cmdStaleDelete(args);
       break;
     default:
-      fail(`Unknown command: ${command || '(none)'}. Available: create_run, generate_task_pack, block, respond, list, status, stale_list, stale_delete`);
+      fail(`Unknown command: ${command || '(none)'}. Available: create_run, create_run_from_ticket, generate_task_pack, block, respond, list, status, stale_list, stale_delete`);
   }
 } catch (err) {
   fail(err.message);

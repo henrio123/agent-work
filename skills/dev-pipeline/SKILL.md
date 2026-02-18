@@ -37,11 +37,17 @@ All commands are invoked via the main script:
 node {baseDir}/scripts/dev-pipeline.js <command> [args...]
 ```
 
+Or via the shortcut wrapper:
+
+```
+./tools/dp.sh <command> [args...]
+```
+
 All output is JSON to stdout. Errors exit 1 with `{ "ok": false, "error": "..." }` on stderr.
 
 ### create_run
 
-Create a new run for a ticket.
+Create a new run for a ticket (manual fields).
 
 ```bash
 node {baseDir}/scripts/dev-pipeline.js create_run <ticket_id> <title> <project>
@@ -50,6 +56,18 @@ node {baseDir}/scripts/dev-pipeline.js create_run <ticket_id> <title> <project>
 Creates `runs/<YYYYMMDD_HHMMSS>_<ticket_id>/` with `00-intake.json` and `status.json`.
 
 **Output:** `{ "ok": true, "run_folder": "...", "status": "intake" }`
+
+### create_run_from_ticket
+
+Create a run by reading metadata from a ticket file. Preferred over `create_run`.
+
+```bash
+node {baseDir}/scripts/dev-pipeline.js create_run_from_ticket <ticket_id>
+```
+
+Reads `tickets/<ticket_id>.md`, extracts `ticket_id`, `title`, `project` from YAML frontmatter. Sets `source: "ticket"` in the intake file.
+
+**Output:** `{ "ok": true, "run_folder": "...", "status": "intake", "ticket_id": "...", "title": "...", "project": "..." }`
 
 ### generate_task_pack
 
