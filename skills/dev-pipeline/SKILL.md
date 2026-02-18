@@ -398,6 +398,43 @@ Output (one JSON object per line):
 
 Use for dashboards, CI integration, or piping into `jq` for filtering.
 
+#### Global Operator Index
+
+Read-only global index of all runs. Scans `runs/`, reads each `status.json`, detects stop signals, audit logs, stalled runs, and computes summary counts. Deterministic ordering (sorted by `run_folder` ASC). Never mutates the filesystem.
+
+```bash
+./tools/run-index.sh
+./tools/run-index.sh | jq
+```
+
+**Output structure:**
+
+```json
+{
+  "ok": true,
+  "generated_at": "2026-02-18T15:00:00.000Z",
+  "runs": [
+    {
+      "run_folder": "runs/20260218_140202_OC-07",
+      "has_status": true,
+      "current_stage": "dev-ready",
+      "blocked": false,
+      "blocked_reason": null,
+      "stop_signal": false,
+      "has_audit_log": true,
+      "last_autonomous_run_at": "2026-02-18T14:30:00.000Z",
+      "last_autonomous_summary": { "final_action": "needs_artifacts", "steps_run": 5, "agent_calls": 2, "artifacts_written": [...] },
+      "stalled": false
+    }
+  ],
+  "summary": { "total": 2, "blocked": 0, "needs_artifacts": 1, "done": 0, "stopped": 0 }
+}
+```
+
+**Stalled detection:** A run is stalled when `last_autonomous_summary.final_action === "needs_artifacts"` and the audit log file has not been modified in 30+ minutes.
+
+Used by dashboards and as foundation for a future scheduler.
+
 #### scaffold_artifacts
 
 Create minimal schema-valid JSON files for the current stage's required artifacts. Handles `$ref`, `oneOf`/`anyOf`/`allOf`, `format` (date-time, uuid, uri), `minLength`, `minItems`, `default`, and union types. Skips `.diff` files and never overwrites existing artifacts.
@@ -506,6 +543,7 @@ node skills/dev-pipeline/tests/test-run-next-safe.js   # run_next_safe + safety 
 node skills/dev-pipeline/tests/test-run-next-loop.js   # run_next_loop autopilot tests (11 tests)
 node skills/dev-pipeline/tests/test-run-next-autonomous.js  # autonomous runner tests (33 tests)
 node skills/dev-pipeline/tests/test-run-next-watch.js      # watch mode tests (17 tests)
+node skills/dev-pipeline/tests/test-run-index.js           # global run index tests (19 tests)
 ```
 
 ## Security

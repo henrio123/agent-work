@@ -13,6 +13,7 @@ SUITES=(
   "$TESTS_DIR/test-run-next-loop.js"
   "$TESTS_DIR/test-run-next-autonomous.js"
   "$TESTS_DIR/test-run-next-watch.js"
+  "$TESTS_DIR/test-run-index.js"
 )
 
 total_passed=0
