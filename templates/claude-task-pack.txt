@@ -1,0 +1,33 @@
+TICKET: {{TICKET_ID}}
+TITLE: {{TITLE}}
+PROJECT: {{PROJECT_NAME}}
+RUN: {{RUN_FOLDER}}
+
+---
+
+CONTEXT
+You are working on ticket {{TICKET_ID}} for project {{PROJECT_NAME}}.
+Read the intake file at {{RUN_FOLDER}}/00-intake.json for full ticket details.
+
+TASK
+Implement the steps described in the ticket.
+Work only within the project directory for {{PROJECT_NAME}}.
+Do not modify files outside the project scope.
+
+CONSTRAINTS
+- Do not install new global dependencies without confirmation.
+- Do not push to remote repositories without confirmation.
+- Do not modify CI/CD pipelines without confirmation.
+- Keep changes minimal and focused on the ticket scope.
+
+OUTPUT
+When done, create a file at {{RUN_FOLDER}}/50-dev-result.json with:
+{
+  "ticket_id": "{{TICKET_ID}}",
+  "status": "done" | "partial" | "blocked",
+  "files_changed": [],
+  "summary": "Brief description of what was done",
+  "blockers": []
+}
+
+If blocked, update status.json in the run folder with the reason and required inputs.

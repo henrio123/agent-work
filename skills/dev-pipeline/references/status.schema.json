@@ -1,0 +1,148 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "dev-pipeline/status.schema.json",
+  "title": "DevPipeline Run Status",
+  "description": "Canonical schema for status.json in a dev-pipeline run folder.",
+  "type": "object",
+  "required": [
+    "ticket_id",
+    "title",
+    "project",
+    "created_at",
+    "updated_at",
+    "current_stage",
+    "blocked",
+    "blocked_reason",
+    "required_user_input",
+    "stage_history",
+    "next_actions"
+  ],
+  "properties": {
+    "ticket_id": {
+      "type": "string",
+      "description": "Unique ticket identifier, e.g. DEMO-1"
+    },
+    "title": {
+      "type": "string",
+      "description": "Human-readable ticket title"
+    },
+    "project": {
+      "type": "string",
+      "description": "Project name this ticket belongs to"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp when the run was created"
+    },
+    "updated_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp of the last status update"
+    },
+    "current_stage": {
+      "type": "string",
+      "enum": [
+        "intake",
+        "task-pack-generated",
+        "in-progress",
+        "blocked",
+        "review",
+        "done"
+      ],
+      "description": "Current pipeline stage"
+    },
+    "blocked": {
+      "type": "boolean",
+      "description": "Whether the run is currently blocked"
+    },
+    "blocked_reason": {
+      "type": ["string", "null"],
+      "description": "Why the run is blocked, null if not blocked"
+    },
+    "required_user_input": {
+      "type": "array",
+      "description": "Pending questions that need user answers to unblock",
+      "items": {
+        "type": "object",
+        "required": ["id", "prompt", "status"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Unique identifier for this input request"
+          },
+          "prompt": {
+            "type": "string",
+            "description": "Question or prompt for the user"
+          },
+          "options": {
+            "type": ["array", "null"],
+            "items": { "type": "string" },
+            "description": "Optional list of suggested choices"
+          },
+          "default": {
+            "type": ["string", "null"],
+            "description": "Optional default answer"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["pending", "answered"],
+            "description": "Whether this input has been answered"
+          },
+          "answer": {
+            "type": ["string", "null"],
+            "description": "The user's answer, null if pending"
+          }
+        }
+      }
+    },
+    "stage_history": {
+      "type": "array",
+      "description": "Ordered log of stage transitions",
+      "items": {
+        "type": "object",
+        "required": ["stage", "started_at"],
+        "properties": {
+          "stage": {
+            "type": "string",
+            "description": "Stage name"
+          },
+          "started_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When this stage began"
+          },
+          "finished_at": {
+            "type": ["string", "null"],
+            "format": "date-time",
+            "description": "When this stage ended, null if current"
+          },
+          "artifact_paths": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Files produced during this stage"
+          }
+        }
+      }
+    },
+    "next_actions": {
+      "type": "array",
+      "description": "Suggested next steps the agent or user can take",
+      "items": {
+        "type": "object",
+        "required": ["label", "command"],
+        "properties": {
+          "label": {
+            "type": "string",
+            "description": "Human-readable action description"
+          },
+          "command": {
+            "type": "string",
+            "description": "CLI command to execute this action"
+          }
+        }
+      }
+    }
+  }
+}

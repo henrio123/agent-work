@@ -1,0 +1,12 @@
+{
+  "ticket_id": "DEMO-1",
+  "title": "Demo",
+  "project_name": "demo-project",
+  "created_at": "2026-02-18T12:14:45Z",
+  "status": "blocked",
+  "blocked": true,
+  "blocked_reason": "Need target repository path for demo-project",
+  "required_user_input": ["Path to the demo-project git repository"],
+  "steps_done": ["generate_task_pack"],
+  "steps_next": []
+}
