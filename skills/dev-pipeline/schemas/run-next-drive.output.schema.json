@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "run-next-drive output",
+  "description": "Output schema for ./tools/run-next-drive.sh. Action is either drive_complete or drive_skipped.",
+  "type": "object",
+  "required": ["ok", "action", "picked"],
+  "additionalProperties": false,
+  "properties": {
+    "ok": { "type": "boolean", "const": true },
+    "action": {
+      "type": "string",
+      "enum": ["drive_complete", "drive_skipped"]
+    },
+    "picked": {
+      "type": "object",
+      "required": ["ok", "action"],
+      "properties": {
+        "ok": { "type": "boolean" },
+        "action": { "type": "string" },
+        "run_folder": { "type": "string" },
+        "reason": { "type": "string" },
+        "priority_bucket": { "type": "string" }
+      }
+    },
+    "autonomous": {
+      "type": "object",
+      "required": ["action", "final_action", "steps_run", "agent_calls", "artifacts_written", "artifacts_skipped", "trace"],
+      "properties": {
+        "action": { "type": "string" },
+        "final_action": { "type": "string" },
+        "steps_run": { "type": "number" },
+        "agent_calls": { "type": "number" },
+        "max_steps": { "type": "number" },
+        "max_agent_calls": { "type": "number" },
+        "artifacts_written": { "type": "array" },
+        "artifacts_skipped": { "type": "array" },
+        "trace": { "type": "array" }
+      }
+    }
+  }
+}

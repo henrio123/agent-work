@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "run-next-pick output",
+  "description": "Output schema for ./tools/run-next-pick.sh. Action is either picked_run or no_eligible_runs.",
+  "type": "object",
+  "required": ["ok", "action"],
+  "additionalProperties": false,
+  "properties": {
+    "ok": { "type": "boolean", "const": true },
+    "action": {
+      "type": "string",
+      "enum": ["picked_run", "no_eligible_runs"]
+    },
+    "run_folder": { "type": "string" },
+    "reason": { "type": "string" },
+    "priority_bucket": {
+      "type": "string",
+      "enum": ["needs_task_pack", "needs_artifacts", "other"]
+    }
+  }
+}

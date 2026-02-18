@@ -347,6 +347,36 @@ test('shell helper outputs valid JSON', () => {
 });
 
 // -------------------------------------------------------------------------
+// Test 13: Output schema validation
+// -------------------------------------------------------------------------
+console.log('\n--- output schema ---');
+
+const { validateAgainstSchema } = require(path.resolve(__dirname, '..', 'scripts', 'validate-json-schema.js'));
+const indexSchema = JSON.parse(fs.readFileSync(path.resolve(__dirname, '..', 'schemas', 'run-index.output.schema.json'), 'utf8'));
+
+test('CLI output validates against run-index.output.schema.json', () => {
+  const stdout = execFileSync('node', [INDEX_SCRIPT], { encoding: 'utf8', timeout: 10000 });
+  const parsed = JSON.parse(stdout);
+  const v = validateAgainstSchema(parsed, indexSchema);
+  if (!v.ok) throw new Error(`schema validation failed: ${v.details.join('; ')}`);
+});
+
+test('programmatic output validates against schema', () => {
+  const result = buildIndex();
+  const v = validateAgainstSchema(result, indexSchema);
+  if (!v.ok) throw new Error(`schema validation failed: ${v.details.join('; ')}`);
+});
+
+test('empty runs dir validates against schema', () => {
+  const tmpRunsDir = path.join(os.tmpdir(), `_test_idx_schema_empty_${Date.now()}`);
+  fs.mkdirSync(tmpRunsDir, { recursive: true });
+  tmpDirs.push(tmpRunsDir);
+  const result = buildIndex({ runsDir: tmpRunsDir });
+  const v = validateAgainstSchema(result, indexSchema);
+  if (!v.ok) throw new Error(`schema validation failed: ${v.details.join('; ')}`);
+});
+
+// -------------------------------------------------------------------------
 // Summary
 // -------------------------------------------------------------------------
 console.log(`\n${'='.repeat(40)}`);

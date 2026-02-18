@@ -435,6 +435,14 @@ Read-only global index of all runs. Scans `runs/`, reads each `status.json`, det
 
 Used by dashboards and as foundation for the scheduler.
 
+**Output Schemas:** The JSON output of `run-index`, `run-next-pick`, and `run-next-drive` is validated against schemas in `{baseDir}/schemas/`. Validated in CI via `test-all.sh`. Use the validator manually:
+
+```bash
+node skills/dev-pipeline/scripts/validate-json-schema.js \
+  --schema skills/dev-pipeline/schemas/run-index.output.schema.json \
+  --json /tmp/run-index.json
+```
+
 #### Scheduler (pick and drive)
 
 Deterministic scheduler that selects the next run to work on and drives exactly one autonomous invocation. One-shot, no background processes, safe for CI.
@@ -580,9 +588,9 @@ node skills/dev-pipeline/tests/test-run-next-safe.js   # run_next_safe + safety 
 node skills/dev-pipeline/tests/test-run-next-loop.js   # run_next_loop autopilot tests (11 tests)
 node skills/dev-pipeline/tests/test-run-next-autonomous.js  # autonomous runner tests (33 tests)
 node skills/dev-pipeline/tests/test-run-next-watch.js      # watch mode tests (17 tests)
-node skills/dev-pipeline/tests/test-run-index.js           # global run index tests (19 tests)
-node skills/dev-pipeline/tests/test-run-next-pick.js       # scheduler pick tests (18 tests)
-node skills/dev-pipeline/tests/test-run-next-drive.js      # scheduler drive tests (14 tests)
+node skills/dev-pipeline/tests/test-run-index.js           # global run index tests (22 tests)
+node skills/dev-pipeline/tests/test-run-next-pick.js       # scheduler pick tests (21 tests)
+node skills/dev-pipeline/tests/test-run-next-drive.js      # scheduler drive tests (16 tests)
 ```
 
 ## Security

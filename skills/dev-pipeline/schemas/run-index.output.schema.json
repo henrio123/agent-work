@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "run-index output",
+  "description": "Output schema for ./tools/run-index.sh",
+  "type": "object",
+  "required": ["ok", "generated_at", "runs", "summary"],
+  "additionalProperties": false,
+  "properties": {
+    "ok": { "type": "boolean", "const": true },
+    "generated_at": { "type": "string" },
+    "runs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "run_folder", "has_status", "current_stage", "blocked",
+          "blocked_reason", "stop_signal", "has_audit_log",
+          "last_autonomous_run_at", "last_autonomous_summary", "stalled"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "run_folder": { "type": "string" },
+          "has_status": { "type": "boolean" },
+          "current_stage": { "type": ["string", "null"] },
+          "blocked": { "type": "boolean" },
+          "blocked_reason": { "type": ["string", "null"] },
+          "stop_signal": { "type": "boolean" },
+          "has_audit_log": { "type": "boolean" },
+          "last_autonomous_run_at": { "type": ["string", "null"] },
+          "last_autonomous_summary": { "type": ["object", "null"] },
+          "stalled": { "type": "boolean" }
+        }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "required": ["total", "blocked", "needs_artifacts", "done", "stopped"],
+      "additionalProperties": false,
+      "properties": {
+        "total": { "type": "number" },
+        "blocked": { "type": "number" },
+        "needs_artifacts": { "type": "number" },
+        "done": { "type": "number" },
+        "stopped": { "type": "number" }
+      }
+    }
+  }
+}

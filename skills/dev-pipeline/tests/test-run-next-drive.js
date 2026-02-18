@@ -360,7 +360,45 @@ test('quiet mode does not change selection or summary', () => {
 });
 
 // -------------------------------------------------------------------------
-// Test 9: Read-only safety
+// Test 9: Output schema validation
+// -------------------------------------------------------------------------
+console.log('\n--- output schema ---');
+
+const { validateAgainstSchema } = require(path.resolve(__dirname, '..', 'scripts', 'validate-json-schema.js'));
+const driveSchema = JSON.parse(fs.readFileSync(path.resolve(__dirname, '..', 'schemas', 'run-next-drive.output.schema.json'), 'utf8'));
+
+test('drive_complete output validates against schema', () => {
+  const stdout = execFileSync('node', [DRIVE_SCRIPT, '--dry_run', '--max_steps', '1'], {
+    encoding: 'utf8',
+    timeout: 30000,
+  });
+  const parsed = JSON.parse(stdout);
+  if (parsed.action !== 'drive_complete') return; // skip if no eligible runs
+  const v = validateAgainstSchema(parsed, driveSchema);
+  if (!v.ok) throw new Error(`schema validation failed: ${v.details.join('; ')}`);
+});
+
+test('drive_skipped output validates against schema', () => {
+  const tmpRunsDir = path.join(os.tmpdir(), `_test_drv_schema_empty_${Date.now()}`);
+  fs.mkdirSync(tmpRunsDir, { recursive: true });
+  tmpDirs.push(tmpRunsDir);
+
+  const doneDir = path.join(tmpRunsDir, 'run-done');
+  fs.mkdirSync(doneDir);
+  fs.writeFileSync(path.join(doneDir, 'status.json'), JSON.stringify({
+    ticket_id: 'T', title: 'T', project: 'T',
+    created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z',
+    current_stage: 'done', blocked: false,
+    required_user_input: [], stage_history: [], next_actions: [],
+  }), 'utf8');
+
+  const result = driveOnce({ runsDir: tmpRunsDir });
+  const v = validateAgainstSchema(result, driveSchema);
+  if (!v.ok) throw new Error(`schema validation failed: ${v.details.join('; ')}`);
+});
+
+// -------------------------------------------------------------------------
+// Test 10: Read-only safety
 // -------------------------------------------------------------------------
 console.log('\n--- read-only safety ---');
 

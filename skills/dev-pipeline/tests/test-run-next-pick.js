@@ -268,6 +268,37 @@ test('no new run folders created', () => {
 });
 
 // -------------------------------------------------------------------------
+// Test 8: Output schema validation
+// -------------------------------------------------------------------------
+console.log('\n--- output schema ---');
+
+const { validateAgainstSchema } = require(path.resolve(__dirname, '..', 'scripts', 'validate-json-schema.js'));
+const pickSchema = JSON.parse(fs.readFileSync(path.resolve(__dirname, '..', 'schemas', 'run-next-pick.output.schema.json'), 'utf8'));
+
+test('picked_run output validates against schema', () => {
+  const result = pickNextRun();
+  if (result.action !== 'picked_run') return; // skip if no eligible
+  const v = validateAgainstSchema(result, pickSchema);
+  if (!v.ok) throw new Error(`schema validation failed: ${v.details.join('; ')}`);
+});
+
+test('no_eligible_runs output validates against schema', () => {
+  const tmpRunsDir = path.join(os.tmpdir(), `_test_pick_schema_empty_${Date.now()}`);
+  fs.mkdirSync(tmpRunsDir, { recursive: true });
+  tmpDirs.push(tmpRunsDir);
+  const result = pickNextRun({ runsDir: tmpRunsDir });
+  const v = validateAgainstSchema(result, pickSchema);
+  if (!v.ok) throw new Error(`schema validation failed: ${v.details.join('; ')}`);
+});
+
+test('CLI output validates against schema', () => {
+  const stdout = execFileSync('node', [PICK_SCRIPT], { encoding: 'utf8', timeout: 10000 });
+  const parsed = JSON.parse(stdout);
+  const v = validateAgainstSchema(parsed, pickSchema);
+  if (!v.ok) throw new Error(`schema validation failed: ${v.details.join('; ')}`);
+});
+
+// -------------------------------------------------------------------------
 // Summary
 // -------------------------------------------------------------------------
 console.log(`\n${'='.repeat(40)}`);
