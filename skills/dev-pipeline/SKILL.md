@@ -433,7 +433,42 @@ Read-only global index of all runs. Scans `runs/`, reads each `status.json`, det
 
 **Stalled detection:** A run is stalled when `last_autonomous_summary.final_action === "needs_artifacts"` and the audit log file has not been modified in 30+ minutes.
 
-Used by dashboards and as foundation for a future scheduler.
+Used by dashboards and as foundation for the scheduler.
+
+#### Scheduler (pick and drive)
+
+Deterministic scheduler that selects the next run to work on and drives exactly one autonomous invocation. One-shot, no background processes, safe for CI.
+
+**Pick next run:**
+
+```bash
+./tools/run-next-pick.sh
+./tools/run-next-pick.sh | jq
+```
+
+Output: `{ "ok": true, "action": "picked_run", "run_folder": "runs/...", "reason": "priority: needs_artifacts", "priority_bucket": "needs_artifacts" }`
+
+If nothing eligible: `{ "ok": true, "action": "no_eligible_runs", "reason": "all blocked or stopped or done" }`
+
+**Priority buckets** (highest first):
+1. `needs_task_pack` — intake/task-pack-generated stages
+2. `needs_artifacts` — last autonomous action was `needs_artifacts`
+3. `other` — any non-done, non-blocked, non-stopped stage
+
+Skips: stopped (`.stop`), blocked, done runs. Within a bucket, earliest `run_folder` ASC wins.
+
+**One-shot drive:**
+
+```bash
+./tools/run-next-drive.sh [--max_steps N] [--max_agent_calls N] [--dry_run] [--audit_log]
+./tools/run-next-drive.sh --audit_log | jq
+```
+
+Output: `{ "ok": true, "action": "drive_complete", "picked": {...}, "autonomous": {...} }`
+
+If no eligible: `{ "ok": true, "action": "drive_skipped", "picked": { "action": "no_eligible_runs", ... } }`
+
+Both exit 0 on expected outcomes, exit 1 on errors.
 
 #### scaffold_artifacts
 
@@ -544,6 +579,8 @@ node skills/dev-pipeline/tests/test-run-next-loop.js   # run_next_loop autopilot
 node skills/dev-pipeline/tests/test-run-next-autonomous.js  # autonomous runner tests (33 tests)
 node skills/dev-pipeline/tests/test-run-next-watch.js      # watch mode tests (17 tests)
 node skills/dev-pipeline/tests/test-run-index.js           # global run index tests (19 tests)
+node skills/dev-pipeline/tests/test-run-next-pick.js       # scheduler pick tests (18 tests)
+node skills/dev-pipeline/tests/test-run-next-drive.js      # scheduler drive tests (10 tests)
 ```
 
 ## Security
