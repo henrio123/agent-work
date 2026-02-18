@@ -332,18 +332,20 @@ When the runner detects `.stop` it exits with `final_action: "stopped"` and exit
 
 **Example: stop and resume session**
 
+Use two terminals — one for the runner, one for stop/resume.
+
 ```bash
-# Start a run
-$ ./tools/run-next-autonomous.sh runs/20260218_150000_TICKET-1 --audit_log &
-
-# Stop it
-$ ./tools/run-next-stop.sh runs/20260218_150000_TICKET-1
-# Runner exits with final_action: "stopped"
-
-# Resume
-$ ./tools/run-next-resume.sh runs/20260218_150000_TICKET-1
+# Terminal 1: start a run
 $ ./tools/run-next-autonomous.sh runs/20260218_150000_TICKET-1 --audit_log
-# Continues from where it left off, skips existing artifacts
+
+# Terminal 2: signal stop (runner exits at next step boundary)
+$ ./tools/run-next-stop.sh runs/20260218_150000_TICKET-1
+
+# Terminal 2: clear stop signal
+$ ./tools/run-next-resume.sh runs/20260218_150000_TICKET-1
+
+# Terminal 1: restart — continues from current state, skips existing artifacts
+$ ./tools/run-next-autonomous.sh runs/20260218_150000_TICKET-1 --audit_log
 ```
 
 **Dashboard integration:** After each invocation, `status.json` is updated with:
@@ -458,7 +460,7 @@ node skills/dev-pipeline/tests/test-scaffold.js        # scaffold + schema tests
 node skills/dev-pipeline/tests/test-state-machine.js   # state machine regression (28 tests)
 node skills/dev-pipeline/tests/test-run-next-safe.js   # run_next_safe + safety contract (13 tests)
 node skills/dev-pipeline/tests/test-run-next-loop.js   # run_next_loop autopilot tests (11 tests)
-node skills/dev-pipeline/tests/test-run-next-autonomous.js  # autonomous runner tests (29 tests)
+node skills/dev-pipeline/tests/test-run-next-autonomous.js  # autonomous runner tests (33 tests)
 ```
 
 ## Security

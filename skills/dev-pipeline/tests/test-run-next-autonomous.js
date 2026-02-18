@@ -650,29 +650,85 @@ test('last_autonomous_summary does not break status command', () => {
 // -------------------------------------------------------------------------
 console.log('\n--- stop/resume helpers ---');
 
-test('run-next-stop.sh creates .stop file', () => {
+test('run-next-stop.sh creates .stop file via relative path', () => {
   const { relDir, absDir } = makeTempRun('auto-stop-helper');
   const stopPath = path.join(absDir, STOP_FILENAME);
 
-  execFileSync('bash', [path.join(WORKSPACE_ROOT, 'tools', 'run-next-stop.sh'), absDir], {
+  execFileSync('bash', [path.join(WORKSPACE_ROOT, 'tools', 'run-next-stop.sh'), relDir], {
     encoding: 'utf8',
     timeout: 5000,
+    cwd: WORKSPACE_ROOT,
   });
 
   if (!fs.existsSync(stopPath)) throw new Error('.stop file not created by helper');
 });
 
-test('run-next-resume.sh removes .stop file', () => {
+test('run-next-resume.sh removes .stop file via relative path', () => {
   const { relDir, absDir } = makeTempRun('auto-resume-helper');
   const stopPath = path.join(absDir, STOP_FILENAME);
   fs.writeFileSync(stopPath, '', 'utf8');
 
-  execFileSync('bash', [path.join(WORKSPACE_ROOT, 'tools', 'run-next-resume.sh'), absDir], {
+  execFileSync('bash', [path.join(WORKSPACE_ROOT, 'tools', 'run-next-resume.sh'), relDir], {
     encoding: 'utf8',
     timeout: 5000,
+    cwd: WORKSPACE_ROOT,
   });
 
   if (fs.existsSync(stopPath)) throw new Error('.stop file not removed by helper');
+});
+
+test('run-next-stop.sh refuses absolute path', () => {
+  const { absDir } = makeTempRun('auto-stop-abs');
+  let exitCode = 0;
+  try {
+    execFileSync('bash', [path.join(WORKSPACE_ROOT, 'tools', 'run-next-stop.sh'), absDir], {
+      encoding: 'utf8',
+      timeout: 5000,
+    });
+  } catch (e) {
+    exitCode = e.status;
+  }
+  if (exitCode === 0) throw new Error('should reject absolute path');
+});
+
+test('run-next-stop.sh refuses path without runs/ prefix', () => {
+  let exitCode = 0;
+  try {
+    execFileSync('bash', [path.join(WORKSPACE_ROOT, 'tools', 'run-next-stop.sh'), '/tmp/evil'], {
+      encoding: 'utf8',
+      timeout: 5000,
+    });
+  } catch (e) {
+    exitCode = e.status;
+  }
+  if (exitCode === 0) throw new Error('should reject /tmp path');
+});
+
+test('run-next-stop.sh refuses path traversal', () => {
+  let exitCode = 0;
+  try {
+    execFileSync('bash', [path.join(WORKSPACE_ROOT, 'tools', 'run-next-stop.sh'), 'runs/../../../tmp/evil'], {
+      encoding: 'utf8',
+      timeout: 5000,
+    });
+  } catch (e) {
+    exitCode = e.status;
+  }
+  if (exitCode === 0) throw new Error('should reject traversal path');
+});
+
+test('run-next-resume.sh refuses absolute path', () => {
+  const { absDir } = makeTempRun('auto-resume-abs');
+  let exitCode = 0;
+  try {
+    execFileSync('bash', [path.join(WORKSPACE_ROOT, 'tools', 'run-next-resume.sh'), absDir], {
+      encoding: 'utf8',
+      timeout: 5000,
+    });
+  } catch (e) {
+    exitCode = e.status;
+  }
+  if (exitCode === 0) throw new Error('should reject absolute path');
 });
 
 // -------------------------------------------------------------------------
