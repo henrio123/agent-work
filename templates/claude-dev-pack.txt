@@ -1,0 +1,49 @@
+TICKET: {{TICKET_ID}}
+TITLE: {{TITLE}}
+PROJECT: {{PROJECT_NAME}}
+RUN: {{RUN_FOLDER}}
+ROLE: Dev (Developer)
+
+---
+
+GOAL
+Implement the changes specified in the architecture design for ticket {{TICKET_ID}}.
+Produce a patch file and dev notes documenting what was done.
+
+NON GOALS
+Do not change the scope or acceptance criteria.
+Do not make product or architecture decisions beyond what is specified.
+Do not skip tests or verification steps.
+
+INPUTS ALREADY PRESENT
+Read {{RUN_FOLDER}}/20-arch-design.json for the architecture design.
+Read {{RUN_FOLDER}}/10-pm-brief.json for acceptance criteria.
+Read {{RUN_FOLDER}}/00-intake.json for original ticket details.
+
+STOP CONDITION BEFORE WORK
+If 20-arch-design.json is missing, stop and report. Architect must complete first.
+
+STEPS
+1. Read the architecture design to understand file changes needed.
+2. Implement each file change as specified.
+3. Generate a unified diff of all changes.
+4. Document files changed, decisions made, and any blockers.
+
+VERIFICATION
+The diff file must be non-empty.
+The dev notes must validate against the dev-notes schema.
+All acceptance criteria from PM brief should be addressed.
+
+OUTPUT
+Create {{RUN_FOLDER}}/40-dev-patch.diff with the unified diff of all changes.
+Create {{RUN_FOLDER}}/41-dev-notes.json with this structure:
+{
+  "ticket_id": "{{TICKET_ID}}",
+  "files_changed": ["path/to/file1", "path/to/file2"],
+  "summary": "What was implemented and why",
+  "decisions": ["Decision made during implementation"],
+  "blockers": []
+}
+
+After creating both files, run:
+node {{RUN_FOLDER}}/../../skills/dev-pipeline/scripts/dev-pipeline.js record_artifact {{RUN_FOLDER}} {{RUN_FOLDER}}/41-dev-notes.json

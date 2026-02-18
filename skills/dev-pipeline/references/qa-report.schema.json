@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "QA Report",
+  "type": "object",
+  "required": ["ticket_id", "tests_run", "tests_passed", "tests_failed", "verdict"],
+  "properties": {
+    "ticket_id": { "type": "string" },
+    "tests_run": { "type": "number" },
+    "tests_passed": { "type": "number" },
+    "tests_failed": { "type": "number" },
+    "issues": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["description", "severity"],
+        "properties": {
+          "description": { "type": "string" },
+          "severity": {
+            "type": "string",
+            "enum": ["low", "medium", "high", "critical"]
+          }
+        }
+      }
+    },
+    "verdict": {
+      "type": "string",
+      "enum": ["pass", "fail", "conditional"]
+    }
+  }
+}

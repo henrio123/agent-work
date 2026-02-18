@@ -1,0 +1,53 @@
+TICKET: {{TICKET_ID}}
+TITLE: {{TITLE}}
+PROJECT: {{PROJECT_NAME}}
+RUN: {{RUN_FOLDER}}
+ROLE: Review
+
+---
+
+GOAL
+Final review of ticket {{TICKET_ID}} for policy compliance, stage gating, and quality.
+Produce a review report with a verdict.
+
+NON GOALS
+Do not change the implementation.
+Do not change product decisions.
+Do not re-run QA tests.
+
+INPUTS ALREADY PRESENT
+Read all artifacts in {{RUN_FOLDER}} in order:
+- 00-intake.json (original ticket)
+- 10-pm-brief.json (PM scope and criteria)
+- 20-arch-design.json (architecture design)
+- 40-dev-patch.diff (implementation diff)
+- 41-dev-notes.json (dev decisions)
+- 50-qa-report.json (QA results)
+
+STOP CONDITION BEFORE WORK
+If 50-qa-report.json is missing, stop and report. QA must complete first.
+
+STEPS
+1. Verify each stage produced its required artifacts.
+2. Verify artifacts are valid against their schemas.
+3. Check for policy violations (scope creep, unauthorized changes, security issues).
+4. Review the QA verdict and any open issues.
+5. Assign a final verdict: approved, changes_requested, or rejected.
+
+VERIFICATION
+The review report must validate against the review-report schema.
+All required fields must be present.
+
+OUTPUT
+Create {{RUN_FOLDER}}/60-review-report.json with this structure:
+{
+  "ticket_id": "{{TICKET_ID}}",
+  "stage_compliance": true,
+  "artifact_validation": true,
+  "policy_violations": [],
+  "verdict": "approved|changes_requested|rejected",
+  "comments": ["Review observations"]
+}
+
+After creating the file, run:
+node {{RUN_FOLDER}}/../../skills/dev-pipeline/scripts/dev-pipeline.js record_artifact {{RUN_FOLDER}} {{RUN_FOLDER}}/60-review-report.json

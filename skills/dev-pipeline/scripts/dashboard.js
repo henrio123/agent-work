@@ -87,8 +87,16 @@ function renderHTML() {
   .badge-in-progress { background: #f0883e33; color: #f0883e; }
   .badge-blocked { background: #f8514933; color: #f85149; }
   .badge-review { background: #d29a2833; color: #d29a28; }
+  .badge-pm-ready { background: #da3633ff; color: #fff; }
+  .badge-arch-ready { background: #8b5cf6ff; color: #fff; }
+  .badge-dev-ready { background: #f0883eff; color: #fff; }
+  .badge-qa-ready { background: #1f6febff; color: #fff; }
   .badge-done { background: #3fb95033; color: #3fb950; }
+  .role-tag { display: inline-block; padding: 1px 6px; border-radius: 4px; font-size: 0.7rem; background: #30363d; color: #c9d1d9; margin-left: 4px; }
   .blocked-icon { color: #f85149; margin-left: 4px; }
+  .artifact-item { margin: 2px 0; font-size: 0.78rem; color: #8b949e; }
+  .cmd-copy { font-family: monospace; font-size: 0.72rem; background: #161b22; padding: 2px 6px; border-radius: 3px; cursor: pointer; color: #58a6ff; }
+  .cmd-copy:hover { background: #21262d; }
   details { margin-top: 6px; }
   details summary { cursor: pointer; color: #58a6ff; font-size: 0.8rem; }
   details summary:hover { text-decoration: underline; }
@@ -115,12 +123,37 @@ async function load() {
       document.getElementById('app').innerHTML = '<p class="empty">No runs yet.</p>';
       return;
     }
-    let html = '<table><thead><tr><th>Folder</th><th>Ticket</th><th>Title</th><th>Project</th><th>Stage</th><th>Updated</th><th>Details</th></tr></thead><tbody>';
+    let html = '<table><thead><tr><th>Folder</th><th>Ticket</th><th>Title</th><th>Stage</th><th>Role</th><th>Artifacts</th><th>Updated</th><th>Details</th></tr></thead><tbody>';
     for (const r of runs) {
       const stage = r.current_stage || 'unknown';
       const cls = 'badge badge-' + stage;
       const blockedMark = r.blocked ? ' <span class="blocked-icon">&#9679; blocked</span>' : '';
+      // Find current role from latest stage_history entry
+      let currentRole = '';
+      if (r.stage_history && r.stage_history.length) {
+        const latest = r.stage_history[r.stage_history.length - 1];
+        if (latest.role) currentRole = '<span class="role-tag">' + esc(latest.role) + '</span>';
+      }
+      // Collect all artifacts from stage_history
+      let artifactsHtml = '';
+      const allArtifacts = [];
+      if (r.stage_history) {
+        for (const h of r.stage_history) {
+          if (h.artifact_paths) allArtifacts.push(...h.artifact_paths);
+        }
+      }
+      if (allArtifacts.length) {
+        artifactsHtml = allArtifacts.map(a => '<div class="artifact-item">' + esc(a) + '</div>').join('');
+      }
       let detailsHtml = '';
+      // Next actions with copy buttons
+      if (r.next_actions && r.next_actions.length) {
+        detailsHtml += '<details><summary>Next (' + r.next_actions.length + ')</summary><div class="detail-section">';
+        for (const act of r.next_actions) {
+          detailsHtml += '<div class="artifact-item"><strong>' + esc(act.label) + '</strong> <span class="cmd-copy" onclick="navigator.clipboard.writeText(this.dataset.cmd)" data-cmd="' + esc(act.command).replace(/"/g,'&quot;') + '">' + esc(act.command) + '</span></div>';
+        }
+        detailsHtml += '</div></details>';
+      }
       if (r.required_user_input && r.required_user_input.length) {
         detailsHtml += '<details><summary>Inputs (' + r.required_user_input.length + ')</summary><div class="detail-section">';
         for (const inp of r.required_user_input) {
@@ -128,6 +161,10 @@ async function load() {
           detailsHtml += '<div class="input-item ' + cls2 + '"><strong>' + esc(inp.prompt) + '</strong>';
           if (inp.status === 'answered') detailsHtml += ' &rarr; ' + esc(inp.answer || '');
           else detailsHtml += ' <em>(pending)</em>';
+          if (inp.id && inp.status !== 'answered') {
+            const cmd = './tools/dp.sh respond runs/' + esc(r.folder) + ' ' + esc(inp.id) + ' <answer>';
+            detailsHtml += ' <span class="cmd-copy" onclick="navigator.clipboard.writeText(this.dataset.cmd)" data-cmd="' + cmd.replace(/"/g,'&quot;') + '">copy cmd</span>';
+          }
           detailsHtml += '</div>';
         }
         detailsHtml += '</div></details>';
@@ -135,11 +172,12 @@ async function load() {
       if (r.stage_history && r.stage_history.length) {
         detailsHtml += '<details><summary>History (' + r.stage_history.length + ')</summary><div class="detail-section">';
         for (const h of r.stage_history) {
-          detailsHtml += '<div class="history-item"><span class="badge badge-' + h.stage + '">' + esc(h.stage) + '</span> <span class="ts">' + esc(h.started_at || '') + (h.finished_at ? ' &rarr; ' + esc(h.finished_at) : ' (active)') + '</span></div>';
+          const roleTag = h.role ? ' <span class="role-tag">' + esc(h.role) + '</span>' : '';
+          detailsHtml += '<div class="history-item"><span class="badge badge-' + h.stage + '">' + esc(h.stage) + '</span>' + roleTag + ' <span class="ts">' + esc(h.started_at || '') + (h.finished_at ? ' &rarr; ' + esc(h.finished_at) : ' (active)') + '</span></div>';
         }
         detailsHtml += '</div></details>';
       }
-      html += '<tr><td><code>' + esc(r.folder) + '</code></td><td>' + esc(r.ticket_id) + '</td><td>' + esc(r.title) + '</td><td>' + esc(r.project) + '</td><td><span class="' + cls + '">' + esc(stage) + '</span>' + blockedMark + '</td><td class="ts">' + esc(r.updated_at || '') + '</td><td>' + detailsHtml + '</td></tr>';
+      html += '<tr><td><code>' + esc(r.folder) + '</code></td><td>' + esc(r.ticket_id) + '</td><td>' + esc(r.title) + '</td><td><span class="' + cls + '">' + esc(stage) + '</span>' + blockedMark + '</td><td>' + currentRole + '</td><td>' + artifactsHtml + '</td><td class="ts">' + esc(r.updated_at || '') + '</td><td>' + detailsHtml + '</td></tr>';
     }
     html += '</tbody></table>';
     document.getElementById('app').innerHTML = html;

@@ -1,7 +1,7 @@
 ---
 name: dev-pipeline
-description: Local dev orchestration pipeline that manages ticket runs, generates Claude Code task packs, and tracks status via executable scripts.
-version: 2.0.0
+description: Role-based deterministic orchestration pipeline with schema-validated artifacts and reproducible execution per run.
+version: 3.0.0
 author: henr
 user-invocable: true
 metadata:
@@ -14,30 +14,35 @@ metadata:
 
 # DevPipeline Skill
 
-An executable local dev orchestration pipeline. All operations are performed by Node.js scripts — no manual JSON construction needed.
+A role-based deterministic orchestration system. Each ticket moves through a fixed state machine. Each stage is owned by one role. Artifacts are schema-validated before advancing.
 
-## Workspace
+## Stage Machine
 
-All artifacts are stored under `~/dev/agent-work/`. Scripts enforce this boundary.
+```
+intake → task-pack-generated → pm-ready → arch-ready → dev-ready → qa-ready → review → done
+                                                                              ↕
+                                                                           blocked
+```
 
-- `runs/` — timestamped run folders with status and artifacts
-- `templates/` — ticket and task pack templates
-- `skills/dev-pipeline/scripts/` — executable scripts
-- `skills/dev-pipeline/references/` — JSON schema for status.json
+| Stage | Role | Produces | Schema |
+|-------|------|----------|--------|
+| pm-ready | PM | 10-pm-brief.json | pm-brief.schema.json |
+| arch-ready | Architect | 20-arch-design.json | arch-design.schema.json |
+| dev-ready | Dev | 40-dev-patch.diff, 41-dev-notes.json | dev-notes.schema.json |
+| qa-ready | QA | 50-qa-report.json | qa-report.schema.json |
+| review | Review | 60-review-report.json | review-report.schema.json |
 
-## Schema
+## Role Boundaries
 
-The canonical `status.json` contract is defined in `{baseDir}/references/status.schema.json`. All scripts produce status files conforming to this schema.
+- **PM** cannot propose code changes
+- **Architect** cannot write implementation code
+- **Dev** cannot change scope or acceptance criteria
+- **QA** cannot change product decisions
+- **Review** checks policy compliance, stage gating, and diffs
 
 ## Commands
 
-All commands are invoked via the main script:
-
-```
-node {baseDir}/scripts/dev-pipeline.js <command> [args...]
-```
-
-Or via the shortcut wrapper:
+All commands via:
 
 ```
 ./tools/dp.sh <command> [args...]
@@ -45,158 +50,140 @@ Or via the shortcut wrapper:
 
 All output is JSON to stdout. Errors exit 1 with `{ "ok": false, "error": "..." }` on stderr.
 
-### create_run
+### Run Lifecycle
 
-Create a new run for a ticket (manual fields).
-
-```bash
-node {baseDir}/scripts/dev-pipeline.js create_run <ticket_id> <title> <project>
-```
-
-Creates `runs/<YYYYMMDD_HHMMSS>_<ticket_id>/` with `00-intake.json` and `status.json`.
-
-**Output:** `{ "ok": true, "run_folder": "...", "status": "intake" }`
-
-### create_run_from_ticket
-
-Create a run by reading metadata from a ticket file. Preferred over `create_run`.
+#### create_run / create_run_from_ticket
 
 ```bash
-node {baseDir}/scripts/dev-pipeline.js create_run_from_ticket <ticket_id>
+./tools/dp.sh create_run <ticket_id> <title> <project>
+./tools/dp.sh create_run_from_ticket <ticket_id>   # preferred
 ```
 
-Reads `tickets/<ticket_id>.md`, extracts `ticket_id`, `title`, `project` from YAML frontmatter. Sets `source: "ticket"` in the intake file.
+#### generate_task_pack
 
-**Output:** `{ "ok": true, "run_folder": "...", "status": "intake", "ticket_id": "...", "title": "...", "project": "..." }`
-
-### generate_task_pack
-
-Generate a Claude Code task pack from the template.
+Generate the base Claude Code task pack (intake → task-pack-generated).
 
 ```bash
-node {baseDir}/scripts/dev-pipeline.js generate_task_pack <run_folder>
+./tools/dp.sh generate_task_pack <run_folder>
 ```
 
-Reads `00-intake.json` + `templates/claude-task-pack.txt`, replaces placeholders, writes `30-dev-claude-task.txt`.
+### Orchestration
 
-**Output:** `{ "ok": true, "artifact": "30-dev-claude-task.txt" }`
+#### next_stage
 
-### block
-
-Mark a run as blocked, requiring user input.
+Determine the next stage, role, and required artifacts.
 
 ```bash
-node {baseDir}/scripts/dev-pipeline.js block <run_folder> <reason> [prompt1] [prompt2] ...
+./tools/dp.sh next_stage <run_folder>
 ```
 
-Sets blocked state and creates `required_user_input` entries with unique IDs.
+**Output:** `{ "ok": true, "next_stage": "pm-ready", "role": "PM", "required_artifacts": [...], "gates_pass": bool }`
 
-**Output:** `{ "ok": true, "inputs": [{ "id": "...", "prompt": "..." }, ...] }`
+#### generate_role_pack
 
-### respond
-
-Answer a pending input to unblock a run.
+Generate a role-specific task pack and advance to the next stage.
 
 ```bash
-node {baseDir}/scripts/dev-pipeline.js respond <run_folder> <input_id> <answer>
+./tools/dp.sh generate_role_pack <run_folder>
 ```
 
-Marks the input as answered. If all inputs are answered, clears blocked state and restores the previous stage.
+Creates the role's task file (e.g. `31-pm-claude-task.txt`) and updates status.
 
-**Output:** `{ "ok": true, "all_answered": true, "unblocked": true }`
+#### record_artifact
 
-### list
-
-List all runs with summary info.
+Validate an artifact against its schema. Blocks with a specific error if validation fails.
 
 ```bash
-node {baseDir}/scripts/dev-pipeline.js list
+./tools/dp.sh record_artifact <run_folder> <artifact_path>
 ```
 
-**Output:** `{ "ok": true, "runs": [{ "folder": "...", "ticket_id": "...", "current_stage": "...", "blocked": false }, ...] }`
+#### advance
 
-### status
-
-Print full status of a single run.
+Advance to next stage if all gates pass. Requires `--confirm`.
 
 ```bash
-node {baseDir}/scripts/dev-pipeline.js status <run_folder>
+./tools/dp.sh advance <run_folder> --confirm
 ```
 
-**Output:** `{ "ok": true, "run": { ... } }`
+#### orchestrate_one
 
-### stale_list
-
-List runs considered stale by the cleanup policy.
+Idempotent single-step orchestrator. Determines and executes the next safe action.
 
 ```bash
-node {baseDir}/scripts/dev-pipeline.js stale_list
+./tools/dp.sh orchestrate_one <run_folder>
+# or
+./tools/orchestrate-next.sh <run_folder>
 ```
 
-**Stale policy:**
-- `intake` with `updated_at` older than 48 hours
-- `task-pack-generated` with `updated_at` older than 7 days
-- `blocked` with `updated_at` older than 7 days
-- Run folder exists but `status.json` is missing or unreadable
+### Status & Cleanup
 
-**Output:** `{ "ok": true, "stale": [{ "folder": "...", "ticket_id": "...", "current_stage": "...", "updated_at": "...", "reason": "..." }], "count": N }`
-
-### stale_delete
-
-Delete stale runs. Requires `--confirm` flag for safety.
+#### list / status
 
 ```bash
-# Dry run (will fail with explanation)
-node {baseDir}/scripts/dev-pipeline.js stale_delete
-
-# Actually delete
-node {baseDir}/scripts/dev-pipeline.js stale_delete --confirm
+./tools/dp.sh list
+./tools/dp.sh status <run_folder>
 ```
 
-Uses the same stale policy as `stale_list`. Only deletes folders inside `runs/`.
+#### block / respond
 
-**Output:** `{ "ok": true, "deleted": [{ "folder": "...", "ticket_id": "...", "reason": "..." }], "count": N }`
+```bash
+./tools/dp.sh block <run_folder> <reason> [prompt1] [prompt2] ...
+./tools/dp.sh respond <run_folder> <input_id> <answer>
+```
+
+#### stale_list / stale_delete
+
+```bash
+./tools/dp.sh stale_list
+./tools/dp.sh stale_delete --confirm
+```
 
 ## Dashboard
 
-Launch a local web dashboard to view all runs:
-
 ```bash
-node {baseDir}/scripts/dashboard.js
+./tools/dashboard-start.sh   # start (http://localhost:18790)
+./tools/dashboard-stop.sh    # stop
 ```
 
-Opens at `http://localhost:18790` (override with `--port=NNNN`). Auto-refreshes every 5 seconds. Shows color-coded stage badges, expandable inputs and history.
+Shows role, stage, artifacts, next actions with copy-to-clipboard commands, and expandable history.
 
-Helper scripts for quick start/stop:
+## Schemas
+
+All artifact schemas are in `{baseDir}/references/`:
+- `pm-brief.schema.json`
+- `arch-design.schema.json`
+- `dev-notes.schema.json`
+- `qa-report.schema.json`
+- `review-report.schema.json`
+- `run-manifest.schema.json`
+- `status.schema.json`
+
+## Typical Multi-Role Workflow
 
 ```bash
-./tools/dashboard-start.sh   # start (idempotent, prints URL)
-./tools/dashboard-stop.sh    # stop (safe if nothing running)
+# 1. Create run from ticket
+./tools/dp.sh create_run_from_ticket TICKET-1
+./tools/dp.sh generate_task_pack <run_folder>
+
+# 2. Orchestrate through roles
+./tools/orchestrate-next.sh <run_folder>   # → pm-ready, generates PM task
+
+# 3. PM creates 10-pm-brief.json, then:
+./tools/dp.sh record_artifact <run_folder> <run_folder>/10-pm-brief.json
+
+# 4. Orchestrate next
+./tools/orchestrate-next.sh <run_folder>   # → arch-ready, generates Architect task
+
+# 5. Architect creates 20-arch-design.json, then:
+./tools/dp.sh record_artifact <run_folder> <run_folder>/20-arch-design.json
+
+# 6. Continue through Dev → QA → Review → done
+./tools/orchestrate-next.sh <run_folder>   # repeat for each role
 ```
 
 ## Security
 
-- All paths are resolved and validated to stay within `~/dev/agent-work/`
+- All paths validated to stay within `~/dev/agent-work/`
 - No `child_process`, no outbound network (main script)
 - Dashboard binds to `127.0.0.1` only
-- Never execute code from ticket content — only store and template it
-
-## Typical Workflow
-
-```bash
-# 1. Create a run
-node {baseDir}/scripts/dev-pipeline.js create_run TICKET-1 "Add feature X" my-project
-
-# 2. Generate the task pack
-node {baseDir}/scripts/dev-pipeline.js generate_task_pack <run_folder>
-
-# 3. If blocked, record why
-node {baseDir}/scripts/dev-pipeline.js block <run_folder> "Missing API key" "Which API key?"
-
-# 4. When user answers
-node {baseDir}/scripts/dev-pipeline.js respond <run_folder> <input_id> "key-abc-123"
-
-# 5. Check status anytime
-node {baseDir}/scripts/dev-pipeline.js list
-node {baseDir}/scripts/dev-pipeline.js status <run_folder>
-```
+- Artifacts validated against schemas before stage transitions

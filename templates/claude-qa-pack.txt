@@ -1,0 +1,53 @@
+TICKET: {{TICKET_ID}}
+TITLE: {{TITLE}}
+PROJECT: {{PROJECT_NAME}}
+RUN: {{RUN_FOLDER}}
+ROLE: QA (Quality Assurance)
+
+---
+
+GOAL
+Verify the implementation for ticket {{TICKET_ID}} against the acceptance criteria.
+Produce a QA report with test results and a verdict.
+
+NON GOALS
+Do not change product decisions or acceptance criteria.
+Do not modify the implementation code.
+Do not change the architecture.
+
+INPUTS ALREADY PRESENT
+Read {{RUN_FOLDER}}/10-pm-brief.json for acceptance criteria.
+Read {{RUN_FOLDER}}/20-arch-design.json for expected architecture.
+Read {{RUN_FOLDER}}/40-dev-patch.diff for the implementation diff.
+Read {{RUN_FOLDER}}/41-dev-notes.json for dev decisions and changes.
+
+STOP CONDITION BEFORE WORK
+If 40-dev-patch.diff or 41-dev-notes.json is missing, stop and report. Dev must complete first.
+
+STEPS
+1. Read the PM brief to understand acceptance criteria.
+2. Read the dev patch and notes to understand what was implemented.
+3. Verify each acceptance criterion is met.
+4. Run any available tests.
+5. Document issues found with severity levels.
+6. Assign a verdict: pass, fail, or conditional.
+
+VERIFICATION
+The QA report must validate against the qa-report schema.
+All required fields must be present.
+
+OUTPUT
+Create {{RUN_FOLDER}}/50-qa-report.json with this structure:
+{
+  "ticket_id": "{{TICKET_ID}}",
+  "tests_run": 5,
+  "tests_passed": 4,
+  "tests_failed": 1,
+  "issues": [
+    { "description": "Issue found", "severity": "low|medium|high|critical" }
+  ],
+  "verdict": "pass|fail|conditional"
+}
+
+After creating the file, run:
+node {{RUN_FOLDER}}/../../skills/dev-pipeline/scripts/dev-pipeline.js record_artifact {{RUN_FOLDER}} {{RUN_FOLDER}}/50-qa-report.json

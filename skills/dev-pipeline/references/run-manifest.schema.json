@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Run Manifest",
+  "type": "object",
+  "required": ["ticket_id", "stages_completed", "artifacts"],
+  "properties": {
+    "ticket_id": { "type": "string" },
+    "stages_completed": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "artifacts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["path", "schema", "valid"],
+        "properties": {
+          "path": { "type": "string" },
+          "schema": { "type": "string" },
+          "valid": { "type": "boolean" }
+        }
+      }
+    },
+    "role_history": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["role", "stage", "started_at"],
+        "properties": {
+          "role": { "type": "string" },
+          "stage": { "type": "string" },
+          "started_at": { "type": "string" },
+          "finished_at": { "type": ["string", "null"] }
+        }
+      }
+    }
+  }
+}

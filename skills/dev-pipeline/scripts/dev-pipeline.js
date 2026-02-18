@@ -531,6 +531,578 @@ function cmdStaleDelete(args) {
 }
 
 // ---------------------------------------------------------------------------
+// Orchestration: stage machine, roles, schema validation
+// ---------------------------------------------------------------------------
+const STAGE_CONFIG = {
+  'pm-ready': {
+    role: 'PM',
+    requiredArtifacts: ['10-pm-brief.json'],
+    taskFile: '31-pm-claude-task.txt',
+    template: 'claude-pm-pack.txt',
+    next: 'arch-ready',
+  },
+  'arch-ready': {
+    role: 'Architect',
+    requiredArtifacts: ['20-arch-design.json'],
+    taskFile: '32-arch-claude-task.txt',
+    template: 'claude-arch-pack.txt',
+    next: 'dev-ready',
+  },
+  'dev-ready': {
+    role: 'Dev',
+    requiredArtifacts: ['40-dev-patch.diff', '41-dev-notes.json'],
+    taskFile: '33-dev-claude-task.txt',
+    template: 'claude-dev-pack.txt',
+    next: 'qa-ready',
+  },
+  'qa-ready': {
+    role: 'QA',
+    requiredArtifacts: ['50-qa-report.json'],
+    taskFile: '34-qa-claude-task.txt',
+    template: 'claude-qa-pack.txt',
+    next: 'review',
+  },
+  'review': {
+    role: 'Review',
+    requiredArtifacts: ['60-review-report.json'],
+    taskFile: '35-review-claude-task.txt',
+    template: 'claude-review-pack.txt',
+    next: 'done',
+  },
+};
+
+const ARTIFACT_SCHEMA_MAP = {
+  '10-pm-brief.json': 'pm-brief.schema.json',
+  '20-arch-design.json': 'arch-design.schema.json',
+  '41-dev-notes.json': 'dev-notes.schema.json',
+  '50-qa-report.json': 'qa-report.schema.json',
+  '60-review-report.json': 'review-report.schema.json',
+};
+
+// Minimal JSON schema validator (supports type, required, properties, enum, items, additionalProperties)
+function validateSchema(value, schema, pathStr) {
+  pathStr = pathStr || '$';
+  const errors = [];
+
+  if (schema.type) {
+    const types = Array.isArray(schema.type) ? schema.type : [schema.type];
+    const actual = value === null ? 'null' : Array.isArray(value) ? 'array' : typeof value;
+    if (!types.includes(actual)) {
+      errors.push(`${pathStr}: expected ${types.join('|')}, got ${actual}`);
+      return errors;
+    }
+  }
+
+  if (schema.enum && !schema.enum.includes(value)) {
+    errors.push(`${pathStr}: must be one of [${schema.enum.join(', ')}], got "${value}"`);
+  }
+
+  if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+    if (schema.required) {
+      for (const key of schema.required) {
+        if (!(key in value) || value[key] === undefined) {
+          errors.push(`${pathStr}.${key}: required field missing`);
+        }
+      }
+    }
+    if (schema.properties) {
+      for (const [key, propSchema] of Object.entries(schema.properties)) {
+        if (key in value && value[key] !== undefined) {
+          errors.push(...validateSchema(value[key], propSchema, `${pathStr}.${key}`));
+        }
+      }
+    }
+    if (schema.additionalProperties === false && schema.properties) {
+      for (const key of Object.keys(value)) {
+        if (!(key in schema.properties)) {
+          errors.push(`${pathStr}.${key}: additional property not allowed`);
+        }
+      }
+    }
+  }
+
+  if (Array.isArray(value) && schema.items) {
+    for (let i = 0; i < value.length; i++) {
+      errors.push(...validateSchema(value[i], schema.items, `${pathStr}[${i}]`));
+    }
+  }
+
+  return errors;
+}
+
+function loadArtifactSchema(artifactFilename) {
+  const schemaName = ARTIFACT_SCHEMA_MAP[artifactFilename];
+  if (!schemaName) return null;
+  const schemaPath = safePath(path.join('skills', 'dev-pipeline', 'references', schemaName));
+  if (!fs.existsSync(schemaPath)) return null;
+  return readJSON(schemaPath);
+}
+
+function validateArtifact(runFolder, artifactFilename) {
+  const artifactPath = path.join(runFolder, artifactFilename);
+  if (!fs.existsSync(artifactPath)) {
+    return { valid: false, errors: [`${artifactFilename}: file not found`] };
+  }
+
+  // .diff files: just check non-empty
+  if (artifactFilename.endsWith('.diff')) {
+    const content = fs.readFileSync(artifactPath, 'utf8').trim();
+    if (!content) return { valid: false, errors: [`${artifactFilename}: file is empty`] };
+    return { valid: true, errors: [] };
+  }
+
+  // JSON files: parse and validate
+  let data;
+  try {
+    data = readJSON(artifactPath);
+  } catch (e) {
+    return { valid: false, errors: [`${artifactFilename}: invalid JSON — ${e.message}`] };
+  }
+
+  const schema = loadArtifactSchema(artifactFilename);
+  if (!schema) {
+    return { valid: true, errors: [] }; // no schema = pass
+  }
+
+  const errors = validateSchema(data, schema);
+  return { valid: errors.length === 0, errors };
+}
+
+function getNextStageInfo(runFolder, status) {
+  const stage = status.current_stage;
+
+  if (stage === 'done') return { next_stage: null, role: null, message: 'Run is complete' };
+  if (stage === 'blocked') return { next_stage: null, role: null, blocked: true };
+  if (stage === 'intake') return { next_stage: 'task-pack-generated', role: null, action: 'generate_task_pack' };
+
+  if (stage === 'task-pack-generated') {
+    return { next_stage: 'pm-ready', role: 'PM', required_artifacts: ['10-pm-brief.json'] };
+  }
+
+  const config = STAGE_CONFIG[stage];
+  if (!config) return { next_stage: null, role: null, error: `Unknown stage: ${stage}` };
+
+  // Check if current stage's required artifacts are present and valid
+  const missing = [];
+  const invalid = [];
+  for (const artifact of config.requiredArtifacts) {
+    const result = validateArtifact(runFolder, artifact);
+    if (!fs.existsSync(path.join(runFolder, artifact))) {
+      missing.push(artifact);
+    } else if (!result.valid) {
+      invalid.push({ artifact, errors: result.errors });
+    }
+  }
+
+  if (missing.length > 0 || invalid.length > 0) {
+    return {
+      next_stage: stage,
+      role: config.role,
+      required_artifacts: config.requiredArtifacts,
+      missing_artifacts: missing,
+      invalid_artifacts: invalid,
+      gates_pass: false,
+    };
+  }
+
+  // All gates pass — next stage
+  const nextConfig = STAGE_CONFIG[config.next];
+  return {
+    next_stage: config.next,
+    role: nextConfig ? nextConfig.role : null,
+    required_artifacts: nextConfig ? nextConfig.requiredArtifacts : [],
+    gates_pass: true,
+  };
+}
+
+function cmdNextStage(runFolder) {
+  if (!runFolder) fail('Usage: next_stage <run_folder>');
+  runFolder = safePath(runFolder);
+  const status = readStatus(runFolder);
+  const info = getNextStageInfo(runFolder, status);
+  ok(info);
+}
+
+function renderTemplate(templateName, vars) {
+  const templatePath = safePath(path.join('templates', templateName));
+  if (!fs.existsSync(templatePath)) {
+    throw new Error(`Template not found: templates/${templateName}`);
+  }
+  let content = fs.readFileSync(templatePath, 'utf8');
+  content = content
+    .replace(/\{\{TICKET_ID\}\}/g, vars.ticket_id)
+    .replace(/\{\{TITLE\}\}/g, vars.title)
+    .replace(/\{\{PROJECT_NAME\}\}/g, vars.project)
+    .replace(/\{\{RUN_FOLDER\}\}/g, vars.run_folder);
+  return content;
+}
+
+function cmdGenerateRolePack(runFolder) {
+  if (!runFolder) fail('Usage: generate_role_pack <run_folder>');
+  runFolder = safePath(runFolder);
+
+  const status = readStatus(runFolder);
+  const info = getNextStageInfo(runFolder, status);
+
+  if (!info.next_stage || info.next_stage === status.current_stage) {
+    // Still in current stage — generate task for current role
+    const config = STAGE_CONFIG[status.current_stage];
+    if (!config) fail(`No role pack available for stage: ${status.current_stage}`);
+
+    const intake = readJSON(path.join(runFolder, '00-intake.json'));
+    const content = renderTemplate(config.template, {
+      ticket_id: intake.ticket_id,
+      title: intake.title,
+      project: intake.project || intake.project_name,
+      run_folder: runFolder,
+    });
+
+    const taskPath = path.join(runFolder, config.taskFile);
+    fs.writeFileSync(taskPath, content, 'utf8');
+    ok({ role: config.role, task_file: config.taskFile, stage: status.current_stage });
+    return;
+  }
+
+  // Advance to next stage and generate its role pack
+  const nextStage = info.next_stage;
+  const nextConfig = STAGE_CONFIG[nextStage];
+  if (!nextConfig) {
+    if (nextStage === 'done') fail('Run is complete, no more role packs to generate');
+    fail(`No role config for stage: ${nextStage}`);
+  }
+
+  const currentTime = now();
+  const currentEntry = status.stage_history.find(
+    (e) => e.stage === status.current_stage && !e.finished_at
+  );
+  if (currentEntry) currentEntry.finished_at = currentTime;
+
+  status.current_stage = nextStage;
+  status.stage_history.push({
+    stage: nextStage,
+    started_at: currentTime,
+    finished_at: null,
+    artifact_paths: [],
+    role: nextConfig.role,
+  });
+
+  const intake = readJSON(path.join(runFolder, '00-intake.json'));
+  const content = renderTemplate(nextConfig.template, {
+    ticket_id: intake.ticket_id,
+    title: intake.title,
+    project: intake.project || intake.project_name,
+    run_folder: runFolder,
+  });
+
+  const taskPath = path.join(runFolder, nextConfig.taskFile);
+  fs.writeFileSync(taskPath, content, 'utf8');
+
+  status.next_actions = [
+    { label: `${nextConfig.role}: complete work`, command: `Follow ${nextConfig.taskFile}` },
+    ...nextConfig.requiredArtifacts.map((a) => ({
+      label: `Record artifact: ${a}`,
+      command: `./tools/dp.sh record_artifact ${runFolder} ${path.join(runFolder, a)}`,
+    })),
+  ];
+  writeStatus(runFolder, status);
+
+  ok({ role: nextConfig.role, task_file: nextConfig.taskFile, stage: nextStage });
+}
+
+function cmdRecordArtifact(runFolder, artifactPath) {
+  if (!runFolder || !artifactPath) fail('Usage: record_artifact <run_folder> <artifact_path>');
+  runFolder = safePath(runFolder);
+  artifactPath = safePath(artifactPath);
+
+  const artifactFilename = path.basename(artifactPath);
+  const result = validateArtifact(runFolder, artifactFilename);
+
+  if (!result.valid) {
+    // Block with first error as prompt
+    const status = readStatus(runFolder);
+    status._previous_stage = status.current_stage;
+
+    const currentTime = now();
+    const currentEntry = status.stage_history.find(
+      (e) => e.stage === status.current_stage && !e.finished_at
+    );
+    if (currentEntry) currentEntry.finished_at = currentTime;
+
+    status.blocked = true;
+    status.blocked_reason = `Artifact validation failed: ${artifactFilename}`;
+    status.current_stage = 'blocked';
+    status.stage_history.push({
+      stage: 'blocked',
+      started_at: currentTime,
+      finished_at: null,
+      artifact_paths: [],
+    });
+
+    const input = {
+      id: crypto.randomUUID(),
+      prompt: result.errors[0],
+      options: null,
+      default: null,
+      status: 'pending',
+      answer: null,
+    };
+    status.required_user_input.push(input);
+    status.next_actions = [{
+      label: 'Fix artifact and re-record',
+      command: `./tools/dp.sh record_artifact ${runFolder} ${artifactPath}`,
+    }];
+    writeStatus(runFolder, status);
+
+    ok({ valid: false, errors: result.errors, blocked: true, input_id: input.id });
+    return;
+  }
+
+  // Valid — record in stage history
+  const status = readStatus(runFolder);
+  const currentEntry = status.stage_history.find(
+    (e) => e.stage === status.current_stage && !e.finished_at
+  );
+  if (currentEntry && !currentEntry.artifact_paths.includes(artifactFilename)) {
+    currentEntry.artifact_paths.push(artifactFilename);
+  }
+
+  // Check if all gates pass for current stage
+  const config = STAGE_CONFIG[status.current_stage];
+  let gatesPass = false;
+  if (config) {
+    const allPresent = config.requiredArtifacts.every((a) => {
+      const r = validateArtifact(runFolder, a);
+      return r.valid;
+    });
+    gatesPass = allPresent;
+  }
+
+  writeStatus(runFolder, status);
+  ok({ valid: true, artifact: artifactFilename, gates_pass: gatesPass });
+}
+
+function cmdAdvance(runFolder, args) {
+  if (!runFolder) fail('Usage: advance <run_folder> --confirm');
+  if (!args.includes('--confirm')) {
+    fail('Safety: pass --confirm to advance. Run next_stage first to review.');
+  }
+
+  runFolder = safePath(runFolder);
+  const status = readStatus(runFolder);
+  const info = getNextStageInfo(runFolder, status);
+
+  if (!info.gates_pass) {
+    fail(`Gates do not pass. Missing: ${JSON.stringify(info.missing_artifacts || [])}. Invalid: ${JSON.stringify(info.invalid_artifacts || [])}`);
+  }
+
+  if (!info.next_stage || info.next_stage === status.current_stage) {
+    fail('No stage to advance to');
+  }
+
+  const currentTime = now();
+  const currentEntry = status.stage_history.find(
+    (e) => e.stage === status.current_stage && !e.finished_at
+  );
+  if (currentEntry) currentEntry.finished_at = currentTime;
+
+  status.current_stage = info.next_stage;
+
+  if (info.next_stage === 'done') {
+    status.stage_history.push({
+      stage: 'done',
+      started_at: currentTime,
+      finished_at: currentTime,
+      artifact_paths: [],
+    });
+    status.next_actions = [];
+  } else {
+    status.stage_history.push({
+      stage: info.next_stage,
+      started_at: currentTime,
+      finished_at: null,
+      artifact_paths: [],
+      role: info.role,
+    });
+    status.next_actions = [{
+      label: `Generate ${info.role} task pack`,
+      command: `./tools/dp.sh generate_role_pack ${runFolder}`,
+    }];
+  }
+
+  writeStatus(runFolder, status);
+  ok({ advanced_to: info.next_stage, role: info.role });
+}
+
+function cmdOrchestrateOne(runFolder) {
+  if (!runFolder) fail('Usage: orchestrate_one <run_folder>');
+  runFolder = safePath(runFolder);
+
+  const status = readStatus(runFolder);
+
+  if (status.blocked) {
+    const pending = status.required_user_input.filter((i) => i.status === 'pending');
+    process.stdout.write(JSON.stringify({
+      ok: true,
+      action: 'blocked',
+      current_stage: status.current_stage,
+      required_user_input: pending,
+    }, null, 2) + '\n');
+    process.exit(0);
+  }
+
+  if (status.current_stage === 'done') {
+    process.stdout.write(JSON.stringify({
+      ok: true,
+      action: 'done',
+      current_stage: 'done',
+      message: 'Run is complete',
+    }, null, 2) + '\n');
+    process.exit(0);
+  }
+
+  if (status.current_stage === 'intake') {
+    process.stdout.write(JSON.stringify({
+      ok: true,
+      action: 'needs_task_pack',
+      current_stage: 'intake',
+      next_command: `./tools/dp.sh generate_task_pack ${runFolder}`,
+    }, null, 2) + '\n');
+    process.exit(0);
+  }
+
+  const info = getNextStageInfo(runFolder, status);
+
+  // If gates pass and we can advance, do so then generate role pack
+  if (info.gates_pass && info.next_stage !== status.current_stage) {
+    const currentTime = now();
+    const currentEntry = status.stage_history.find(
+      (e) => e.stage === status.current_stage && !e.finished_at
+    );
+    if (currentEntry) currentEntry.finished_at = currentTime;
+
+    status.current_stage = info.next_stage;
+
+    if (info.next_stage === 'done') {
+      status.stage_history.push({
+        stage: 'done', started_at: currentTime, finished_at: currentTime, artifact_paths: [],
+      });
+      status.next_actions = [];
+      writeStatus(runFolder, status);
+      process.stdout.write(JSON.stringify({
+        ok: true, action: 'completed', advanced_to: 'done',
+      }, null, 2) + '\n');
+      process.exit(0);
+    }
+
+    const nextConfig = STAGE_CONFIG[info.next_stage];
+    status.stage_history.push({
+      stage: info.next_stage, started_at: currentTime, finished_at: null,
+      artifact_paths: [], role: nextConfig ? nextConfig.role : null,
+    });
+
+    // Generate role pack if config exists
+    if (nextConfig) {
+      const intake = readJSON(path.join(runFolder, '00-intake.json'));
+      const content = renderTemplate(nextConfig.template, {
+        ticket_id: intake.ticket_id, title: intake.title,
+        project: intake.project || intake.project_name, run_folder: runFolder,
+      });
+      fs.writeFileSync(path.join(runFolder, nextConfig.taskFile), content, 'utf8');
+
+      status.next_actions = [
+        { label: `${nextConfig.role}: complete work`, command: `Follow ${nextConfig.taskFile}` },
+        ...nextConfig.requiredArtifacts.map((a) => ({
+          label: `Record: ${a}`,
+          command: `./tools/dp.sh record_artifact ${runFolder} ${path.join(runFolder, a)}`,
+        })),
+      ];
+    }
+
+    writeStatus(runFolder, status);
+    process.stdout.write(JSON.stringify({
+      ok: true,
+      action: 'advanced_and_generated',
+      advanced_to: info.next_stage,
+      role: nextConfig ? nextConfig.role : null,
+      task_file: nextConfig ? nextConfig.taskFile : null,
+      required_artifacts: nextConfig ? nextConfig.requiredArtifacts : [],
+    }, null, 2) + '\n');
+    process.exit(0);
+  }
+
+  // Gates don't pass yet — report what's needed
+  const config = STAGE_CONFIG[status.current_stage];
+
+  // If no task file generated for current stage yet, generate it
+  if (config && !fs.existsSync(path.join(runFolder, config.taskFile))) {
+    const intake = readJSON(path.join(runFolder, '00-intake.json'));
+    const content = renderTemplate(config.template, {
+      ticket_id: intake.ticket_id, title: intake.title,
+      project: intake.project || intake.project_name, run_folder: runFolder,
+    });
+    fs.writeFileSync(path.join(runFolder, config.taskFile), content, 'utf8');
+
+    status.next_actions = [
+      { label: `${config.role}: complete work`, command: `Follow ${config.taskFile}` },
+      ...config.requiredArtifacts.map((a) => ({
+        label: `Record: ${a}`,
+        command: `./tools/dp.sh record_artifact ${runFolder} ${path.join(runFolder, a)}`,
+      })),
+    ];
+    writeStatus(runFolder, status);
+  }
+
+  // For task-pack-generated, advance to pm-ready
+  if (status.current_stage === 'task-pack-generated') {
+    const currentTime = now();
+    const currentEntry = status.stage_history.find(
+      (e) => e.stage === status.current_stage && !e.finished_at
+    );
+    if (currentEntry) currentEntry.finished_at = currentTime;
+
+    status.current_stage = 'pm-ready';
+    const pmConfig = STAGE_CONFIG['pm-ready'];
+    status.stage_history.push({
+      stage: 'pm-ready', started_at: currentTime, finished_at: null,
+      artifact_paths: [], role: 'PM',
+    });
+
+    const intake = readJSON(path.join(runFolder, '00-intake.json'));
+    const content = renderTemplate(pmConfig.template, {
+      ticket_id: intake.ticket_id, title: intake.title,
+      project: intake.project || intake.project_name, run_folder: runFolder,
+    });
+    fs.writeFileSync(path.join(runFolder, pmConfig.taskFile), content, 'utf8');
+
+    status.next_actions = [
+      { label: 'PM: complete work', command: `Follow ${pmConfig.taskFile}` },
+      ...pmConfig.requiredArtifacts.map((a) => ({
+        label: `Record: ${a}`,
+        command: `./tools/dp.sh record_artifact ${runFolder} ${path.join(runFolder, a)}`,
+      })),
+    ];
+    writeStatus(runFolder, status);
+
+    process.stdout.write(JSON.stringify({
+      ok: true, action: 'advanced_and_generated',
+      advanced_to: 'pm-ready', role: 'PM', task_file: pmConfig.taskFile,
+      required_artifacts: pmConfig.requiredArtifacts,
+    }, null, 2) + '\n');
+    process.exit(0);
+  }
+
+  process.stdout.write(JSON.stringify({
+    ok: true,
+    action: 'waiting_for_artifacts',
+    current_stage: status.current_stage,
+    role: config ? config.role : null,
+    missing_artifacts: info.missing_artifacts || [],
+    invalid_artifacts: info.invalid_artifacts || [],
+  }, null, 2) + '\n');
+  process.exit(0);
+}
+
+// ---------------------------------------------------------------------------
 // CLI dispatch
 // ---------------------------------------------------------------------------
 const [command, ...args] = process.argv.slice(2);
@@ -564,8 +1136,23 @@ try {
     case 'stale_delete':
       cmdStaleDelete(args);
       break;
+    case 'next_stage':
+      cmdNextStage(args[0]);
+      break;
+    case 'generate_role_pack':
+      cmdGenerateRolePack(args[0]);
+      break;
+    case 'record_artifact':
+      cmdRecordArtifact(args[0], args[1]);
+      break;
+    case 'advance':
+      cmdAdvance(args[0], args.slice(1));
+      break;
+    case 'orchestrate_one':
+      cmdOrchestrateOne(args[0]);
+      break;
     default:
-      fail(`Unknown command: ${command || '(none)'}. Available: create_run, create_run_from_ticket, generate_task_pack, block, respond, list, status, stale_list, stale_delete`);
+      fail(`Unknown command: ${command || '(none)'}. Available: create_run, create_run_from_ticket, generate_task_pack, generate_role_pack, next_stage, record_artifact, advance, orchestrate_one, block, respond, list, status, stale_list, stale_delete`);
   }
 } catch (err) {
   fail(err.message);

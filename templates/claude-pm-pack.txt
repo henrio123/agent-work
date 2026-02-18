@@ -1,0 +1,52 @@
+TICKET: {{TICKET_ID}}
+TITLE: {{TITLE}}
+PROJECT: {{PROJECT_NAME}}
+RUN: {{RUN_FOLDER}}
+ROLE: PM (Product Manager)
+
+---
+
+GOAL
+Define the problem, scope, and acceptance criteria for ticket {{TICKET_ID}}.
+Produce a PM brief that the Architect can use to design a solution.
+
+NON GOALS
+Do not propose technical solutions or code changes.
+Do not make architecture decisions.
+Do not write implementation code.
+
+INPUTS ALREADY PRESENT
+Read the intake file at {{RUN_FOLDER}}/00-intake.json for ticket details.
+Read the base task pack at {{RUN_FOLDER}}/30-dev-claude-task.txt for context.
+
+STOP CONDITION BEFORE WORK
+If the intake file is missing or has no ticket_id, stop and report.
+
+STEPS
+1. Read the intake file and understand the ticket.
+2. Write a clear problem statement.
+3. Define the scope of work.
+4. List concrete acceptance criteria that can be verified.
+5. List non-goals to prevent scope creep.
+6. Assign a priority level.
+
+VERIFICATION
+The output file must validate against the pm-brief schema.
+All required fields must be present and non-empty.
+
+OUTPUT
+Create {{RUN_FOLDER}}/10-pm-brief.json with this structure:
+{
+  "ticket_id": "{{TICKET_ID}}",
+  "title": "{{TITLE}}",
+  "project": "{{PROJECT_NAME}}",
+  "problem_statement": "Clear description of the problem",
+  "scope": "What is in scope for this ticket",
+  "acceptance_criteria": ["Criterion 1", "Criterion 2"],
+  "non_goals": ["What is explicitly out of scope"],
+  "stakeholders": ["Who cares about this"],
+  "priority": "medium"
+}
+
+After creating the file, run:
+node {{RUN_FOLDER}}/../../skills/dev-pipeline/scripts/dev-pipeline.js record_artifact {{RUN_FOLDER}} {{RUN_FOLDER}}/10-pm-brief.json

@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Review Report",
+  "type": "object",
+  "required": ["ticket_id", "stage_compliance", "artifact_validation", "verdict"],
+  "properties": {
+    "ticket_id": { "type": "string" },
+    "stage_compliance": { "type": "boolean" },
+    "artifact_validation": { "type": "boolean" },
+    "policy_violations": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "verdict": {
+      "type": "string",
+      "enum": ["approved", "changes_requested", "rejected"]
+    },
+    "comments": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  }
+}

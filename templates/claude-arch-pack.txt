@@ -1,0 +1,53 @@
+TICKET: {{TICKET_ID}}
+TITLE: {{TITLE}}
+PROJECT: {{PROJECT_NAME}}
+RUN: {{RUN_FOLDER}}
+ROLE: Architect
+
+---
+
+GOAL
+Design the technical approach for ticket {{TICKET_ID}}.
+Produce an architecture design document that the Dev can implement from.
+
+NON GOALS
+Do not write implementation code.
+Do not change the scope or acceptance criteria defined by PM.
+Do not make product decisions.
+
+INPUTS ALREADY PRESENT
+Read {{RUN_FOLDER}}/10-pm-brief.json for the PM brief with scope and acceptance criteria.
+Read {{RUN_FOLDER}}/00-intake.json for original ticket details.
+
+STOP CONDITION BEFORE WORK
+If 10-pm-brief.json is missing, stop and report. PM must complete first.
+
+STEPS
+1. Read the PM brief to understand scope and acceptance criteria.
+2. Define the technical approach.
+3. List components and their responsibilities.
+4. List specific file changes needed (path, action, description).
+5. Identify constraints, risks, and dependencies.
+
+VERIFICATION
+The output file must validate against the arch-design schema.
+All required fields must be present.
+
+OUTPUT
+Create {{RUN_FOLDER}}/20-arch-design.json with this structure:
+{
+  "ticket_id": "{{TICKET_ID}}",
+  "approach": "High-level technical approach",
+  "components": [
+    { "name": "Component", "responsibility": "What it does" }
+  ],
+  "file_changes": [
+    { "path": "path/to/file", "action": "create|modify|delete", "description": "What changes" }
+  ],
+  "constraints": ["Technical constraints"],
+  "risks": ["Potential risks"],
+  "dependencies": ["External dependencies"]
+}
+
+After creating the file, run:
+node {{RUN_FOLDER}}/../../skills/dev-pipeline/scripts/dev-pipeline.js record_artifact {{RUN_FOLDER}} {{RUN_FOLDER}}/20-arch-design.json

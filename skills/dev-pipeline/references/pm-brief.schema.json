@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "PM Brief",
+  "type": "object",
+  "required": ["ticket_id", "title", "project", "problem_statement", "scope", "acceptance_criteria"],
+  "properties": {
+    "ticket_id": { "type": "string" },
+    "title": { "type": "string" },
+    "project": { "type": "string" },
+    "problem_statement": { "type": "string" },
+    "scope": { "type": "string" },
+    "acceptance_criteria": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "non_goals": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "stakeholders": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "priority": {
+      "type": "string",
+      "enum": ["low", "medium", "high", "critical"]
+    }
+  }
+}
