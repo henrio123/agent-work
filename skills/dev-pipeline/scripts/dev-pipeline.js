@@ -6,6 +6,8 @@ const path = require('node:path');
 const os = require('node:os');
 const crypto = require('node:crypto');
 
+const TOOL_VERSION = '0.1.0';
+
 // ---------------------------------------------------------------------------
 // Security: all paths must resolve inside WORKSPACE_ROOT
 // ---------------------------------------------------------------------------
@@ -52,6 +54,31 @@ function parseFrontmatter(text) {
 
 function writeJSON(filePath, data) {
   fs.writeFileSync(filePath, JSON.stringify(data, null, 2) + '\n', 'utf8');
+}
+
+function getGitHead() {
+  try {
+    const headPath = path.join(WORKSPACE_ROOT, '.git', 'HEAD');
+    const head = fs.readFileSync(headPath, 'utf8').trim();
+    if (head.startsWith('ref: ')) {
+      const refPath = path.join(WORKSPACE_ROOT, '.git', head.slice(5));
+      return fs.readFileSync(refPath, 'utf8').trim();
+    }
+    return head; // detached HEAD
+  } catch {
+    return null;
+  }
+}
+
+function writeRunManifest(runFolder, ticketId, createdAt) {
+  const manifest = {
+    ticket_id: ticketId,
+    created_at: createdAt,
+    tool_version: TOOL_VERSION,
+    schema_version: '1.0.0',
+    git_head: getGitHead(),
+  };
+  writeJSON(path.join(runFolder, 'run-manifest.json'), manifest);
 }
 
 function ok(data) {
@@ -153,6 +180,9 @@ function cmdCreateRun(ticketId, title, project) {
   };
   writeJSON(path.join(runFolder, '00-intake.json'), intake);
 
+  // run-manifest.json
+  writeRunManifest(runFolder, ticketId, createdAt);
+
   // status.json (full schema)
   const status = {
     ticket_id: ticketId,
@@ -169,7 +199,7 @@ function cmdCreateRun(ticketId, title, project) {
         stage: 'intake',
         started_at: createdAt,
         finished_at: null,
-        artifact_paths: ['00-intake.json'],
+        artifact_paths: ['00-intake.json', 'run-manifest.json'],
       },
     ],
     next_actions: [
@@ -399,6 +429,9 @@ function cmdCreateRunFromTicket(ticketId) {
   };
   writeJSON(path.join(runFolder, '00-intake.json'), intake);
 
+  // run-manifest.json
+  writeRunManifest(runFolder, fm.ticket_id, createdAt);
+
   const status = {
     ticket_id: fm.ticket_id,
     title: fm.title,
@@ -414,7 +447,7 @@ function cmdCreateRunFromTicket(ticketId) {
         stage: 'intake',
         started_at: createdAt,
         finished_at: null,
-        artifact_paths: ['00-intake.json'],
+        artifact_paths: ['00-intake.json', 'run-manifest.json'],
       },
     ],
     next_actions: [
@@ -1223,7 +1256,11 @@ function cmdScaffoldArtifacts(runFolder) {
 // Exports for testing
 // ---------------------------------------------------------------------------
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { generateMinimalValue, validateSchema, resolveRef, ARTIFACT_SCHEMA_MAP };
+  module.exports = {
+    TOOL_VERSION, STAGE_CONFIG, ARTIFACT_SCHEMA_MAP,
+    generateMinimalValue, validateSchema, resolveRef,
+    getNextStageInfo, normalizeStatus, getGitHead,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -1234,6 +1271,46 @@ if (require.main === module) {
 
   try {
     switch (command) {
+      case 'help':
+      case '--help':
+      case '-h':
+        process.stdout.write([
+          `dev-pipeline ${TOOL_VERSION}`,
+          '',
+          'Run lifecycle:',
+          '  create_run <ticket_id> <title> <project>   Create a new run',
+          '  create_run_from_ticket <ticket_id>          Create run from tickets/<id>.md',
+          '  generate_task_pack <run_folder>              Generate base task pack (intake → task-pack-generated)',
+          '',
+          'Orchestration:',
+          '  next_stage <run_folder>                      Show next stage, role, and gate status',
+          '  generate_role_pack <run_folder>               Generate task file for current stage (no advance)',
+          '  record_artifact <run_folder> <artifact_path>  Validate and record an artifact',
+          '  advance <run_folder> --confirm                Advance to next stage if gates pass',
+          '  orchestrate_one <run_folder>                  Idempotent single-step orchestrator',
+          '  scaffold_artifacts <run_folder>               Create minimal schema-valid JSON for current stage',
+          '',
+          'Status:',
+          '  list                                          List all runs',
+          '  status <run_folder>                           Full status of one run',
+          '  block <run_folder> <reason> [prompts...]      Block run with user input prompts',
+          '  respond <run_folder> <input_id> <answer>      Answer a pending input',
+          '',
+          'Maintenance:',
+          '  stale_list                                    List stale runs',
+          '  stale_delete --confirm                        Delete stale runs',
+          '  help                                          Show this help',
+          '  version                                       Show version',
+          '',
+        ].join('\n'));
+        process.exit(0);
+        break;
+      case 'version':
+      case '--version':
+      case '-v':
+        process.stdout.write(JSON.stringify({ ok: true, version: TOOL_VERSION }, null, 2) + '\n');
+        process.exit(0);
+        break;
       case 'create_run':
         cmdCreateRun(args[0], args[1], args[2]);
         break;

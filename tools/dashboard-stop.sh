@@ -1,13 +1,22 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-PORT=18790
+SCRIPT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+PORT="${PORT:-18790}"
+STATE_DIR="$SCRIPT_DIR/tools/.state"
+PIDFILE="$STATE_DIR/dashboard.pid"
 
-PIDS=$(lsof -ti:"$PORT" 2>/dev/null || true)
-if [ -z "$PIDS" ]; then
-  echo "No process on port $PORT"
+if [ ! -f "$PIDFILE" ]; then
+  echo "No dashboard pidfile found (not started by dashboard-start.sh)"
   exit 0
 fi
 
-echo "$PIDS" | xargs kill
-echo "Stopped (port $PORT freed)"
+PID=$(cat "$PIDFILE")
+if kill -0 "$PID" 2>/dev/null; then
+  kill "$PID"
+  echo "Stopped dashboard (pid $PID, port $PORT freed)"
+else
+  echo "Dashboard process $PID already exited"
+fi
+
+rm -f "$PIDFILE"

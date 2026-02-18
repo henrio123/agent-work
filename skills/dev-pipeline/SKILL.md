@@ -50,6 +50,13 @@ All commands via:
 
 All output is JSON to stdout. Errors exit 1 with `{ "ok": false, "error": "..." }` on stderr.
 
+#### help / version
+
+```bash
+./tools/dp.sh help       # list all commands
+./tools/dp.sh version    # show version (0.1.0)
+```
+
 ### Run Lifecycle
 
 #### create_run / create_run_from_ticket
@@ -58,6 +65,8 @@ All output is JSON to stdout. Errors exit 1 with `{ "ok": false, "error": "..." 
 ./tools/dp.sh create_run <ticket_id> <title> <project>
 ./tools/dp.sh create_run_from_ticket <ticket_id>   # preferred
 ```
+
+Both commands also generate `run-manifest.json` with ticket_id, created_at, tool_version, schema_version, and git_head (if git is available).
 
 #### generate_task_pack
 
@@ -193,9 +202,29 @@ All artifact schemas are in `{baseDir}/references/`:
 ./tools/orchestrate-next.sh <run_folder>   # repeat for each role
 ```
 
+## QA Checklist
+
+QA verification should use **only read-only commands** that do not create runs or modify state:
+
+```bash
+./tools/dp.sh list                                          # list all runs
+./tools/dp.sh status <run_folder>                           # full status
+./tools/dp.sh next_stage <run_folder>                       # gate check
+./tools/dp.sh record_artifact <run_folder> <artifact_path>  # validate existing artifact
+```
+
+**Do NOT use** `create_run`, `create_run_from_ticket`, or `advance` during QA. The QA role verifies — it does not create or advance.
+
+## Testing
+
+```bash
+node skills/dev-pipeline/tests/test-scaffold.js        # scaffold + schema tests
+node skills/dev-pipeline/tests/test-state-machine.js   # state machine regression
+```
+
 ## Security
 
 - All paths validated to stay within `~/dev/agent-work/`
 - No `child_process`, no outbound network (main script)
-- Dashboard binds to `127.0.0.1` only
+- Dashboard binds to `127.0.0.1` only, uses pidfile for lifecycle
 - Artifacts validated against schemas before stage transitions
