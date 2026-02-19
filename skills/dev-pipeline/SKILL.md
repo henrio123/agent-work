@@ -887,11 +887,12 @@ node skills/dev-pipeline/tests/test-project-next-drive.js  # project driver test
 node skills/dev-pipeline/tests/test-ticket-store.js        # ticket persistence tests (41 tests)
 node skills/dev-pipeline/tests/test-project-dashboard.js   # project dashboard tests (20 tests)
 node skills/dev-pipeline/tests/test-task-pack.js           # task pack tests (28 tests)
-node skills/dev-pipeline/tests/test-agent-state.js         # agent state tests
-node skills/dev-pipeline/tests/test-role-enforcement.js    # role enforcement tests
-node skills/dev-pipeline/tests/test-responsible-agent.js   # responsible agent field tests
-node skills/dev-pipeline/tests/test-dashboard-workload.js  # dashboard workload stats tests
-node skills/dev-pipeline/tests/test-picker-owner-role.js   # picker owner_role enforcement tests
+node skills/dev-pipeline/tests/test-agent-state.js         # agent state tests (29 tests)
+node skills/dev-pipeline/tests/test-role-enforcement.js    # role enforcement tests (21 tests)
+node skills/dev-pipeline/tests/test-responsible-agent.js   # responsible agent field tests (13 tests)
+node skills/dev-pipeline/tests/test-dashboard-workload.js  # dashboard workload stats tests (13 tests)
+node skills/dev-pipeline/tests/test-picker-owner-role.js   # picker owner_role enforcement tests (8 tests)
+node skills/dev-pipeline/tests/test-role-leakage.js        # role leakage prevention tests (15 tests)
 ```
 
 ## Security

@@ -108,7 +108,11 @@ Each run folder contains:
 - Pipeline artifacts: `10-pm-brief.json`, `20-arch-design.json`, `40-dev-patch.diff`, `41-dev-notes.json`, `50-qa-report.json`, `60-review-report.json`.
 - Optional: `.stop` file (stop signal), `autonomous-audit.jsonl` (audit log).
 
-`status.json` required fields: `ticket_id`, `title`, `project`, `created_at`, `updated_at`, `current_stage`, `blocked`, `blocked_reason`, `required_user_input`, `stage_history`, `next_actions`.
+`status.json` required fields: `ticket_id`, `title`, `project`, `created_at`, `updated_at`, `current_stage`, `blocked`, `blocked_reason`, `responsible_agent`, `required_user_input`, `stage_history`, `next_actions`.
+
+The `responsible_agent` field (string or null) identifies which agent identity is currently driving the run. Set via `--agent_id` on `create_run`, `advance`, `record_artifact`, and `orchestrate_one`. Defaults to `null` when no agent is specified.
+
+Each `stage_history` entry includes an `agent_id` field (string or null) recording which agent drove that stage transition. This provides a per-stage audit trail of agent participation.
 
 Optional fields written by the autonomous runner: `last_autonomous_run_at`, `last_autonomous_summary`.
 
@@ -356,11 +360,11 @@ Make roles enforceable at runtime. Currently, `agents.json` defines roles declar
 
 All of the following must be true before Phase 1 is complete:
 
-1. A role cannot execute a stage it does not own. The run engine rejects artifact submissions from the wrong role.
-2. The project dashboard output includes workload counts per role.
-3. Every run's `status.json` contains a `responsible_agent` field.
-4. Every backlog item has an `assigned_role` field. The picker skips items without one.
-5. No cross-role leakage is possible. Tests verify that role enforcement cannot be bypassed.
+1. **A role cannot execute a stage it does not own.** The run engine rejects artifact submissions from the wrong role. Implemented in `checkRoleForStage()` (`dev-pipeline.js`). Tested by `test-role-enforcement.js` (21 tests) and `test-role-leakage.js` (15 tests).
+2. **The project dashboard output includes workload counts per role.** `workload_by_agent` per project and `workload_summary` in top-level summary. Implemented in `project-dashboard.js`. Tested by `test-dashboard-workload.js` (13 tests). Schema enforced by `project-dashboard.output.schema.json`.
+3. **Every run's `status.json` contains a `responsible_agent` field.** Top-level field set via `--agent_id`, `null` by default. `normalizeStatus()` adds it to old files. Tested by `test-responsible-agent.js` (13 tests). Schema enforced by `status.schema.json`.
+4. **Every backlog item has an `assigned_role` field. The picker skips items without one.** `owner_role` check is the first filter in `classifyTask()` (`project-next-pick.js`). Warnings emitted to stderr. Tested by `test-picker-owner-role.js` (8 tests).
+5. **No cross-role leakage is possible.** End-to-end scenario tests prove DEV/QA/PM agents cannot produce artifacts for wrong stages, agents with empty/null roles are rejected, and `responsible_agent` is always populated after transitions. Tested by `test-role-leakage.js` (15 tests).
 
 Phase 1 does not modify the dependency graph, backlog hierarchy, or artifact classification. No dependency graph changes in Phase 1.
 
