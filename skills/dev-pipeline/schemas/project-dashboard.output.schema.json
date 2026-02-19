@@ -12,7 +12,7 @@
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["project_id", "title", "description", "totals", "backlog"],
+        "required": ["project_id", "title", "description", "totals", "backlog", "workload_by_agent"],
         "additionalProperties": false,
         "properties": {
           "project_id": { "type": "string" },
@@ -28,6 +28,21 @@
               "in_progress": { "type": "number" },
               "blocked": { "type": "number" },
               "done": { "type": "number" }
+            }
+          },
+          "workload_by_agent": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["agent_id", "role", "runs_responsible", "stages_driven", "active_runs"],
+              "additionalProperties": false,
+              "properties": {
+                "agent_id": { "type": "string" },
+                "role": { "type": "string" },
+                "runs_responsible": { "type": "number" },
+                "stages_driven": { "type": "number" },
+                "active_runs": { "type": "number" }
+              }
             }
           },
           "backlog": {
@@ -65,7 +80,7 @@
     },
     "summary": {
       "type": "object",
-      "required": ["projects", "tasks_total", "todo", "in_progress", "blocked", "done", "stopped", "stalled", "needs_task_pack", "needs_artifacts"],
+      "required": ["projects", "tasks_total", "todo", "in_progress", "blocked", "done", "stopped", "stalled", "needs_task_pack", "needs_artifacts", "workload_summary"],
       "additionalProperties": false,
       "properties": {
         "projects": { "type": "number" },
@@ -77,7 +92,16 @@
         "stopped": { "type": "number" },
         "stalled": { "type": "number" },
         "needs_task_pack": { "type": "number" },
-        "needs_artifacts": { "type": "number" }
+        "needs_artifacts": { "type": "number" },
+        "workload_summary": {
+          "type": "object",
+          "required": ["runs_per_role", "stages_per_role"],
+          "additionalProperties": false,
+          "properties": {
+            "runs_per_role": { "type": "object", "additionalProperties": { "type": "number" } },
+            "stages_per_role": { "type": "object", "additionalProperties": { "type": "number" } }
+          }
+        }
       }
     }
   }

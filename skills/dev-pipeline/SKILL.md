@@ -695,6 +695,24 @@ Read-only aggregated JSON view of all projects, backlog items, and their compute
 
 Summary includes: `needs_task_pack` and `needs_artifacts` counts in addition to standard totals.
 
+#### Agent Workload
+
+Each project includes a `workload_by_agent` array with one entry per agent seen in that project's linked runs:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| agent_id | string | Agent identity |
+| role | string | Resolved from `agents/<id>/state.json`; `"unknown"` if not found |
+| runs_responsible | number | Runs where `responsible_agent === agent_id` |
+| stages_driven | number | `stage_history` entries where `agent_id` matches |
+| active_runs | number | Runs where responsible AND `current_stage !== "done"` |
+
+Sorted by `agent_id` ascending for determinism. Null agent IDs are excluded.
+
+The top-level `summary.workload_summary` aggregates across all projects:
+- `runs_per_role`: count of runs per role (e.g. `{ "PM": 3, "Dev": 2 }`)
+- `stages_per_role`: count of stage_history entries per role
+
 ### Task Packs
 
 Deterministic task pack generator. Produces a structured JSON file for a backlog item by scanning available project files, agents, linked runs, and patterns. No LLM calls.
@@ -870,6 +888,7 @@ node skills/dev-pipeline/tests/test-task-pack.js           # task pack tests (28
 node skills/dev-pipeline/tests/test-agent-state.js         # agent state tests
 node skills/dev-pipeline/tests/test-role-enforcement.js    # role enforcement tests
 node skills/dev-pipeline/tests/test-responsible-agent.js   # responsible agent field tests
+node skills/dev-pipeline/tests/test-dashboard-workload.js  # dashboard workload stats tests
 ```
 
 ## Security

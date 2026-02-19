@@ -25,6 +25,23 @@ const PROJECTS_DIR = path.join(WORKSPACE_ROOT, 'projects');
 const STOP_FILENAME = '.stop';
 const AUDIT_FILENAME = 'autonomous-audit.jsonl';
 
+// Agent state for role resolution (lazy-loaded)
+let _agentStateModule = null;
+function getAgentStateModule() {
+  if (!_agentStateModule) {
+    _agentStateModule = require(path.resolve(__dirname, 'agent-state.js'));
+  }
+  return _agentStateModule;
+}
+
+function sortObjectKeys(obj) {
+  const sorted = {};
+  for (const key of Object.keys(obj).sort()) {
+    sorted[key] = obj[key];
+  }
+  return sorted;
+}
+
 // ---------------------------------------------------------------------------
 // Core dashboard builder
 // ---------------------------------------------------------------------------
@@ -54,6 +71,7 @@ function buildDashboard(options = {}) {
     stalled: 0,
     needs_task_pack: 0,
     needs_artifacts: 0,
+    workload_summary: { runs_per_role: {}, stages_per_role: {} },
   };
 
   for (const projectId of projectDirs) {
@@ -105,15 +123,86 @@ function buildDashboard(options = {}) {
       }
     }
 
+    // Build per-project workload from linked runs
+    const agentStats = {}; // agent_id -> { runs_responsible, stages_driven, active_runs }
+    const roleCache = options._roleCache || {};
+    const agentsDir = options.agentsDir || null;
+
+    for (const entry of backlogItems) {
+      if (!entry.run_folder) continue;
+      const runAbsDir = path.resolve(workspaceRoot, entry.run_folder);
+      const statusPath = path.join(runAbsDir, 'status.json');
+      if (!fs.existsSync(statusPath)) continue;
+
+      let status;
+      try {
+        status = JSON.parse(fs.readFileSync(statusPath, 'utf8'));
+      } catch { continue; }
+
+      // Count responsible_agent
+      const ra = status.responsible_agent;
+      if (ra && typeof ra === 'string') {
+        if (!agentStats[ra]) agentStats[ra] = { runs_responsible: 0, stages_driven: 0, active_runs: 0 };
+        agentStats[ra].runs_responsible++;
+        if (status.current_stage !== 'done') agentStats[ra].active_runs++;
+      }
+
+      // Count stage_history agent_ids
+      if (Array.isArray(status.stage_history)) {
+        for (const sh of status.stage_history) {
+          const aid = sh.agent_id;
+          if (aid && typeof aid === 'string') {
+            if (!agentStats[aid]) agentStats[aid] = { runs_responsible: 0, stages_driven: 0, active_runs: 0 };
+            agentStats[aid].stages_driven++;
+          }
+        }
+      }
+    }
+
+    // Resolve roles and build workload_by_agent
+    const workloadByAgent = Object.keys(agentStats).sort().map((agentId) => {
+      if (!(agentId in roleCache)) {
+        try {
+          const agentMod = getAgentStateModule();
+          const opts = agentsDir ? { agentsDir } : {};
+          const state = agentMod.readAgentState(agentId, opts);
+          roleCache[agentId] = state ? state.role : 'unknown';
+        } catch {
+          roleCache[agentId] = 'unknown';
+        }
+      }
+      const role = roleCache[agentId];
+      const stats = agentStats[agentId];
+
+      // Aggregate into top-level summary
+      summary.workload_summary.runs_per_role[role] =
+        (summary.workload_summary.runs_per_role[role] || 0) + stats.runs_responsible;
+      summary.workload_summary.stages_per_role[role] =
+        (summary.workload_summary.stages_per_role[role] || 0) + stats.stages_driven;
+
+      return {
+        agent_id: agentId,
+        role,
+        runs_responsible: stats.runs_responsible,
+        stages_driven: stats.stages_driven,
+        active_runs: stats.active_runs,
+      };
+    });
+
     projects.push({
       project_id: projectId,
       title: projectMeta.title || projectId,
       description: projectMeta.description || '',
       totals,
       backlog: backlogItems,
+      workload_by_agent: workloadByAgent,
     });
     summary.projects++;
   }
+
+  // Ensure deterministic key ordering in workload_summary
+  summary.workload_summary.runs_per_role = sortObjectKeys(summary.workload_summary.runs_per_role);
+  summary.workload_summary.stages_per_role = sortObjectKeys(summary.workload_summary.stages_per_role);
 
   return {
     ok: true,
