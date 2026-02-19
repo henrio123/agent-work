@@ -347,6 +347,7 @@ function runAutonomous(runFolder, options = {}) {
   const agentAdapter = options.agentAdapter || claudeCodeAdapter;
   const auditLogEnabled = options.auditLog || false;
   const progressEnabled = options.progress !== false; // on by default for CLI
+  const agentId = options.agentId || null;
 
   const trace = [];
   const artifactsWritten = [];
@@ -561,8 +562,10 @@ function runAutonomous(runFolder, options = {}) {
           // Clean up draft
           try { fs.unlinkSync(draft.draftPath); } catch {}
 
-          // Record artifact via pipeline
-          const recResult = callDP('record_artifact', resolvedFolder, targetPath);
+          // Record artifact via pipeline (pass --agent_id if set)
+          const recArgs = ['record_artifact', resolvedFolder, targetPath];
+          if (agentId) recArgs.push('--agent_id', agentId);
+          const recResult = callDP(...recArgs);
           if (recResult.json && !recResult.json.valid) {
             trace.push(`record_artifact validation failed: ${draft.targetArtifact} — ${JSON.stringify(recResult.json.errors)}`);
           } else {

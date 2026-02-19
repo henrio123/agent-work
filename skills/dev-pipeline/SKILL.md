@@ -147,23 +147,27 @@ Creates the role's task file (e.g. `31-pm-claude-task.txt`) for the current stag
 Validate an artifact against its schema. Blocks with a specific error if validation fails.
 
 ```bash
-./tools/dp.sh record_artifact <run_folder> <artifact_path>
+./tools/dp.sh record_artifact <run_folder> <artifact_path> [--agent_id <id>]
 ```
+
+When `--agent_id` is provided, the agent's role (from `agents/<id>/state.json`) must match the stage's declared role in `STAGE_CONFIG`. Role mismatch exits 1 with a clear error. Without `--agent_id`, no role enforcement occurs (backward compatible).
 
 #### advance
 
 Advance to next stage if all gates pass. Requires `--confirm`.
 
 ```bash
-./tools/dp.sh advance <run_folder> --confirm
+./tools/dp.sh advance <run_folder> --confirm [--agent_id <id>]
 ```
+
+When `--agent_id` is provided, role enforcement applies to the current stage before advancing.
 
 #### orchestrate_one
 
 Idempotent single-step orchestrator. Determines and executes the next safe action.
 
 ```bash
-./tools/dp.sh orchestrate_one <run_folder>
+./tools/dp.sh orchestrate_one <run_folder> [--agent_id <id>]
 # or
 ./tools/orchestrate-next.sh <run_folder>
 ```
@@ -282,9 +286,9 @@ Default `--max_steps` is 10. The loop stops when:
 Autonomous multi-agent runner. Drives a run forward by repeatedly: getting the next action, invoking the correct role agent to produce draft artifacts, validating drafts against schemas, writing final artifacts (only if target does not exist), and recording them.
 
 ```bash
-./tools/dp.sh run_next_autonomous <run_folder> [--max_steps N] [--max_agent_calls N] [--dry_run] [--audit_log]
+./tools/dp.sh run_next_autonomous <run_folder> [--max_steps N] [--max_agent_calls N] [--dry_run] [--audit_log] [--agent_id <id>]
 # or
-./tools/run-next-autonomous.sh <run_folder> [--max_steps N] [--max_agent_calls N] [--dry_run] [--audit_log]
+./tools/run-next-autonomous.sh <run_folder> [--max_steps N] [--max_agent_calls N] [--dry_run] [--audit_log] [--agent_id <id>]
 ```
 
 Defaults: `--max_steps 50`, `--max_agent_calls 20`. Use `--dry_run` to preview without invoking agents. Use `--audit_log` (or `DP_AUDIT_LOG=1`) to write an append-only audit log.
@@ -854,6 +858,7 @@ node skills/dev-pipeline/tests/test-ticket-store.js        # ticket persistence 
 node skills/dev-pipeline/tests/test-project-dashboard.js   # project dashboard tests (20 tests)
 node skills/dev-pipeline/tests/test-task-pack.js           # task pack tests (28 tests)
 node skills/dev-pipeline/tests/test-agent-state.js         # agent state tests
+node skills/dev-pipeline/tests/test-role-enforcement.js    # role enforcement tests
 ```
 
 ## Security

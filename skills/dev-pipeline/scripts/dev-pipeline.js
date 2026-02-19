@@ -812,10 +812,17 @@ function cmdGenerateRolePack(runFolder) {
   ok({ role: config.role, task_file: config.taskFile, stage: status.current_stage });
 }
 
-function cmdRecordArtifact(runFolder, artifactPath) {
+function cmdRecordArtifact(runFolder, artifactPath, agentId) {
   if (!runFolder || !artifactPath) fail('Usage: record_artifact <run_folder> <artifact_path>');
   runFolder = safePath(runFolder);
   artifactPath = safePath(artifactPath);
+
+  // Role enforcement: check agent role matches current stage
+  if (agentId) {
+    const status = readStatus(runFolder);
+    const roleCheck = checkRoleForStage(agentId, status.current_stage);
+    if (!roleCheck.ok) fail(roleCheck.error);
+  }
 
   const artifactFilename = path.basename(artifactPath);
   const result = validateArtifact(runFolder, artifactFilename);
@@ -884,7 +891,7 @@ function cmdRecordArtifact(runFolder, artifactPath) {
   ok({ valid: true, artifact: artifactFilename, gates_pass: gatesPass });
 }
 
-function cmdAdvance(runFolder, args) {
+function cmdAdvance(runFolder, args, agentId) {
   if (!runFolder) fail('Usage: advance <run_folder> --confirm');
   if (!args.includes('--confirm')) {
     fail('Safety: pass --confirm to advance. Run next_stage first to review.');
@@ -892,6 +899,13 @@ function cmdAdvance(runFolder, args) {
 
   runFolder = safePath(runFolder);
   const status = readStatus(runFolder);
+
+  // Role enforcement: check agent role matches current stage
+  if (agentId) {
+    const roleCheck = checkRoleForStage(agentId, status.current_stage);
+    if (!roleCheck.ok) fail(roleCheck.error);
+  }
+
   const info = getNextStageInfo(runFolder, status);
 
   if (!info.gates_pass) {
@@ -936,11 +950,17 @@ function cmdAdvance(runFolder, args) {
   ok({ advanced_to: info.next_stage, role: info.role });
 }
 
-function cmdOrchestrateOne(runFolder) {
+function cmdOrchestrateOne(runFolder, agentId) {
   if (!runFolder) fail('Usage: orchestrate_one <run_folder>');
   runFolder = safePath(runFolder);
 
   const status = readStatus(runFolder);
+
+  // Role enforcement: check agent role matches current stage
+  if (agentId) {
+    const roleCheck = checkRoleForStage(agentId, status.current_stage);
+    if (!roleCheck.ok) fail(roleCheck.error);
+  }
 
   if (status.blocked) {
     const pending = status.required_user_input.filter((i) => i.status === 'pending');
@@ -1562,6 +1582,27 @@ function cmdScaffoldArtifacts(runFolder) {
 }
 
 // ---------------------------------------------------------------------------
+// Role enforcement: check agent role matches stage role
+// ---------------------------------------------------------------------------
+function checkRoleForStage(agentId, stage, options) {
+  if (!agentId) return { ok: true, skipped: true };
+
+  const config = STAGE_CONFIG[stage];
+  if (!config) return { ok: true, skipped: true }; // non-role stages: intake, task-pack-generated, done, blocked
+
+  const { readAgentState } = require(path.resolve(__dirname, 'agent-state.js'));
+  const state = readAgentState(agentId, options);
+  if (!state) return { ok: false, error: `Agent ${agentId} not found` };
+
+  const stageRole = config.role;
+  if (state.role !== stageRole) {
+    return { ok: false, error: `Role mismatch: agent ${agentId} has role ${state.role}, but stage ${stage} requires ${stageRole}` };
+  }
+
+  return { ok: true, agent_id: agentId, role: state.role, stage };
+}
+
+// ---------------------------------------------------------------------------
 // Exports for testing
 // ---------------------------------------------------------------------------
 if (typeof module !== 'undefined' && module.exports) {
@@ -1570,7 +1611,7 @@ if (typeof module !== 'undefined' && module.exports) {
     generateMinimalValue, validateSchema, resolveRef,
     getNextStageInfo, normalizeStatus, getGitHead,
     safePath, readJSON, writeJSON, readStatus, loadArtifactSchema, validateArtifact,
-    _runNextSafeCore,
+    _runNextSafeCore, checkRoleForStage,
   };
 }
 
@@ -1578,7 +1619,15 @@ if (typeof module !== 'undefined' && module.exports) {
 // CLI dispatch
 // ---------------------------------------------------------------------------
 if (require.main === module) {
-  const [command, ...args] = process.argv.slice(2);
+  const rawArgs = process.argv.slice(2);
+  // Extract --agent_id flag before dispatch (available to all commands)
+  const agentIdIdx = rawArgs.indexOf('--agent_id');
+  let _cliAgentId = null;
+  if (agentIdIdx !== -1) {
+    _cliAgentId = rawArgs[agentIdIdx + 1] || null;
+    rawArgs.splice(agentIdIdx, 2);
+  }
+  const [command, ...args] = rawArgs;
 
   try {
     switch (command) {
@@ -1659,13 +1708,13 @@ if (require.main === module) {
         cmdGenerateRolePack(args[0]);
         break;
       case 'record_artifact':
-        cmdRecordArtifact(args[0], args[1]);
+        cmdRecordArtifact(args[0], args[1], _cliAgentId);
         break;
       case 'advance':
-        cmdAdvance(args[0], args.slice(1));
+        cmdAdvance(args[0], args.slice(1), _cliAgentId);
         break;
       case 'orchestrate_one':
-        cmdOrchestrateOne(args[0]);
+        cmdOrchestrateOne(args[0], _cliAgentId);
         break;
       case 'scaffold_artifacts':
         cmdScaffoldArtifacts(args[0]);
@@ -1684,7 +1733,7 @@ if (require.main === module) {
         const { runAutonomous } = require('./autonomous-runner.js');
         const optFlags = new Set(['--max_steps', '--max_agent_calls', '--dry_run', '--audit_log']);
         const aFolder = args.find((a) => !optFlags.has(a) && !args.some((f, i) => optFlags.has(f) && args[i + 1] === a));
-        if (!aFolder) fail('Usage: run_next_autonomous <run_folder> [--max_steps N] [--max_agent_calls N] [--dry_run] [--audit_log]');
+        if (!aFolder) fail('Usage: run_next_autonomous <run_folder> [--max_steps N] [--max_agent_calls N] [--dry_run] [--audit_log] [--agent_id ID]');
         const resolvedFolder = safePath(aFolder);
         const aMaxStepsIdx = args.indexOf('--max_steps');
         const aMaxAgentIdx = args.indexOf('--max_agent_calls');
@@ -1693,6 +1742,7 @@ if (require.main === module) {
           maxAgentCalls: aMaxAgentIdx !== -1 ? parseInt(args[aMaxAgentIdx + 1], 10) : 20,
           dryRun: args.includes('--dry_run'),
           auditLog: args.includes('--audit_log') || process.env.DP_AUDIT_LOG === '1',
+          agentId: _cliAgentId,
         };
         // Safety: snapshot runs/ before
         const aRunsDir = safePath('runs');
