@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "validate-backlog-graph output",
+  "description": "Output schema for ./tools/validate-backlog-graph.sh — DAG validation for backlog dependency and parent graphs.",
+  "type": "object",
+  "required": ["ok", "project_id", "valid", "nodes", "edges", "cycles", "parent_errors", "warnings"],
+  "additionalProperties": false,
+  "properties": {
+    "ok": { "type": "boolean", "const": true },
+    "project_id": { "type": "string" },
+    "valid": { "type": "boolean" },
+    "nodes": { "type": "number" },
+    "edges": {
+      "type": "object",
+      "required": ["depends_on", "parent_child"],
+      "additionalProperties": false,
+      "properties": {
+        "depends_on": { "type": "number" },
+        "parent_child": { "type": "number" }
+      }
+    },
+    "cycles": {
+      "type": "array",
+      "items": {
+        "type": "array",
+        "items": { "type": "string" }
+      }
+    },
+    "parent_errors": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "warnings": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  }
+}
