@@ -17,7 +17,7 @@
     "reason": { "type": "string" },
     "priority_bucket": {
       "type": "string",
-      "enum": ["needs_task_pack", "needs_artifacts", "other"]
+      "enum": ["ready_for_run_creation", "needs_task_pack", "needs_artifacts", "other"]
     }
   }
 }

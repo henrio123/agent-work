@@ -108,6 +108,30 @@ function createRunForTask(taskItem, projectId, options = {}) {
 }
 
 // ---------------------------------------------------------------------------
+// Copy task pack into run folder as intake artifact
+// ---------------------------------------------------------------------------
+function copyTaskPackToRun(projectId, taskId, runFolder, options = {}) {
+  const workspaceRoot = options.workspaceRoot || WORKSPACE_ROOT;
+  const projectsDir = options.projectsDir || path.join(workspaceRoot, 'projects');
+  const taskPackPath = path.join(projectsDir, projectId, 'task-packs', `${taskId}.json`);
+
+  if (!fs.existsSync(taskPackPath)) return false;
+
+  try {
+    const absRunFolder = safePath(runFolder, workspaceRoot);
+    const destPath = path.join(absRunFolder, '10-pm-brief.json');
+    // Only copy if 10-pm-brief.json doesn't already exist
+    if (!fs.existsSync(destPath)) {
+      fs.copyFileSync(taskPackPath, destPath);
+      return true;
+    }
+  } catch {
+    // Non-fatal
+  }
+  return false;
+}
+
+// ---------------------------------------------------------------------------
 // Link run_folder back to backlog item
 // ---------------------------------------------------------------------------
 function linkRunToBacklogItem(taskId, projectId, runFolder, options = {}) {
@@ -200,6 +224,9 @@ function projectDriveOnce(options = {}) {
     runFolder = createRunForTask(taskItem, projectId, options);
     linkRunToBacklogItem(taskId, projectId, runFolder, options);
     createdRun = true;
+
+    // Copy task pack into run intake if it exists
+    copyTaskPackToRun(projectId, taskId, runFolder, options);
   }
 
   // Step 3: Drive the run using existing run-next-drive
@@ -329,4 +356,4 @@ if (require.main === module) {
 // ---------------------------------------------------------------------------
 // Exports
 // ---------------------------------------------------------------------------
-module.exports = { projectDriveOnce, createRunForTask, linkRunToBacklogItem };
+module.exports = { projectDriveOnce, createRunForTask, linkRunToBacklogItem, copyTaskPackToRun };

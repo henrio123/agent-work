@@ -38,16 +38,28 @@ const { buildProjectIndex } = require(path.resolve(__dirname, 'project-index.js'
 
 const STATUS_RANK = { in_progress: 0, todo: 1, blocked: 2, done: 3 };
 const PRIORITY_RANK = { P0: 0, P1: 1, P2: 2, P3: 3 };
-const BUCKET_PRIORITY = { needs_task_pack: 0, needs_artifacts: 1, other: 2 };
+const BUCKET_PRIORITY = { ready_for_run_creation: 0, needs_task_pack: 1, needs_artifacts: 2, other: 3 };
+
+// ---------------------------------------------------------------------------
+// Check if a task pack exists for a given task
+// ---------------------------------------------------------------------------
+function hasTaskPack(projectId, taskId, workspaceRoot) {
+  const taskPackPath = path.join(workspaceRoot, 'projects', projectId, 'task-packs', `${taskId}.json`);
+  return fs.existsSync(taskPackPath);
+}
 
 // ---------------------------------------------------------------------------
 // Classify a backlog entry into a priority bucket
 // ---------------------------------------------------------------------------
-function classifyTask(entry, workspaceRoot) {
+function classifyTask(entry, workspaceRoot, projectId) {
   // Not eligible
   if (entry.status !== 'todo' && entry.status !== 'in_progress') return null;
   if (entry.blocked) return null;
   if (entry.stop_signal) return null;
+
+  const pid = projectId || entry.project_id || '';
+  const tid = entry.id || '';
+  const packExists = pid && tid && hasTaskPack(pid, tid, workspaceRoot);
 
   // Check linked run for classification
   if (entry.run_folder) {
@@ -58,9 +70,9 @@ function classifyTask(entry, workspaceRoot) {
         const status = JSON.parse(fs.readFileSync(statusPath, 'utf8'));
         const stage = status.current_stage;
 
-        // Intake or task-pack-generated → needs task pack
+        // Intake or task-pack-generated → needs task pack (or ready if pack exists)
         if (stage === 'intake' || stage === 'task-pack-generated') {
-          return 'needs_task_pack';
+          return packExists ? 'ready_for_run_creation' : 'needs_task_pack';
         }
 
         // Last autonomous action was needs_artifacts
@@ -78,8 +90,8 @@ function classifyTask(entry, workspaceRoot) {
       }
     }
   } else {
-    // No run folder yet — PM intake task
-    return 'needs_task_pack';
+    // No run folder yet — ready for run creation if task pack exists, else needs task pack
+    return packExists ? 'ready_for_run_creation' : 'needs_task_pack';
   }
 
   return 'other';
@@ -99,7 +111,7 @@ function pickNextTask(options = {}) {
 
   for (const project of indexResult.projects) {
     for (const entry of project.backlog) {
-      const bucket = classifyTask(entry, workspaceRoot);
+      const bucket = classifyTask(entry, workspaceRoot, project.project_id);
       if (bucket === null) continue;
       candidates.push({
         project_id: project.project_id,

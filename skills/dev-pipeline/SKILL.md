@@ -630,10 +630,12 @@ Deterministic picker for the next eligible backlog item across all projects.
 ```
 
 **Selection rules (deterministic):**
-1. Priority buckets: `needs_task_pack` > `needs_artifacts` > `other`
+1. Priority buckets: `ready_for_run_creation` > `needs_task_pack` > `needs_artifacts` > `other`
 2. Status rank: `in_progress` > `todo`
 3. Priority rank: `P0` > `P1` > `P2` > `P3`
 4. Project ID ASC, then task ID ASC
+
+Tasks with an existing task pack in `projects/<project_id>/task-packs/<task_id>.json` are classified as `ready_for_run_creation` instead of `needs_task_pack`.
 
 **Output:** `{ ok, action: "picked_task"|"no_eligible_tasks", project_id, task_id, run_folder, priority_bucket }`
 
@@ -645,7 +647,7 @@ One-shot driver that picks a backlog task, ensures a run exists, and drives it o
 ./tools/project-next-drive.sh [--max_steps N] [--max_agent_calls N] [--dry_run] [--audit_log] [--verbose]
 ```
 
-If the picked task has no `run_folder`, creates one (intake + status.json) and links it back to the backlog item. Then calls the existing autonomous runner once.
+If the picked task has no `run_folder`, creates one (intake + status.json) and links it back to the backlog item. If a task pack exists in `projects/<project_id>/task-packs/<task_id>.json`, it is copied into the new run as `10-pm-brief.json` (only if the file doesn't already exist). Then calls the existing autonomous runner once.
 
 **Output:** `{ ok, action: "drive_complete"|"drive_created_run"|"drive_skipped", picked, run_folder, autonomous }`
 
@@ -660,6 +662,72 @@ Output schemas:
 - `project-index.output.schema.json`
 - `project-next-pick.output.schema.json`
 - `project-next-drive.output.schema.json`
+- `project-dashboard.output.schema.json`
+
+### Project Dashboard
+
+Read-only aggregated JSON view of all projects, backlog items, and their computed state. Suitable for dashboards, automation, or feeding into other tools.
+
+```bash
+./tools/project-dashboard.sh
+./tools/project-dashboard.sh | jq
+```
+
+**Output includes per-item computed fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| priority_bucket | string\|null | `ready_for_run_creation`, `needs_task_pack`, `needs_artifacts`, `other`, or null for done |
+| run_stage | string\|null | Current stage from linked run's status.json |
+| run_blocked | boolean | Whether the linked run is blocked |
+| run_stop | boolean | Whether a .stop file exists in the linked run |
+| needs_task_pack | boolean | True if task has no task pack yet |
+| needs_artifacts | boolean | True if linked run needs artifacts |
+| stalled | boolean | True if linked run is stalled |
+
+Summary includes: `needs_task_pack` and `needs_artifacts` counts in addition to standard totals.
+
+### Task Packs
+
+Deterministic task pack generator. Produces a structured JSON file for a backlog item by scanning available project files, agents, linked runs, and patterns. No LLM calls.
+
+```bash
+# Generate a task pack
+./tools/task-pack-generate.sh <project_id> <task_id>
+
+# Validate an existing task pack
+./tools/task-pack-validate.sh <task_pack_path>
+
+# List all task packs
+./tools/task-pack-list.sh [project_id]
+```
+
+**Task pack location:** `projects/<project_id>/task-packs/<task_id>.json`
+
+**Task pack fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| task_id | string | Backlog item ID |
+| project_id | string | Parent project |
+| title | string | From backlog item |
+| description | string | From backlog item |
+| owner_role | string | From backlog item |
+| inputs_present | string[] | Files found during scan |
+| open_questions | string[] | Gaps detected during inference |
+| artifacts_expected | string[] | Expected pipeline outputs |
+| acceptance_criteria | string[] | Inferred from description |
+| constraints | string[] | Standard pipeline constraints |
+| suggested_next_agents | string[] | Inferred from owner_role |
+| references | string[] | File paths referenced |
+| created_at | string | ISO 8601 |
+| updated_at | string | ISO 8601 |
+
+**Integration with picker:** Tasks with a task pack are classified as `ready_for_run_creation` (highest priority bucket). Tasks without one remain `needs_task_pack`.
+
+**Integration with driver:** When `project-next-drive` creates a run for a task with an existing task pack, the pack is copied into the run as `10-pm-brief.json`.
+
+**Schema:** `task-pack.schema.json` (additionalProperties: false)
 
 ## Schemas
 
@@ -679,6 +747,8 @@ All output schemas are in `{baseDir}/schemas/`:
 - `project-index.output.schema.json`
 - `project-next-pick.output.schema.json`
 - `project-next-drive.output.schema.json`
+- `project-dashboard.output.schema.json`
+- `task-pack.schema.json`
 
 ## Typical Multi-Role Workflow
 
@@ -740,6 +810,8 @@ node skills/dev-pipeline/tests/test-project-index.js       # project index tests
 node skills/dev-pipeline/tests/test-project-next-pick.js   # project picker tests (22 tests)
 node skills/dev-pipeline/tests/test-project-next-drive.js  # project driver tests (11 tests)
 node skills/dev-pipeline/tests/test-ticket-store.js        # ticket persistence tests (41 tests)
+node skills/dev-pipeline/tests/test-project-dashboard.js   # project dashboard tests (20 tests)
+node skills/dev-pipeline/tests/test-task-pack.js           # task pack tests (28 tests)
 ```
 
 ## Security

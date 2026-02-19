@@ -1,0 +1,84 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "project-dashboard output",
+  "description": "Output schema for ./tools/project-dashboard.sh — aggregated project state for dashboards and automation.",
+  "type": "object",
+  "required": ["ok", "generated_at", "projects", "summary"],
+  "additionalProperties": false,
+  "properties": {
+    "ok": { "type": "boolean", "const": true },
+    "generated_at": { "type": "string" },
+    "projects": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["project_id", "title", "description", "totals", "backlog"],
+        "additionalProperties": false,
+        "properties": {
+          "project_id": { "type": "string" },
+          "title": { "type": "string" },
+          "description": { "type": "string" },
+          "totals": {
+            "type": "object",
+            "required": ["total", "todo", "in_progress", "blocked", "done"],
+            "additionalProperties": false,
+            "properties": {
+              "total": { "type": "number" },
+              "todo": { "type": "number" },
+              "in_progress": { "type": "number" },
+              "blocked": { "type": "number" },
+              "done": { "type": "number" }
+            }
+          },
+          "backlog": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "id", "type", "status", "priority", "owner_role",
+                "depends_on", "tags", "run_folder",
+                "priority_bucket", "run_stage", "run_blocked", "run_stop",
+                "needs_task_pack", "needs_artifacts", "stalled"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "id": { "type": "string" },
+                "type": { "type": "string" },
+                "status": { "type": "string" },
+                "priority": { "type": "string" },
+                "owner_role": { "type": "string" },
+                "depends_on": { "type": "array", "items": { "type": "string" } },
+                "tags": { "type": "array", "items": { "type": "string" } },
+                "run_folder": { "type": ["string", "null"] },
+                "priority_bucket": { "type": ["string", "null"] },
+                "run_stage": { "type": ["string", "null"] },
+                "run_blocked": { "type": "boolean" },
+                "run_stop": { "type": "boolean" },
+                "needs_task_pack": { "type": "boolean" },
+                "needs_artifacts": { "type": "boolean" },
+                "stalled": { "type": "boolean" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "required": ["projects", "tasks_total", "todo", "in_progress", "blocked", "done", "stopped", "stalled", "needs_task_pack", "needs_artifacts"],
+      "additionalProperties": false,
+      "properties": {
+        "projects": { "type": "number" },
+        "tasks_total": { "type": "number" },
+        "todo": { "type": "number" },
+        "in_progress": { "type": "number" },
+        "blocked": { "type": "number" },
+        "done": { "type": "number" },
+        "stopped": { "type": "number" },
+        "stalled": { "type": "number" },
+        "needs_task_pack": { "type": "number" },
+        "needs_artifacts": { "type": "number" }
+      }
+    }
+  }
+}

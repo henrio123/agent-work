@@ -20,6 +20,8 @@ SUITES=(
   "$TESTS_DIR/test-project-next-pick.js"
   "$TESTS_DIR/test-project-next-drive.js"
   "$TESTS_DIR/test-ticket-store.js"
+  "$TESTS_DIR/test-project-dashboard.js"
+  "$TESTS_DIR/test-task-pack.js"
 )
 
 total_passed=0
