@@ -53,7 +53,8 @@
                 "id", "type", "status", "priority", "owner_role",
                 "depends_on", "parent_id", "tags", "run_folder",
                 "priority_bucket", "run_stage", "run_blocked", "run_stop",
-                "needs_task_pack", "needs_artifacts", "stalled"
+                "needs_task_pack", "needs_artifacts", "stalled",
+                "children", "depends_on_status", "blocked_by_deps", "is_blocked_by_parent"
               ],
               "additionalProperties": false,
               "properties": {
@@ -72,7 +73,22 @@
                 "run_stop": { "type": "boolean" },
                 "needs_task_pack": { "type": "boolean" },
                 "needs_artifacts": { "type": "boolean" },
-                "stalled": { "type": "boolean" }
+                "stalled": { "type": "boolean" },
+                "children": { "type": "array", "items": { "type": "string" } },
+                "depends_on_status": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": ["id", "status"],
+                    "additionalProperties": false,
+                    "properties": {
+                      "id": { "type": "string" },
+                      "status": { "type": "string" }
+                    }
+                  }
+                },
+                "blocked_by_deps": { "type": "array", "items": { "type": "string" } },
+                "is_blocked_by_parent": { "type": "boolean" }
               }
             }
           }

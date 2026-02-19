@@ -123,6 +123,9 @@ function buildDashboard(options = {}) {
       }
     }
 
+    // Enrich dependency chain fields (second pass over all items in project)
+    enrichDependencyChain(backlogItems);
+
     // Build per-project workload from linked runs
     const agentStats = {}; // agent_id -> { runs_responsible, stages_driven, active_runs }
     const roleCache = options._roleCache || {};
@@ -299,6 +302,40 @@ function buildDashboardEntry(item, projectId, workspaceRoot, stallThresholdMs) {
   }
 
   return entry;
+}
+
+// ---------------------------------------------------------------------------
+// Enrich backlog items with dependency chain fields (mutates entries in place)
+// ---------------------------------------------------------------------------
+function enrichDependencyChain(items) {
+  const byId = new Map();
+  for (const item of items) byId.set(item.id, item);
+
+  for (const item of items) {
+    // children: IDs of items whose parent_id is this item
+    item.children = items.filter(c => c.parent_id === item.id).map(c => c.id);
+
+    // depends_on_status: { id, status } for each dependency
+    item.depends_on_status = (item.depends_on || []).map(depId => {
+      const dep = byId.get(depId);
+      return { id: depId, status: dep ? dep.status : 'unknown' };
+    });
+
+    // blocked_by_deps: dependency IDs that are not done
+    item.blocked_by_deps = (item.depends_on || []).filter(depId => {
+      const dep = byId.get(depId);
+      return dep && dep.status !== 'done';
+    });
+
+    // is_blocked_by_parent: true if parent exists and is blocked
+    item.is_blocked_by_parent = false;
+    if (item.parent_id) {
+      const parent = byId.get(item.parent_id);
+      if (parent && (parent.status === 'blocked')) {
+        item.is_blocked_by_parent = true;
+      }
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------
