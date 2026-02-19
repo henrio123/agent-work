@@ -1,0 +1,18 @@
+{
+  "id": "P1-03",
+  "project_id": "ai-organisation-os",
+  "type": "dev",
+  "title": "Responsible agent field in run status.json",
+  "description": "Add a responsible_agent field to every run's status.json. When a run is created or a stage transition occurs, the system records which agent identity is driving that stage. The field must contain the agent_id. Update the status.json schema to include this field as required. Update the run creation and stage transition logic to populate it.",
+  "created_at": "2026-02-19T12:00:00Z",
+  "updated_at": "2026-02-19T12:00:00Z",
+  "status": "todo",
+  "priority": "P0",
+  "owner_role": "DEV",
+  "depends_on": ["P1-01"],
+  "run_folder": null,
+  "tags": ["phase-1", "agent-identity", "status-tracking"],
+  "artifacts_expected": ["skills/dev-pipeline/schemas/status.schema.json (modified)", "skills/dev-pipeline/scripts/dev-pipeline.js (modified)"],
+  "phase": "Phase 1",
+  "stop_condition": "Every run's status.json contains a responsible_agent field identifying the agent driving the current stage."
+}

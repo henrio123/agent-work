@@ -1,0 +1,18 @@
+{
+  "id": "P1-01",
+  "project_id": "ai-organisation-os",
+  "type": "dev",
+  "title": "Agent state contract — agents/<agent_id>/state.json",
+  "description": "Define and implement the persistent agent state contract. Each agent identity gets a state.json file at agents/<agent_id>/state.json with fields: assigned_role, current_task, workload_counters (runs_started, stages_completed), last_active_at. Create a JSON schema for validation. Provide read/write utility functions that enforce the schema. The state file is created on first assignment and updated on every stage transition.",
+  "created_at": "2026-02-19T12:00:00Z",
+  "updated_at": "2026-02-19T12:00:00Z",
+  "status": "todo",
+  "priority": "P0",
+  "owner_role": "ARCHITECT",
+  "depends_on": [],
+  "run_folder": null,
+  "tags": ["phase-1", "agent-identity"],
+  "artifacts_expected": ["skills/dev-pipeline/schemas/agent-state.schema.json", "skills/dev-pipeline/scripts/agent-state.js"],
+  "phase": "Phase 1",
+  "stop_condition": "Agent state files are created, read, and updated with schema validation. Workload counters increment on stage transitions."
+}
