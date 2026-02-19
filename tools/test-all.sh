@@ -24,6 +24,7 @@ SUITES=(
   "$TESTS_DIR/test-task-pack.js"
   "$TESTS_DIR/test-agent-state.js"
   "$TESTS_DIR/test-role-enforcement.js"
+  "$TESTS_DIR/test-responsible-agent.js"
 )
 
 total_passed=0

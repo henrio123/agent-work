@@ -138,6 +138,8 @@ function normalizeStatus(s) {
   // Ensure blocked fields
   if (typeof s.blocked !== 'boolean') s.blocked = false;
   if (s.blocked_reason === undefined) s.blocked_reason = null;
+  // Ensure responsible_agent
+  if (s.responsible_agent === undefined) s.responsible_agent = null;
   return s;
 }
 
@@ -157,7 +159,7 @@ function writeStatus(runFolder, data) {
 // Commands
 // ---------------------------------------------------------------------------
 
-function cmdCreateRun(ticketId, title, project) {
+function cmdCreateRun(ticketId, title, project, agentId) {
   if (!ticketId || !title || !project) {
     fail('Usage: create_run <ticket_id> <title> <project>');
   }
@@ -193,6 +195,7 @@ function cmdCreateRun(ticketId, title, project) {
     current_stage: 'intake',
     blocked: false,
     blocked_reason: null,
+    responsible_agent: agentId || null,
     required_user_input: [],
     stage_history: [
       {
@@ -200,6 +203,7 @@ function cmdCreateRun(ticketId, title, project) {
         started_at: createdAt,
         finished_at: null,
         artifact_paths: ['00-intake.json', 'run-manifest.json'],
+        agent_id: agentId || null,
       },
     ],
     next_actions: [
@@ -248,6 +252,7 @@ function cmdGenerateTaskPack(runFolder) {
     started_at: currentTime,
     finished_at: null,
     artifact_paths: ['30-dev-claude-task.txt'],
+    agent_id: null,
   });
   status.current_stage = 'task-pack-generated';
   status.next_actions = [
@@ -285,6 +290,7 @@ function cmdBlock(runFolder, reason, ...prompts) {
     started_at: currentTime,
     finished_at: null,
     artifact_paths: [],
+    agent_id: null,
   });
 
   const inputs = prompts.map((prompt) => ({
@@ -345,6 +351,7 @@ function cmdRespond(runFolder, inputId, choice) {
       started_at: currentTime,
       finished_at: null,
       artifact_paths: [],
+      agent_id: null,
     });
 
     status.next_actions = [];
@@ -396,7 +403,7 @@ function cmdStatus(runFolder) {
   ok({ run: status });
 }
 
-function cmdCreateRunFromTicket(ticketId) {
+function cmdCreateRunFromTicket(ticketId, agentId) {
   if (!ticketId) fail('Usage: create_run_from_ticket <ticket_id>');
 
   // safePath prevents traversal in ticket_id (e.g. ../foo)
@@ -441,6 +448,7 @@ function cmdCreateRunFromTicket(ticketId) {
     current_stage: 'intake',
     blocked: false,
     blocked_reason: null,
+    responsible_agent: agentId || null,
     required_user_input: [],
     stage_history: [
       {
@@ -448,6 +456,7 @@ function cmdCreateRunFromTicket(ticketId) {
         started_at: createdAt,
         finished_at: null,
         artifact_paths: ['00-intake.json', 'run-manifest.json'],
+        agent_id: agentId || null,
       },
     ],
     next_actions: [
@@ -846,7 +855,9 @@ function cmdRecordArtifact(runFolder, artifactPath, agentId) {
       started_at: currentTime,
       finished_at: null,
       artifact_paths: [],
+      agent_id: agentId || null,
     });
+    if (agentId) status.responsible_agent = agentId;
 
     const input = {
       id: crypto.randomUUID(),
@@ -923,6 +934,7 @@ function cmdAdvance(runFolder, args, agentId) {
   if (currentEntry) currentEntry.finished_at = currentTime;
 
   status.current_stage = info.next_stage;
+  if (agentId) status.responsible_agent = agentId;
 
   if (info.next_stage === 'done') {
     status.stage_history.push({
@@ -930,6 +942,7 @@ function cmdAdvance(runFolder, args, agentId) {
       started_at: currentTime,
       finished_at: currentTime,
       artifact_paths: [],
+      agent_id: agentId || null,
     });
     status.next_actions = [];
   } else {
@@ -939,6 +952,7 @@ function cmdAdvance(runFolder, args, agentId) {
       finished_at: null,
       artifact_paths: [],
       role: info.role,
+      agent_id: agentId || null,
     });
     status.next_actions = [{
       label: `Generate ${info.role} task pack`,
@@ -1004,10 +1018,12 @@ function cmdOrchestrateOne(runFolder, agentId) {
     if (currentEntry) currentEntry.finished_at = currentTime;
 
     status.current_stage = info.next_stage;
+    if (agentId) status.responsible_agent = agentId;
 
     if (info.next_stage === 'done') {
       status.stage_history.push({
         stage: 'done', started_at: currentTime, finished_at: currentTime, artifact_paths: [],
+        agent_id: agentId || null,
       });
       status.next_actions = [];
       writeStatus(runFolder, status);
@@ -1021,6 +1037,7 @@ function cmdOrchestrateOne(runFolder, agentId) {
     status.stage_history.push({
       stage: info.next_stage, started_at: currentTime, finished_at: null,
       artifact_paths: [], role: nextConfig ? nextConfig.role : null,
+      agent_id: agentId || null,
     });
 
     // Generate role pack if config exists
@@ -1084,10 +1101,12 @@ function cmdOrchestrateOne(runFolder, agentId) {
     if (currentEntry) currentEntry.finished_at = currentTime;
 
     status.current_stage = 'pm-ready';
+    if (agentId) status.responsible_agent = agentId;
     const pmConfig = STAGE_CONFIG['pm-ready'];
     status.stage_history.push({
       stage: 'pm-ready', started_at: currentTime, finished_at: null,
       artifact_paths: [], role: 'PM',
+      agent_id: agentId || null,
     });
 
     const intake = readJSON(path.join(runFolder, '00-intake.json'));
@@ -1141,6 +1160,7 @@ function _doAdvance(runFolder, status, nextStage, trace) {
   if (nextStage === 'done') {
     status.stage_history.push({
       stage: 'done', started_at: currentTime, finished_at: currentTime, artifact_paths: [],
+      agent_id: null,
     });
     status.next_actions = [];
     writeStatus(runFolder, status);
@@ -1152,6 +1172,7 @@ function _doAdvance(runFolder, status, nextStage, trace) {
   status.stage_history.push({
     stage: nextStage, started_at: currentTime, finished_at: null,
     artifact_paths: [], role: nextConfig ? nextConfig.role : null,
+    agent_id: null,
   });
 
   if (nextConfig) {
@@ -1675,7 +1696,7 @@ if (require.main === module) {
         process.exit(0);
         break;
       case 'create_run':
-        cmdCreateRun(args[0], args[1], args[2]);
+        cmdCreateRun(args[0], args[1], args[2], _cliAgentId);
         break;
       case 'generate_task_pack':
         cmdGenerateTaskPack(args[0]);
@@ -1693,7 +1714,7 @@ if (require.main === module) {
         cmdStatus(args[0]);
         break;
       case 'create_run_from_ticket':
-        cmdCreateRunFromTicket(args[0]);
+        cmdCreateRunFromTicket(args[0], _cliAgentId);
         break;
       case 'stale_list':
         cmdStaleList();

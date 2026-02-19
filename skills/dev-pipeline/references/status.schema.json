@@ -15,7 +15,8 @@
     "blocked_reason",
     "required_user_input",
     "stage_history",
-    "next_actions"
+    "next_actions",
+    "responsible_agent"
   ],
   "properties": {
     "ticket_id": {
@@ -122,9 +123,17 @@
             "type": "array",
             "items": { "type": "string" },
             "description": "Files produced during this stage"
+          },
+          "agent_id": {
+            "type": ["string", "null"],
+            "description": "Agent ID that drove this stage, null if unassigned"
           }
         }
       }
+    },
+    "responsible_agent": {
+      "type": ["string", "null"],
+      "description": "Agent ID currently responsible for this run, null if unassigned"
     },
     "next_actions": {
       "type": "array",

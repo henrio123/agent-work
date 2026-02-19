@@ -106,11 +106,13 @@ All output is JSON to stdout. Errors exit 1 with `{ "ok": false, "error": "..." 
 #### create_run / create_run_from_ticket
 
 ```bash
-./tools/dp.sh create_run <ticket_id> <title> <project>
-./tools/dp.sh create_run_from_ticket <ticket_id>   # preferred
+./tools/dp.sh create_run <ticket_id> <title> <project> [--agent_id <id>]
+./tools/dp.sh create_run_from_ticket <ticket_id> [--agent_id <id>]   # preferred
 ```
 
 Both commands also generate `run-manifest.json` with ticket_id, created_at, tool_version, schema_version, and git_head (if git is available).
+
+When `--agent_id` is provided, the run's `responsible_agent` field is set to that agent and the initial `stage_history` entry records the `agent_id`. Without `--agent_id`, both default to `null`.
 
 #### generate_task_pack
 
@@ -773,6 +775,14 @@ All output is JSON. Errors exit 1 with `{ "ok": false, "error": "..." }` on stde
 
 **Schema:** `agent-state.schema.json` (additionalProperties: false)
 
+## Responsible Agent Tracking
+
+Every run's `status.json` includes a `responsible_agent` field (top-level, string or null) that identifies which agent is currently driving the run. Each `stage_history` entry includes an `agent_id` field (string or null) recording which agent drove that particular stage.
+
+- **Set on creation:** `create_run` and `create_run_from_ticket` populate `responsible_agent` and `stage_history[0].agent_id` from `--agent_id` if provided, otherwise `null`.
+- **Updated on transitions:** `advance`, `orchestrate_one`, and `record_artifact` update `responsible_agent` when `--agent_id` is provided; leave it unchanged otherwise. New `stage_history` entries always include `agent_id`.
+- **Backward compatibility:** `normalizeStatus()` sets `responsible_agent: null` when reading old `status.json` files that lack the field. No crash, no data loss.
+
 ## Schemas
 
 All artifact schemas are in `{baseDir}/references/`:
@@ -859,6 +869,7 @@ node skills/dev-pipeline/tests/test-project-dashboard.js   # project dashboard t
 node skills/dev-pipeline/tests/test-task-pack.js           # task pack tests (28 tests)
 node skills/dev-pipeline/tests/test-agent-state.js         # agent state tests
 node skills/dev-pipeline/tests/test-role-enforcement.js    # role enforcement tests
+node skills/dev-pipeline/tests/test-responsible-agent.js   # responsible agent field tests
 ```
 
 ## Security
