@@ -122,6 +122,21 @@ function validateBacklogGraph(projectId, options) {
     }
   }
 
+  // --- Dependency satisfaction warnings (informational) ---
+  for (const item of items) {
+    if (item.status !== 'todo' && item.status !== 'in_progress') continue;
+    const blocking = [];
+    for (const depId of item.depends_on) {
+      const dep = byId.get(depId);
+      if (dep && dep.status !== 'done') {
+        blocking.push(depId);
+      }
+    }
+    if (blocking.length > 0) {
+      warnings.push(`${item.id}: has unfinished dependencies blocking it: ${blocking.join(', ')}`);
+    }
+  }
+
   // --- parent_id validation ---
   for (const item of items) {
     if (item.parent_id === null) continue;
