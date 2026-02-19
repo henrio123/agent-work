@@ -131,13 +131,13 @@ test('returns null for stopped task', () => {
 });
 
 test('returns needs_task_pack for task without run_folder', () => {
-  const result = classifyTask({ status: 'todo', blocked: false, stop_signal: false, run_folder: null }, '/tmp');
+  const result = classifyTask({ status: 'todo', blocked: false, stop_signal: false, run_folder: null, owner_role: 'DEV' }, '/tmp');
   if (result !== 'needs_task_pack') throw new Error(`expected needs_task_pack, got ${result}`);
 });
 
 test('returns needs_task_pack for linked intake run', () => {
   const tmpDir = makeTempRun(os.tmpdir(), 'intake');
-  const result = classifyTask({ status: 'in_progress', blocked: false, stop_signal: false, run_folder: tmpDir }, '/');
+  const result = classifyTask({ status: 'in_progress', blocked: false, stop_signal: false, run_folder: tmpDir, owner_role: 'DEV' }, '/');
   if (result !== 'needs_task_pack') throw new Error(`expected needs_task_pack, got ${result}`);
 });
 
@@ -145,13 +145,13 @@ test('returns needs_artifacts for linked run with needs_artifacts', () => {
   const tmpDir = makeTempRun(os.tmpdir(), 'pm-ready', {
     last_autonomous_summary: { final_action: 'needs_artifacts' },
   });
-  const result = classifyTask({ status: 'in_progress', blocked: false, stop_signal: false, run_folder: tmpDir }, '/');
+  const result = classifyTask({ status: 'in_progress', blocked: false, stop_signal: false, run_folder: tmpDir, owner_role: 'DEV' }, '/');
   if (result !== 'needs_artifacts') throw new Error(`expected needs_artifacts, got ${result}`);
 });
 
 test('returns other for linked run in active stage', () => {
   const tmpDir = makeTempRun(os.tmpdir(), 'pm-ready');
-  const result = classifyTask({ status: 'in_progress', blocked: false, stop_signal: false, run_folder: tmpDir }, '/');
+  const result = classifyTask({ status: 'in_progress', blocked: false, stop_signal: false, run_folder: tmpDir, owner_role: 'DEV' }, '/');
   if (result !== 'other') throw new Error(`expected other, got ${result}`);
 });
 

@@ -472,7 +472,7 @@ test('classifyTask returns needs_task_pack when no task pack exists', () => {
   const wsRoot = makeTempDir();
   fs.mkdirSync(path.join(wsRoot, 'projects', 'proj-cls', 'backlog'), { recursive: true });
 
-  const entry = { id: 'T-CLS', status: 'todo', blocked: false, stop_signal: false, run_folder: null, project_id: 'proj-cls' };
+  const entry = { id: 'T-CLS', status: 'todo', blocked: false, stop_signal: false, run_folder: null, project_id: 'proj-cls', owner_role: 'DEV' };
   const result = classifyTask(entry, wsRoot, 'proj-cls');
   if (result !== 'needs_task_pack') throw new Error(`expected needs_task_pack, got ${result}`);
 });
@@ -483,7 +483,7 @@ test('classifyTask returns ready_for_run_creation when task pack exists', () => 
   fs.mkdirSync(tpDir, { recursive: true });
   fs.writeFileSync(path.join(tpDir, 'T-RDY.json'), '{"task_id":"T-RDY"}', 'utf8');
 
-  const entry = { id: 'T-RDY', status: 'todo', blocked: false, stop_signal: false, run_folder: null, project_id: 'proj-rdy' };
+  const entry = { id: 'T-RDY', status: 'todo', blocked: false, stop_signal: false, run_folder: null, project_id: 'proj-rdy', owner_role: 'DEV' };
   const result = classifyTask(entry, wsRoot, 'proj-rdy');
   if (result !== 'ready_for_run_creation') throw new Error(`expected ready_for_run_creation, got ${result}`);
 });

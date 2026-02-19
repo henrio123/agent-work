@@ -52,6 +52,16 @@ function hasTaskPack(projectId, taskId, workspaceRoot) {
 // Classify a backlog entry into a priority bucket
 // ---------------------------------------------------------------------------
 function classifyTask(entry, workspaceRoot, projectId) {
+  // Require owner_role
+  if (!entry.owner_role || typeof entry.owner_role !== 'string' || entry.owner_role.trim() === '') {
+    process.stderr.write(JSON.stringify({
+      warning: 'skipped_no_owner_role',
+      task_id: entry.id || '(unknown)',
+      project_id: projectId || '(unknown)',
+    }) + '\n');
+    return null;
+  }
+
   // Not eligible
   if (entry.status !== 'todo' && entry.status !== 'in_progress') return null;
   if (entry.blocked) return null;

@@ -645,6 +645,8 @@ Deterministic picker for the next eligible backlog item across all projects.
 
 Tasks with an existing task pack in `projects/<project_id>/task-packs/<task_id>.json` are classified as `ready_for_run_creation` instead of `needs_task_pack`.
 
+**Owner role required:** Backlog items without a valid `owner_role` (missing, empty, or whitespace-only) are skipped by the picker. A JSON warning is emitted to stderr for each skipped item: `{"warning":"skipped_no_owner_role","task_id":"...","project_id":"..."}`.
+
 **Output:** `{ ok, action: "picked_task"|"no_eligible_tasks", project_id, task_id, run_folder, priority_bucket }`
 
 #### project-next-drive
@@ -889,6 +891,7 @@ node skills/dev-pipeline/tests/test-agent-state.js         # agent state tests
 node skills/dev-pipeline/tests/test-role-enforcement.js    # role enforcement tests
 node skills/dev-pipeline/tests/test-responsible-agent.js   # responsible agent field tests
 node skills/dev-pipeline/tests/test-dashboard-workload.js  # dashboard workload stats tests
+node skills/dev-pipeline/tests/test-picker-owner-role.js   # picker owner_role enforcement tests
 ```
 
 ## Security
