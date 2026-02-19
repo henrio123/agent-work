@@ -731,6 +731,44 @@ Deterministic task pack generator. Produces a structured JSON file for a backlog
 
 **Schema:** `task-pack.schema.json` (additionalProperties: false)
 
+## Agent State
+
+Persistent agent identity contract. Each agent gets `agents/<agent_id>/state.json` at `WORKSPACE_ROOT/agents/`.
+
+### Data Model
+
+```
+agents/
+  <agent_id>/
+    state.json    # persistent agent state
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| agent_id | string | Unique agent identifier |
+| role | string | Assigned role (e.g. PM, Architect, Dev, QA, Review) |
+| current_task | string\|null | Currently assigned task ID |
+| workload.runs_started | integer | Count of runs started |
+| workload.stages_completed | integer | Count of stages completed |
+| created_at | string | ISO 8601 creation timestamp |
+| updated_at | string | ISO 8601 last update timestamp |
+| last_active_at | string | ISO 8601 last activity timestamp |
+
+### Agent State Tools
+
+```bash
+./tools/agent-state.sh init <agent_id> <role>                          # create new agent
+./tools/agent-state.sh read <agent_id>                                 # read agent state
+./tools/agent-state.sh assign <agent_id> <task_id>                     # assign task
+./tools/agent-state.sh clear <agent_id>                                # clear current task
+./tools/agent-state.sh increment <agent_id> <runs_started|stages_completed> [amount]  # increment workload
+./tools/agent-state.sh list                                            # list all agents
+```
+
+All output is JSON. Errors exit 1 with `{ "ok": false, "error": "..." }` on stderr.
+
+**Schema:** `agent-state.schema.json` (additionalProperties: false)
+
 ## Schemas
 
 All artifact schemas are in `{baseDir}/references/`:
@@ -751,6 +789,7 @@ All output schemas are in `{baseDir}/schemas/`:
 - `project-next-drive.output.schema.json`
 - `project-dashboard.output.schema.json`
 - `task-pack.schema.json`
+- `agent-state.schema.json`
 
 ## Typical Multi-Role Workflow
 
@@ -814,6 +853,7 @@ node skills/dev-pipeline/tests/test-project-next-drive.js  # project driver test
 node skills/dev-pipeline/tests/test-ticket-store.js        # ticket persistence tests (41 tests)
 node skills/dev-pipeline/tests/test-project-dashboard.js   # project dashboard tests (20 tests)
 node skills/dev-pipeline/tests/test-task-pack.js           # task pack tests (28 tests)
+node skills/dev-pipeline/tests/test-agent-state.js         # agent state tests
 ```
 
 ## Security
