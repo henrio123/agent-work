@@ -127,6 +127,7 @@ function buildBacklogEntry(item, workspaceRoot, stallThresholdMs) {
     status: item.status || 'todo',
     priority: item.priority || 'P3',
     owner_role: item.owner_role || '',
+    parent_id: item.parent_id || null,
     run_folder: item.run_folder || null,
     stop_signal: false,
     blocked: item.status === 'blocked',

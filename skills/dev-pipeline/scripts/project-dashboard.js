@@ -223,6 +223,7 @@ function buildDashboardEntry(item, projectId, workspaceRoot, stallThresholdMs) {
     priority: item.priority || 'P3',
     owner_role: item.owner_role || 'DEV',
     depends_on: item.depends_on || [],
+    parent_id: item.parent_id || null,
     tags: item.tags || [],
     run_folder: item.run_folder || null,
     priority_bucket: null,

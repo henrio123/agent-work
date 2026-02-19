@@ -51,7 +51,7 @@
               "type": "object",
               "required": [
                 "id", "type", "status", "priority", "owner_role",
-                "depends_on", "tags", "run_folder",
+                "depends_on", "parent_id", "tags", "run_folder",
                 "priority_bucket", "run_stage", "run_blocked", "run_stop",
                 "needs_task_pack", "needs_artifacts", "stalled"
               ],
@@ -63,6 +63,7 @@
                 "priority": { "type": "string" },
                 "owner_role": { "type": "string" },
                 "depends_on": { "type": "array", "items": { "type": "string" } },
+                "parent_id": { "type": ["string", "null"] },
                 "tags": { "type": "array", "items": { "type": "string" } },
                 "run_folder": { "type": ["string", "null"] },
                 "priority_bucket": { "type": ["string", "null"] },

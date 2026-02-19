@@ -33,7 +33,7 @@
             "items": {
               "type": "object",
               "required": [
-                "id", "type", "status", "priority", "owner_role",
+                "id", "type", "status", "priority", "owner_role", "parent_id",
                 "run_folder", "stop_signal", "blocked", "stalled"
               ],
               "additionalProperties": false,
@@ -43,6 +43,7 @@
                 "status": { "type": "string" },
                 "priority": { "type": "string" },
                 "owner_role": { "type": "string" },
+                "parent_id": { "type": ["string", "null"] },
                 "run_folder": { "type": ["string", "null"] },
                 "stop_signal": { "type": "boolean" },
                 "blocked": { "type": "boolean" },

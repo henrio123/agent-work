@@ -35,6 +35,7 @@
     "run_folder": { "type": ["string", "null"] },
     "tags": { "type": "array", "items": { "type": "string" } },
     "artifacts_expected": { "type": "array", "items": { "type": "string" } },
-    "last_summary": { "type": ["object", "null"] }
+    "last_summary": { "type": ["object", "null"] },
+    "parent_id": { "type": ["string", "null"] }
   }
 }
