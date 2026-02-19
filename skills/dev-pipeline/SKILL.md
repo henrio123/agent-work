@@ -40,6 +40,48 @@ intake → task-pack-generated → pm-ready → arch-ready → dev-ready → qa-
 - **QA** cannot change product decisions
 - **Review** checks policy compliance, stage gating, and diffs
 
+## Ticket Persistence
+
+Every ticket must be stored as a file in `tickets/<ticket_id>.md` before it can be referenced. This prevents ticket content from being lost to terminal scrollback or conversation compaction.
+
+### Ticket Format
+
+```markdown
+---
+ticket_id: OC-22
+title: Persisted Tickets and Anti Truncation Guard
+project: agent-work
+---
+
+## Goal
+What this ticket achieves.
+
+## Steps
+1. First step
+2. Second step
+```
+
+Required frontmatter: `ticket_id`, `title`. Required headings: `GOAL`, `STEPS` (case-insensitive).
+
+### Ticket Tools
+
+```bash
+./tools/ticket-show.sh <ticket_id>      # print raw ticket content from file
+./tools/ticket-ensure.sh <ticket_id>    # validate existence and format (exit 0/1)
+./tools/ticket-guard.sh <ticket_id>     # anti-truncation guard (exit 0/1)
+./tools/ticket-list.sh                  # list all persisted tickets (JSON)
+```
+
+### Anti-Truncation Guard
+
+Before referencing a ticket ID, the system must verify the ticket file exists:
+
+```bash
+./tools/ticket-guard.sh OC-22 && echo "Safe to reference"
+```
+
+If the guard fails, it prints a JSON error to stderr with a hint to create the ticket file. This ensures no ticket exists only as terminal output.
+
 ## Commands
 
 All commands via:
@@ -697,6 +739,7 @@ node skills/dev-pipeline/tests/test-run-next-drive.js      # scheduler drive tes
 node skills/dev-pipeline/tests/test-project-index.js       # project index tests (18 tests)
 node skills/dev-pipeline/tests/test-project-next-pick.js   # project picker tests (22 tests)
 node skills/dev-pipeline/tests/test-project-next-drive.js  # project driver tests (11 tests)
+node skills/dev-pipeline/tests/test-ticket-store.js        # ticket persistence tests (41 tests)
 ```
 
 ## Security
