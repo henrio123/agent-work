@@ -305,3 +305,125 @@ The autonomous runner is designed for safe reruns:
 ### 10.3 More Artifact Types and Buckets
 
 The bucket classification in `project-next-pick.js` and the stage config in `dev-pipeline.js` are the extension points. New buckets can be added to `BUCKET_PRIORITY`. New artifact types require a new schema and a stage config entry.
+
+# Evolution Roadmap — AI Organisation OS
+
+This section defines the multi-phase evolution plan for the system. It is the authoritative reference for all future tickets. No ticket may introduce scope that falls outside the currently active phase.
+
+## Current System State
+
+The system currently provides:
+
+- A deterministic run engine that moves tickets through a fixed sequence of role stages (`intake` through `done`).
+- A multi-stage pipeline with five role stages (PM, Architect, Dev, QA, Review), each gated by schema-validated artifacts.
+- A Project Brain Layer with project registry (`projects/<project_id>/project.json`), agent role definitions (`agents.json`), and structured backlog (`backlog/<task_id>.json`).
+- A deterministic project scheduler (`project-next-pick`) that classifies tasks into priority buckets and selects the next eligible task using stable sort rules.
+- A one-shot project driver (`project-next-drive`) that creates runs, links backlog items, and invokes the autonomous runner.
+- JSON schema enforcement on all tool outputs (`additionalProperties: false`) and all pipeline artifacts.
+- A project dashboard (`project-dashboard.sh`) that produces a read-only JSON payload with computed fields for each backlog item.
+- A deterministic task pack generator (`task-pack-generate.sh`) that produces structured context documents without LLM calls.
+- Ticket persistence (`tickets/<ticket_id>.md`) with anti-truncation guards.
+- An append-only audit log (`autonomous-audit.jsonl`) per run.
+- Read-only safety guarantees on all index, pick, dashboard, watch, and list tools.
+- A web dashboard (`dashboard.js`) on `localhost:18790` for run-level monitoring.
+- Zero external npm dependencies.
+
+## Target State
+
+The system evolves into a deterministic, role-aware, knowledge-compounding AI Organisation OS. The target state includes:
+
+- Enforced agent identities with persistent state, workload tracking, and runtime role-to-stage enforcement.
+- A structured work graph that replaces the flat backlog with validated epic-child hierarchies, dependency graphs with cycle detection, and graph-aware scheduling.
+- A knowledge and artifact layer that classifies artifacts semantically, indexes them across projects and runs, supports research-type workflows with structured outputs, and accumulates agent memory across runs.
+
+The evolution is divided into three phases. Each phase has explicit deliverables and stop conditions. Phases execute sequentially.
+
+## Phase 1 — Agent Identity and Control Layer
+
+### Purpose
+
+Make roles enforceable at runtime. Currently, `agents.json` defines roles declaratively but nothing prevents a role from executing a stage it does not own.
+
+### Deliverables
+
+- `agents/<agent_id>/state.json` contract defining persistent agent state (assigned role, current task, workload counters, last active timestamp).
+- Role-to-stage enforcement rules in the run engine. A role must match the stage's declared role in `STAGE_CONFIG` before it can produce artifacts for that stage.
+- `responsible_agent` field recorded in `status.json` for each run, identifying which agent identity is driving the current stage.
+- Agent workload visible in the project dashboard output (runs per agent, stages completed per agent).
+- `assigned_role` required on every backlog item. The picker must reject items without an assigned role.
+
+### Stop Condition
+
+All of the following must be true before Phase 1 is complete:
+
+1. A role cannot execute a stage it does not own. The run engine rejects artifact submissions from the wrong role.
+2. The project dashboard output includes workload counts per role.
+3. Every run's `status.json` contains a `responsible_agent` field.
+4. Every backlog item has an `assigned_role` field. The picker skips items without one.
+5. No cross-role leakage is possible. Tests verify that role enforcement cannot be bypassed.
+
+Phase 1 does not modify the dependency graph, backlog hierarchy, or artifact classification. No dependency graph changes in Phase 1.
+
+## Phase 2 — Structured Work Graph
+
+### Purpose
+
+Upgrade the backlog from a flat list to a validated project graph with parent-child relationships and dependency constraints.
+
+### Deliverables
+
+- Epic-to-child hierarchy via a `parent_id` field on backlog items. Epics contain children. Children reference their parent.
+- Dependency graph validation tool that reads backlog items and validates the `depends_on` graph is a DAG.
+- Cycle detection. The validator rejects any backlog state that contains a dependency cycle.
+- Blocked reason enforcement. A task with unfinished dependencies must have `blocked_reason` set to identify the blocking dependency.
+- Picker respects graph constraints. A task is ineligible if any of its `depends_on` items are not `done`. A child is ineligible if its parent epic is `blocked`.
+- Dashboard visualizes the dependency chain. The project dashboard output includes parent-child relationships and dependency status for each item.
+- Epic completion rule. An epic cannot transition to `done` if any of its children are not `done`.
+
+### Stop Condition
+
+All of the following must be true before Phase 2 is complete:
+
+1. Dependency cycles are detected and rejected by the validation tool.
+2. A child task cannot start execution if its parent epic is `blocked`.
+3. An epic cannot complete if any of its children are incomplete.
+4. The picker never selects a task whose dependencies are not satisfied.
+5. The project dashboard output includes the dependency chain for each item.
+
+Phase 2 does not introduce artifact semantic classification, artifact indexing, or cross-run knowledge retention. No artifact semantic layer in Phase 2.
+
+## Phase 3 — Knowledge and Artifact Layer
+
+### Purpose
+
+Turn the execution engine into a knowledge-compounding system where artifacts, research outputs, and agent observations persist and accumulate across runs and projects.
+
+### Deliverables
+
+- Artifact classification schema that tags each artifact with a semantic type (decision, design, implementation, test-result, research-finding, observation).
+- Global artifact index tool that scans all runs across all projects and produces a searchable index of artifacts by type, project, run, and stage.
+- Research backlog type with a dedicated workflow. Research tasks produce structured findings instead of pipeline artifacts. The research output schema defines required fields for hypotheses, methods, findings, and confidence levels.
+- Agent memory persistence layer. Each agent identity can write observations to `agents/<agent_id>/memory/` and read them in subsequent runs. Memory is append-only and schema-validated.
+- Cross-run knowledge retention. The task pack generator can reference artifacts and findings from previous runs in the same project when building context for a new task.
+
+### Stop Condition
+
+All of the following must be true before Phase 3 is complete:
+
+1. The artifact index tool produces valid JSON output covering all artifacts across all projects and runs.
+2. Research tasks have a dedicated workflow with a validated output schema.
+3. Agent memory persists across runs. An agent can write an observation in run N and read it in run N+1.
+4. The project dashboard output includes knowledge state (artifact counts by type, research findings count, memory entry count).
+
+## Evolution Governance Rules
+
+1. Only one phase may be active at a time. Work on Phase N+1 must not begin until Phase N meets all its stop conditions.
+2. A phase is complete when every stop condition listed in its section evaluates to true. Partial completion does not count.
+3. Every ticket must explicitly reference the phase it belongs to (e.g. "Phase 1" in the ticket title or body). Tickets that do not reference a phase are out of scope.
+4. No features outside the declared phase scope. If a ticket introduces functionality that belongs to a later phase, it must be rejected and rewritten.
+5. This section of `docs/ARCHITECTURE.md` is the single source of truth for phase scope and stop conditions. Conflicts between tickets and this document are resolved in favor of this document.
+
+## Evolution Roadmap Version
+
+Version: 1.0
+Date: 2026-02-19
