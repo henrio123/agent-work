@@ -1,0 +1,21 @@
+{
+  "id": "P2-04",
+  "project_id": "ai-organisation-os",
+  "type": "dev",
+  "title": "Epic completion rule enforcement",
+  "description": "An epic cannot transition to status 'done' if any of its children are not done. Enforce this in two places: (1) the graph validator (validate-backlog-graph.js) must report an error if an epic is done but has non-done children, (2) a new function checkEpicCompletion(projectDir, epicId) in a shared module that can be called by other tools. The function reads all backlog items, finds children via parent_id, and returns { ok, incomplete_children }.",
+  "created_at": "2026-02-20T16:00:00Z",
+  "updated_at": "2026-02-20T16:00:00Z",
+  "status": "todo",
+  "priority": "P1",
+  "owner_role": "DEV",
+  "depends_on": ["P2-01", "P2-02"],
+  "run_folder": null,
+  "tags": ["phase-2", "epic", "completion-rule"],
+  "artifacts_expected": [
+    "skills/dev-pipeline/scripts/validate-backlog-graph.js (modified)",
+    "skills/dev-pipeline/tests/test-epic-completion.js (new)"
+  ],
+  "phase": "Phase 2",
+  "stop_condition": "An epic with non-done children cannot be marked done. The graph validator reports this as an error. Tests prove the rule with synthetic data."
+}

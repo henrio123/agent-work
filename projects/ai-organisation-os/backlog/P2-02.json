@@ -1,0 +1,23 @@
+{
+  "id": "P2-02",
+  "project_id": "ai-organisation-os",
+  "type": "dev",
+  "title": "Dependency graph validation tool with cycle detection",
+  "description": "Create a new script validate-backlog-graph.js that reads all backlog items for a project, builds a directed graph from depends_on and parent_id edges, and validates it is a DAG. The tool must detect and reject dependency cycles, reporting the cycle path. It must also validate parent_id references (parent must exist, parent must be type 'epic', no self-reference). Output is JSON: { ok, project_id, nodes, edges, cycles, parent_errors, warnings }. Add a shell wrapper tools/validate-backlog-graph.sh. Create output schema validate-backlog-graph.output.schema.json.",
+  "created_at": "2026-02-20T16:00:00Z",
+  "updated_at": "2026-02-20T16:00:00Z",
+  "status": "todo",
+  "priority": "P1",
+  "owner_role": "DEV",
+  "depends_on": ["P2-01"],
+  "run_folder": null,
+  "tags": ["phase-2", "graph", "cycle-detection"],
+  "artifacts_expected": [
+    "skills/dev-pipeline/scripts/validate-backlog-graph.js (new)",
+    "tools/validate-backlog-graph.sh (new)",
+    "skills/dev-pipeline/schemas/validate-backlog-graph.output.schema.json (new)",
+    "skills/dev-pipeline/tests/test-validate-backlog-graph.js (new)"
+  ],
+  "phase": "Phase 2",
+  "stop_condition": "Cycle detection works on synthetic graphs. Parent_id references are validated. Output matches schema. Tests registered in test-all.sh."
+}

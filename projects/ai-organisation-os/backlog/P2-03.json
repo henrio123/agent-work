@@ -1,0 +1,21 @@
+{
+  "id": "P2-03",
+  "project_id": "ai-organisation-os",
+  "type": "dev",
+  "title": "Graph-aware picker: enforce depends_on and parent constraints",
+  "description": "Update project-next-pick.js classifyTask to skip tasks whose depends_on items are not all done. Skip children whose parent epic is blocked. This requires the picker to have access to the full backlog state for the project (not just the individual item). Update pickNextTask to pass sibling item statuses into classifyTask. Emit stderr warnings for skipped items (same pattern as owner_role). Update project-next-pick.output.schema.json if needed.",
+  "created_at": "2026-02-20T16:00:00Z",
+  "updated_at": "2026-02-20T16:00:00Z",
+  "status": "todo",
+  "priority": "P1",
+  "owner_role": "DEV",
+  "depends_on": ["P2-01", "P2-02"],
+  "run_folder": null,
+  "tags": ["phase-2", "picker", "graph-constraints"],
+  "artifacts_expected": [
+    "skills/dev-pipeline/scripts/project-next-pick.js (modified)",
+    "skills/dev-pipeline/tests/test-picker-graph.js (new)"
+  ],
+  "phase": "Phase 2",
+  "stop_condition": "Picker never selects a task with unsatisfied depends_on. Picker never selects a child whose parent epic is blocked. Warnings emitted for skipped items. All tests pass."
+}

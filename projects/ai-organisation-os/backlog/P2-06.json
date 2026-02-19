@@ -1,0 +1,22 @@
+{
+  "id": "P2-06",
+  "project_id": "ai-organisation-os",
+  "type": "dev",
+  "title": "Dashboard dependency chain visualization",
+  "description": "Update project-dashboard.js to include dependency chain information for each backlog item: parent_id, children (list of child IDs), depends_on_status (array of { id, status } for each dependency), blocked_by_deps (list of dependency IDs that are not done), is_blocked_by_parent (boolean). Update project-dashboard.output.schema.json with the new fields. All fields are computed read-only, never mutating the filesystem.",
+  "created_at": "2026-02-20T16:00:00Z",
+  "updated_at": "2026-02-20T16:00:00Z",
+  "status": "todo",
+  "priority": "P2",
+  "owner_role": "DEV",
+  "depends_on": ["P2-01", "P2-03"],
+  "run_folder": null,
+  "tags": ["phase-2", "dashboard", "dependency-chain"],
+  "artifacts_expected": [
+    "skills/dev-pipeline/scripts/project-dashboard.js (modified)",
+    "skills/dev-pipeline/schemas/project-dashboard.output.schema.json (modified)",
+    "skills/dev-pipeline/tests/test-dashboard-deps.js (new)"
+  ],
+  "phase": "Phase 2",
+  "stop_condition": "Dashboard output includes parent-child relationships and dependency status for each item. Schema enforced. Tests pass."
+}

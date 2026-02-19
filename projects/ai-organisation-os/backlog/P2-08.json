@@ -1,0 +1,18 @@
+{
+  "id": "P2-08",
+  "project_id": "ai-organisation-os",
+  "type": "qa",
+  "title": "Phase 2 stop condition validation",
+  "description": "Final validation that all Phase 2 stop conditions from docs/ARCHITECTURE.md are met: (1) Dependency cycles are detected and rejected by the validation tool, (2) A child task cannot start execution if its parent epic is blocked, (3) An epic cannot complete if any of its children are incomplete, (4) The picker never selects a task whose dependencies are not satisfied, (5) The project dashboard output includes the dependency chain for each item. Run all tests, verify tool outputs, and confirm each condition with evidence.",
+  "created_at": "2026-02-20T16:00:00Z",
+  "updated_at": "2026-02-20T16:00:00Z",
+  "status": "todo",
+  "priority": "P2",
+  "owner_role": "QA",
+  "depends_on": ["P2-06", "P2-07"],
+  "run_folder": null,
+  "tags": ["phase-2", "validation", "stop-condition"],
+  "artifacts_expected": [],
+  "phase": "Phase 2",
+  "stop_condition": "All 5 Phase 2 stop conditions evaluate to true. Phase 2 is declared complete."
+}
