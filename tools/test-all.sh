@@ -27,6 +27,7 @@ SUITES=(
   "$TESTS_DIR/test-responsible-agent.js"
   "$TESTS_DIR/test-dashboard-workload.js"
   "$TESTS_DIR/test-picker-owner-role.js"
+  "$TESTS_DIR/test-role-leakage.js"
 )
 
 total_passed=0
