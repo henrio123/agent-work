@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "project.json",
+  "description": "Project metadata stored in projects/<project_id>/project.json",
+  "type": "object",
+  "required": ["project_id", "title", "description", "created_at", "updated_at"],
+  "properties": {
+    "project_id": { "type": "string" },
+    "title": { "type": "string" },
+    "description": { "type": "string" },
+    "repo_path": { "type": ["string", "null"] },
+    "created_at": { "type": "string" },
+    "updated_at": { "type": "string" }
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "agents.json",
+  "description": "Agent role definitions stored in projects/<project_id>/agents.json",
+  "type": "object",
+  "required": ["agents"],
+  "properties": {
+    "agents": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["role_name", "goal", "allowed_actions", "required_outputs", "handoff_contract"],
+        "properties": {
+          "role_name": { "type": "string" },
+          "goal": { "type": "string" },
+          "allowed_actions": { "type": "array", "items": { "type": "string" } },
+          "required_outputs": { "type": "array", "items": { "type": "string" } },
+          "handoff_contract": { "type": "string" }
+        }
+      }
+    }
+  }
+}

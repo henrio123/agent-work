@@ -524,6 +524,101 @@ Create minimal schema-valid JSON files for the current stage's required artifact
 
 Shows role, stage, artifacts, next actions with copy-to-clipboard commands, and expandable history.
 
+## Project Brain Layer
+
+A project-oriented layer on top of the run engine. Provides persistent project identity, structured backlog, and agent role ownership.
+
+### Architecture
+
+```
+Layer 0: Execution Core (runs/, status.json, autonomous runner)
+Layer 1: Project Registry (projects/<id>/project.json, agents.json)
+Layer 2: Backlog & Task Graph (projects/<id>/backlog/*.json)
+Layer 3: Project Operator Tools (project-index, project-next-pick, project-next-drive)
+```
+
+### Data Model
+
+```
+projects/
+  <project_id>/
+    project.json        # project metadata
+    agents.json         # agent role definitions
+    backlog/
+      TASK-0001.json    # backlog items
+      TASK-0002.json
+```
+
+### Backlog Item Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| id | string | Unique ID (e.g. TASK-0001) |
+| project_id | string | Parent project |
+| type | enum | epic, task, research, design, dev, qa, docs |
+| status | enum | todo, in_progress, blocked, done |
+| priority | enum | P0, P1, P2, P3 |
+| owner_role | enum | PM, UX_ANALYST, DESIGNER, ARCHITECT, DEV, QA |
+| depends_on | string[] | IDs of blocking tasks |
+| run_folder | string\|null | Linked run folder (set when execution begins) |
+| tags | string[] | Free-form tags |
+| artifacts_expected | string[] | Expected output files |
+| last_summary | object\|null | Last autonomous run summary |
+
+### Project Operator Tools
+
+#### project-index
+
+Read-only global view across all projects and backlog items.
+
+```bash
+./tools/project-index.sh
+```
+
+**Output:** `{ ok, generated_at, projects: [{ project_id, totals, backlog }], summary }`
+
+Enriches backlog items with run-level data: stop signals, blocked status, stalled detection.
+
+#### project-next-pick
+
+Deterministic picker for the next eligible backlog item across all projects.
+
+```bash
+./tools/project-next-pick.sh
+```
+
+**Selection rules (deterministic):**
+1. Priority buckets: `needs_task_pack` > `needs_artifacts` > `other`
+2. Status rank: `in_progress` > `todo`
+3. Priority rank: `P0` > `P1` > `P2` > `P3`
+4. Project ID ASC, then task ID ASC
+
+**Output:** `{ ok, action: "picked_task"|"no_eligible_tasks", project_id, task_id, run_folder, priority_bucket }`
+
+#### project-next-drive
+
+One-shot driver that picks a backlog task, ensures a run exists, and drives it once.
+
+```bash
+./tools/project-next-drive.sh [--max_steps N] [--max_agent_calls N] [--dry_run] [--audit_log] [--verbose]
+```
+
+If the picked task has no `run_folder`, creates one (intake + status.json) and links it back to the backlog item. Then calls the existing autonomous runner once.
+
+**Output:** `{ ok, action: "drive_complete"|"drive_created_run"|"drive_skipped", picked, run_folder, autonomous }`
+
+### Project Schemas
+
+All project schemas are in `{baseDir}/schemas/`:
+- `project.schema.json` — project metadata
+- `agents.schema.json` — agent role definitions
+- `backlog-item.schema.json` — backlog item structure
+
+Output schemas:
+- `project-index.output.schema.json`
+- `project-next-pick.output.schema.json`
+- `project-next-drive.output.schema.json`
+
 ## Schemas
 
 All artifact schemas are in `{baseDir}/references/`:
@@ -534,6 +629,14 @@ All artifact schemas are in `{baseDir}/references/`:
 - `review-report.schema.json`
 - `run-manifest.schema.json`
 - `status.schema.json`
+
+All output schemas are in `{baseDir}/schemas/`:
+- `run-index.output.schema.json`
+- `run-next-pick.output.schema.json`
+- `run-next-drive.output.schema.json`
+- `project-index.output.schema.json`
+- `project-next-pick.output.schema.json`
+- `project-next-drive.output.schema.json`
 
 ## Typical Multi-Role Workflow
 
@@ -582,15 +685,18 @@ Run all suites at once:
 Or individually:
 
 ```bash
-node skills/dev-pipeline/tests/test-scaffold.js        # scaffold + schema tests (35 tests)
-node skills/dev-pipeline/tests/test-state-machine.js   # state machine regression (28 tests)
-node skills/dev-pipeline/tests/test-run-next-safe.js   # run_next_safe + safety contract (13 tests)
-node skills/dev-pipeline/tests/test-run-next-loop.js   # run_next_loop autopilot tests (11 tests)
-node skills/dev-pipeline/tests/test-run-next-autonomous.js  # autonomous runner tests (33 tests)
+node skills/dev-pipeline/tests/test-scaffold.js            # scaffold + schema tests (35 tests)
+node skills/dev-pipeline/tests/test-state-machine.js       # state machine regression (28 tests)
+node skills/dev-pipeline/tests/test-run-next-safe.js       # run_next_safe + safety contract (13 tests)
+node skills/dev-pipeline/tests/test-run-next-loop.js       # run_next_loop autopilot tests (11 tests)
+node skills/dev-pipeline/tests/test-run-next-autonomous.js # autonomous runner tests (33 tests)
 node skills/dev-pipeline/tests/test-run-next-watch.js      # watch mode tests (17 tests)
 node skills/dev-pipeline/tests/test-run-index.js           # global run index tests (22 tests)
 node skills/dev-pipeline/tests/test-run-next-pick.js       # scheduler pick tests (21 tests)
 node skills/dev-pipeline/tests/test-run-next-drive.js      # scheduler drive tests (16 tests)
+node skills/dev-pipeline/tests/test-project-index.js       # project index tests (18 tests)
+node skills/dev-pipeline/tests/test-project-next-pick.js   # project picker tests (22 tests)
+node skills/dev-pipeline/tests/test-project-next-drive.js  # project driver tests (11 tests)
 ```
 
 ## Security

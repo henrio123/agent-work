@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "project-index output",
+  "description": "Output schema for ./tools/project-index.sh",
+  "type": "object",
+  "required": ["ok", "generated_at", "projects", "summary"],
+  "additionalProperties": false,
+  "properties": {
+    "ok": { "type": "boolean", "const": true },
+    "generated_at": { "type": "string" },
+    "projects": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["project_id", "totals", "backlog"],
+        "additionalProperties": false,
+        "properties": {
+          "project_id": { "type": "string" },
+          "totals": {
+            "type": "object",
+            "required": ["total", "todo", "in_progress", "blocked", "done"],
+            "additionalProperties": false,
+            "properties": {
+              "total": { "type": "number" },
+              "todo": { "type": "number" },
+              "in_progress": { "type": "number" },
+              "blocked": { "type": "number" },
+              "done": { "type": "number" }
+            }
+          },
+          "backlog": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "id", "type", "status", "priority", "owner_role",
+                "run_folder", "stop_signal", "blocked", "stalled"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "id": { "type": "string" },
+                "type": { "type": "string" },
+                "status": { "type": "string" },
+                "priority": { "type": "string" },
+                "owner_role": { "type": "string" },
+                "run_folder": { "type": ["string", "null"] },
+                "stop_signal": { "type": "boolean" },
+                "blocked": { "type": "boolean" },
+                "stalled": { "type": "boolean" },
+                "last_summary": { "type": ["object", "null"] }
+              }
+            }
+          }
+        }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "required": ["projects", "tasks_total", "todo", "in_progress", "blocked", "done", "stopped", "stalled"],
+      "additionalProperties": false,
+      "properties": {
+        "projects": { "type": "number" },
+        "tasks_total": { "type": "number" },
+        "todo": { "type": "number" },
+        "in_progress": { "type": "number" },
+        "blocked": { "type": "number" },
+        "done": { "type": "number" },
+        "stopped": { "type": "number" },
+        "stalled": { "type": "number" }
+      }
+    }
+  }
+}

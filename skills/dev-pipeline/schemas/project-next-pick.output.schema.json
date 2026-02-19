@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "project-next-pick output",
+  "description": "Output schema for ./tools/project-next-pick.sh. Action is either picked_task or no_eligible_tasks.",
+  "type": "object",
+  "required": ["ok", "action"],
+  "additionalProperties": false,
+  "properties": {
+    "ok": { "type": "boolean", "const": true },
+    "action": {
+      "type": "string",
+      "enum": ["picked_task", "no_eligible_tasks"]
+    },
+    "project_id": { "type": "string" },
+    "task_id": { "type": "string" },
+    "run_folder": { "type": ["string", "null"] },
+    "reason": { "type": "string" },
+    "priority_bucket": {
+      "type": "string",
+      "enum": ["needs_task_pack", "needs_artifacts", "other"]
+    }
+  }
+}

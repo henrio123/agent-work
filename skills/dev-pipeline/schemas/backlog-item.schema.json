@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "backlog-item",
+  "description": "A single backlog item stored in projects/<project_id>/backlog/<id>.json",
+  "type": "object",
+  "required": [
+    "id", "project_id", "type", "title", "description",
+    "created_at", "updated_at", "status", "priority", "owner_role",
+    "depends_on", "run_folder", "tags", "artifacts_expected"
+  ],
+  "properties": {
+    "id": { "type": "string" },
+    "project_id": { "type": "string" },
+    "type": {
+      "type": "string",
+      "enum": ["epic", "task", "research", "design", "dev", "qa", "docs"]
+    },
+    "title": { "type": "string" },
+    "description": { "type": "string" },
+    "created_at": { "type": "string" },
+    "updated_at": { "type": "string" },
+    "status": {
+      "type": "string",
+      "enum": ["todo", "in_progress", "blocked", "done"]
+    },
+    "priority": {
+      "type": "string",
+      "enum": ["P0", "P1", "P2", "P3"]
+    },
+    "owner_role": {
+      "type": "string",
+      "enum": ["PM", "UX_ANALYST", "DESIGNER", "ARCHITECT", "DEV", "QA"]
+    },
+    "depends_on": { "type": "array", "items": { "type": "string" } },
+    "run_folder": { "type": ["string", "null"] },
+    "tags": { "type": "array", "items": { "type": "string" } },
+    "artifacts_expected": { "type": "array", "items": { "type": "string" } },
+    "last_summary": { "type": ["object", "null"] }
+  }
+}
