@@ -1,0 +1,307 @@
+# Architecture
+
+## 1. Vision and Problem Statement
+
+This system is a deterministic, role-based orchestration pipeline for multi-agent software work. It exists because:
+
+- Work must not get lost to terminal scrollback, conversation compaction, or agent context limits.
+- Every piece of state must live on the filesystem as a file, not in memory.
+- The system must be reproducible: given the same filesystem state, every tool must produce the same output.
+- Roles must have hard boundaries. A PM cannot write code. A QA agent cannot change scope.
+
+The pipeline takes a ticket, creates a run, drives it through a fixed sequence of role stages, validates every artifact against a JSON schema, and advances only when gates pass.
+
+## 2. System Boundaries and Invariants
+
+**Workspace root:** `~/dev/agent-work/`. All paths are resolved against this root via `safePath()`. Any path that resolves outside the workspace is rejected.
+
+**Invariants:**
+
+- Zero external npm dependencies. Only `node:fs`, `node:path`, `node:os`, `node:crypto`.
+- All tool stdout is JSON (except `ticket-show.sh` which prints raw markdown). Errors go to stderr as JSON with `{ "ok": false, "error": "..." }`.
+- Read-only tools never create, modify, or delete files. The index, pick, dashboard, watch, and list tools are read-only.
+- Write tools only write to specific locations: run folders, backlog items, task packs, tickets.
+- No tool runs a child process except `autonomous-runner.js` (which invokes the Claude CLI as an agent adapter) and `dashboard.js` (HTTP server).
+- All schemas use `additionalProperties: false` on output schemas.
+- `tools/test-all.sh` is the single gate. If it passes, the system is correct.
+
+## 3. Core Concepts and Definitions
+
+### 3.1 Project
+
+A named container for related work. Lives at `projects/<project_id>/`. Contains a `project.json` metadata file, an optional `agents.json` role definition file, a `backlog/` directory of task items, and a `task-packs/` directory of generated task packs.
+
+### 3.2 Backlog Item
+
+A unit of work within a project. Lives at `projects/<project_id>/backlog/<task_id>.json`. Has a status (`todo`, `in_progress`, `blocked`, `done`), a priority (`P0`-`P3`), an owner role, and an optional link to a run folder. Backlog items are the input to the picker and driver tools.
+
+### 3.3 Task Pack
+
+A structured context document generated for a backlog item before a run begins. Lives at `projects/<project_id>/task-packs/<task_id>.json`. Contains inferred inputs, open questions, expected artifacts, acceptance criteria, constraints, and references. Generated deterministically from the filesystem without LLM calls.
+
+### 3.4 Run
+
+A single execution of the pipeline for one ticket. Lives at `runs/<YYYYMMDD_HHMMSS>_<ticket_id>/`. Contains `status.json` (the canonical state), `00-intake.json` (initial context), role-specific task files, and pipeline artifacts. A run moves through the state machine from `intake` to `done`.
+
+### 3.5 Tool
+
+A shell wrapper in `tools/` that calls a Node.js script. Every tool is a thin `exec node` wrapper. Tools are the public API surface of the system.
+
+### 3.6 Schema
+
+A JSON Schema file that defines the shape of a data file. Two categories:
+
+- **Reference schemas** in `skills/dev-pipeline/references/`: define pipeline artifacts (pm-brief, arch-design, dev-notes, qa-report, review-report, status, run-manifest).
+- **Output/input schemas** in `skills/dev-pipeline/schemas/`: define tool outputs and data model files (backlog-item, project, agents, task-pack, and all `*.output.schema.json` files for tool outputs).
+
+## 4. Filesystem as API
+
+The filesystem is the only API. There is no database, no message queue, no HTTP API (except the optional dashboard server). Every tool reads files, computes, and writes files.
+
+### 4.1 `projects/<project_id>/project.json`
+
+Schema: `skills/dev-pipeline/schemas/project.schema.json`
+
+Required fields: `project_id`, `title`, `description`, `created_at`, `updated_at`.
+
+Optional: `repo_path` (string or null).
+
+### 4.2 `projects/<project_id>/agents.json`
+
+Schema: `skills/dev-pipeline/schemas/agents.schema.json`
+
+Required: `agents` array. Each agent object requires: `role_name`, `goal`, `allowed_actions`, `required_outputs`, `handoff_contract`.
+
+Optional file. If absent, the task pack generator records an open question.
+
+### 4.3 `projects/<project_id>/backlog/<task_id>.json`
+
+Schema: `skills/dev-pipeline/schemas/backlog-item.schema.json`
+
+Required fields: `id`, `project_id`, `type`, `title`, `description`, `created_at`, `updated_at`, `status`, `priority`, `owner_role`, `depends_on`, `run_folder`, `tags`, `artifacts_expected`.
+
+Enum constraints:
+- `type`: `epic`, `task`, `research`, `design`, `dev`, `qa`, `docs`
+- `status`: `todo`, `in_progress`, `blocked`, `done`
+- `priority`: `P0`, `P1`, `P2`, `P3`
+- `owner_role`: `PM`, `UX_ANALYST`, `DESIGNER`, `ARCHITECT`, `DEV`, `QA`
+
+The `run_folder` field is null until a run is created, then set to the relative path (e.g. `runs/20260219_120000_TASK-01`).
+
+### 4.4 `projects/<project_id>/task-packs/<task_id>.json`
+
+Schema: `skills/dev-pipeline/schemas/task-pack.schema.json`
+
+Required fields: `task_id`, `project_id`, `title`, `description`, `owner_role`, `inputs_present`, `open_questions`, `artifacts_expected`, `acceptance_criteria`, `constraints`, `suggested_next_agents`, `references`, `created_at`, `updated_at`.
+
+`additionalProperties: false`. Generated by `scripts/task-pack-generate.js`.
+
+### 4.5 `runs/<run_id>/` folder
+
+Each run folder contains:
+
+- `status.json` — canonical run state (schema: `skills/dev-pipeline/references/status.schema.json`).
+- `00-intake.json` — initial ticket context.
+- `run-manifest.json` — ticket_id, created_at, tool_version, schema_version, git_head.
+- `30-dev-claude-task.txt` — generated task pack for the base stage.
+- `3N-<role>-claude-task.txt` — role-specific task files (31 PM, 32 Architect, 33 Dev, 34 QA, 35 Review).
+- Pipeline artifacts: `10-pm-brief.json`, `20-arch-design.json`, `40-dev-patch.diff`, `41-dev-notes.json`, `50-qa-report.json`, `60-review-report.json`.
+- Optional: `.stop` file (stop signal), `autonomous-audit.jsonl` (audit log).
+
+`status.json` required fields: `ticket_id`, `title`, `project`, `created_at`, `updated_at`, `current_stage`, `blocked`, `blocked_reason`, `required_user_input`, `stage_history`, `next_actions`.
+
+Optional fields written by the autonomous runner: `last_autonomous_run_at`, `last_autonomous_summary`.
+
+### 4.6 `tickets/<ticket_id>.md`
+
+Markdown file with YAML frontmatter.
+
+Required frontmatter: `ticket_id`, `title`.
+
+Required headings (case-insensitive): `Goal`, `Steps`.
+
+The `ticket-store.js` module provides `ensureTicket()` and `guardTicketId()` to validate format and existence. `guardTicketId()` is the anti-truncation guard: it fails fast if a ticket is referenced but no file exists.
+
+Ticket lifecycle: a ticket file is created first, then `create_run_from_ticket` reads it to create a run.
+
+## 5. Determinism Model
+
+### 5.1 What Must Be Deterministic
+
+- **Picker output.** Given the same filesystem state, `project-next-pick` and `run-next-pick` must return the same result. Ordering is by bucket priority, then status rank, then priority rank, then project_id ASC, then task_id/run_folder ASC.
+- **Index output.** Given the same filesystem, `project-index`, `run-index`, and `project-dashboard` must return the same `projects` and `runs` arrays in the same order.
+- **Task pack generation.** Given the same filesystem, `task-pack-generate` must produce the same JSON content (excluding timestamps).
+- **State machine transitions.** Given a run at stage X with artifacts Y, `run_next_safe` must return the same action.
+- **Schema validation.** Given data D and schema S, `validateAgainstSchema(D, S)` must return the same result.
+
+### 5.2 What May Vary
+
+- `generated_at`, `created_at`, `updated_at` timestamps. These use `new Date().toISOString()` and reflect wall clock time.
+- `run-manifest.json` `git_head` field. Reflects the current git HEAD at run creation time.
+- Audit log timestamps and step ordering within a single autonomous invocation (depends on wall clock).
+- Stalled detection. Uses `Date.now() - auditFile.mtimeMs > threshold`, so depends on wall clock.
+
+### 5.3 Time Handling Rules
+
+All timestamps are ISO 8601 strings via `new Date().toISOString()`. The `generated_at` field on index/dashboard outputs represents the moment the scan completed and is informational only. It must not be used for ordering or comparison. Stall detection uses a configurable `stallThresholdMs` (default: 30 minutes) against the audit file's modification time.
+
+## 6. State Machine
+
+### 6.1 Backlog Item Status Transitions
+
+```
+todo  -->  in_progress  -->  done
+  |            |
+  v            v
+blocked    blocked
+```
+
+- `todo` to `in_progress`: when a run is created and linked.
+- `in_progress` to `done`: when the linked run reaches stage `done`.
+- Any to `blocked`: manual or when the run is blocked.
+
+### 6.2 Run `current_stage` Transitions
+
+```
+intake --> task-pack-generated --> pm-ready --> arch-ready --> dev-ready --> qa-ready --> review --> done
+                                                                                         |
+                                                                                      blocked
+```
+
+Each role stage requires specific artifacts to pass gates:
+
+| Stage | Role | Required Artifacts |
+|-------|------|--------------------|
+| `pm-ready` | PM | `10-pm-brief.json` |
+| `arch-ready` | Architect | `20-arch-design.json` |
+| `dev-ready` | Dev | `40-dev-patch.diff`, `41-dev-notes.json` |
+| `qa-ready` | QA | `50-qa-report.json` |
+| `review` | Review | `60-review-report.json` |
+
+Advancement: `run_next_safe` checks if all required artifacts exist and validate against their schemas. If gates pass, it closes the current stage in `stage_history`, sets `current_stage` to the next stage, and generates the next role's task file.
+
+### 6.3 Buckets and Selection Rules
+
+The picker classifies each eligible item into a priority bucket. Bucket order (highest first):
+
+1. `ready_for_run_creation` — task has a task pack but no active run yet, or run is in intake/task-pack-generated with a task pack present.
+2. `needs_task_pack` — task has no task pack and no active run, or run is in intake/task-pack-generated without a task pack.
+3. `needs_artifacts` — linked run's last autonomous action was `needs_artifacts`.
+4. `other` — eligible but does not fit the above buckets.
+
+Within a bucket, sort by: status rank (`in_progress` 0, `todo` 1), priority rank (`P0` 0, `P1` 1, `P2` 2, `P3` 3), project_id ASC, task_id ASC.
+
+Items are ineligible if: status is `done` or `blocked`, or `stop_signal` is true, or the linked run's stage is `done`.
+
+### 6.4 Blocking and Stop Signals
+
+**Blocking:** `./tools/dp.sh block <run_folder> <reason> [prompts...]` sets `blocked: true`, `current_stage: "blocked"`, and creates `required_user_input` entries. `./tools/dp.sh respond <run_folder> <input_id> <answer>` resolves inputs. When all inputs are answered, the run unblocks and restores the previous stage.
+
+**Stop signals:** A `.stop` file in the run folder. The autonomous runner checks for this file at each step boundary and exits with `final_action: "stopped"`. Remove with `./tools/run-next-resume.sh <run_folder>`.
+
+## 7. Workflow
+
+### 7.1 How Work Enters the System
+
+1. A ticket file is created in `tickets/<ticket_id>.md` with the required frontmatter and headings.
+2. A project is set up in `projects/<project_id>/` with `project.json` and backlog items in `backlog/`.
+3. Backlog items reference the ticket and set status, priority, and owner role.
+
+Alternatively, `./tools/dp.sh create_run_from_ticket <ticket_id>` creates a run directly from a ticket without a project/backlog structure. This is the simpler path for standalone tickets.
+
+### 7.2 How Task Packs Are Generated and Validated
+
+`./tools/task-pack-generate.sh <project_id> <task_id>` scans:
+- `project.json` for project context
+- `agents.json` for role definitions (if present)
+- The backlog item for requirements and dependencies
+- The linked run folder for existing artifacts (if present)
+- `skills/dev-pipeline/SKILL.md` for pattern references
+
+If information is missing, `open_questions` is populated. If dependencies are not done, a question is added. The generated file is written to `projects/<project_id>/task-packs/<task_id>.json`.
+
+Validation: `./tools/task-pack-validate.sh <path>` checks against `task-pack.schema.json`.
+
+### 7.3 How Runs Are Created and Linked
+
+When `project-next-drive` picks a task without a `run_folder`:
+
+1. Creates `runs/<YYYYMMDD_HHMMSS>_<task_id>/` with `00-intake.json` and `status.json`.
+2. Links the run back to the backlog item by setting `run_folder` and updating status to `in_progress`.
+3. If a task pack exists at `projects/<project_id>/task-packs/<task_id>.json`, copies it into the run as `10-pm-brief.json` (only if that file does not already exist).
+
+### 7.4 How the Autonomous Runner Is Driven
+
+`./tools/run-next-autonomous.sh <run_folder>` runs a loop:
+
+1. Calls `run_next_safe` to get the current action.
+2. If `needs_artifacts`: invokes the correct role agent (Claude CLI, scaffold adapter, or draft-file adapter) to produce `.draft` files, validates them, writes final artifacts.
+3. If `advanced_and_generated`: continues to the next step.
+4. Stops on: `none` (done), `blocked`, `needs_artifacts` after agent invocation, `stopped` (.stop file), stall detection, or max steps/agent calls reached.
+
+Safety: never creates directories, never overwrites existing artifacts, snapshots `runs/` before/after and fails if changed.
+
+### 7.5 How the Dashboard Is Used
+
+`./tools/project-dashboard.sh` produces a JSON payload with all projects, their backlog items, and computed fields (priority bucket, run stage, blocked, stopped, stalled, needs_task_pack, needs_artifacts). This is read-only and suitable for consumption by a UI layer or automation.
+
+`./tools/dashboard-start.sh` starts an HTTP dashboard on `localhost:18790` that auto-refreshes and shows runs with stage badges and expandable details.
+
+## 8. Quality Gates
+
+### 8.1 JSON-Only Outputs for Tools
+
+Every tool writes JSON to stdout. The only exception is `ticket-show.sh` which prints raw markdown. Errors go to stderr as `{ "ok": false, "error": "..." }`.
+
+### 8.2 Schema Validation with `additionalProperties: false`
+
+All output schemas in `skills/dev-pipeline/schemas/` use `additionalProperties: false`. This means any extra field in a tool's output will cause schema validation to fail.
+
+All artifact schemas in `skills/dev-pipeline/references/` define the shape of pipeline artifacts. Artifacts are validated before a stage can advance.
+
+### 8.3 Tests Required for Each New Tool and Schema
+
+Every new tool must have a corresponding test file in `skills/dev-pipeline/tests/`. Tests cover: programmatic API, CLI output, shell wrapper output, schema validation of output, error cases, read-only safety, and deterministic ordering.
+
+### 8.4 `tools/test-all.sh` as the Final Gate
+
+The `SUITES` array in `tools/test-all.sh` lists every test file. A ticket is not done until this script reports 0 failures. The script runs all suites sequentially and reports totals.
+
+## 9. Failure Modes and Recovery
+
+### 9.1 Corrupted JSON
+
+Tools that read JSON files use `try/catch` around `JSON.parse`. Corrupted files are skipped by index and pick tools. A corrupted `status.json` causes `run_next_safe` to return `action: "error"`.
+
+### 9.2 Missing Files
+
+- Missing `status.json`: run is listed with `has_status: false`, not picked.
+- Missing `project.json`: project directory is skipped.
+- Missing backlog item: skipped by index.
+- Missing ticket file: `guardTicketId()` fails with a clear error and suggested fix.
+
+### 9.3 Stalled Runs
+
+A run is considered stalled when `last_autonomous_summary.final_action === "needs_artifacts"` and the `autonomous-audit.jsonl` file has not been modified in over 30 minutes (configurable via `stallThresholdMs`). Stalled runs appear in the dashboard and index with `stalled: true`.
+
+### 9.4 Partial Execution and Reruns
+
+The autonomous runner is designed for safe reruns:
+- Existing artifacts are never overwritten (skipped with a log entry).
+- The runner picks up from the current state, not from the beginning.
+- Audit logs are append-only and survive restarts.
+- Stage history records start/finish times for each stage visit.
+
+## 10. Roadmap and Extension Points
+
+### 10.1 UI Layer Consumption of Dashboard
+
+`project-dashboard.sh` produces stable JSON with computed fields. A web frontend or TUI can consume this output directly via polling or watch mode.
+
+### 10.2 More Roles and Agent Ownership
+
+`agents.json` defines roles per project. New roles can be added by extending `STAGE_CONFIG` in `dev-pipeline.js`, adding corresponding schemas in `references/`, and templates in `templates/`.
+
+### 10.3 More Artifact Types and Buckets
+
+The bucket classification in `project-next-pick.js` and the stage config in `dev-pipeline.js` are the extension points. New buckets can be added to `BUCKET_PRIORITY`. New artifact types require a new schema and a stage config entry.

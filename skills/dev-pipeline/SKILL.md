@@ -16,6 +16,8 @@ metadata:
 
 A role-based deterministic orchestration system. Each ticket moves through a fixed state machine. Each stage is owned by one role. Artifacts are schema-validated before advancing.
 
+For full architecture details, filesystem contracts, and governance rules see `docs/ARCHITECTURE.md` and `docs/GOVERNANCE.md`.
+
 ## Stage Machine
 
 ```
