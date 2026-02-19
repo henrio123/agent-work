@@ -610,6 +610,7 @@ projects/
 | priority | enum | P0, P1, P2, P3 |
 | owner_role | enum | PM, UX_ANALYST, DESIGNER, ARCHITECT, DEV, QA |
 | depends_on | string[] | IDs of blocking tasks |
+| parent_id | string\|null | Parent epic ID (null if top-level) |
 | run_folder | string\|null | Linked run folder (set when execution begins) |
 | tags | string[] | Free-form tags |
 | artifacts_expected | string[] | Expected output files |
@@ -647,6 +648,11 @@ Tasks with an existing task pack in `projects/<project_id>/task-packs/<task_id>.
 
 **Owner role required:** Backlog items without a valid `owner_role` (missing, empty, or whitespace-only) are skipped by the picker. A JSON warning is emitted to stderr for each skipped item: `{"warning":"skipped_no_owner_role","task_id":"...","project_id":"..."}`.
 
+**Graph-aware constraints (Phase 2):**
+- Tasks whose `depends_on` items are not all `done` are skipped. Warning: `{"warning":"skipped_unsatisfied_deps","task_id":"...","blocking_deps":["DEP-1"]}`.
+- Children whose parent epic is `blocked` are skipped. Warning: `{"warning":"skipped_parent_blocked","task_id":"...","parent_id":"EPIC-1"}`.
+- Dangling dependencies (referencing non-existent items) do NOT block — only existing non-done dependencies block.
+
 **Output:** `{ ok, action: "picked_task"|"no_eligible_tasks", project_id, task_id, run_folder, priority_bucket }`
 
 #### project-next-drive
@@ -661,6 +667,31 @@ If the picked task has no `run_folder`, creates one (intake + status.json) and l
 
 **Output:** `{ ok, action: "drive_complete"|"drive_created_run"|"drive_skipped", picked, run_folder, autonomous }`
 
+### Graph Validation
+
+Read-only DAG validator for backlog dependency and parent graphs. Detects cycles via Kahn's algorithm, validates parent_id references, enforces the epic completion rule, and warns about dependency satisfaction issues.
+
+```bash
+./tools/validate-backlog-graph.sh <project_id> [--projects_dir <path>]
+```
+
+**Checks performed:**
+- `depends_on` cycle detection (Kahn's topological sort)
+- `parent_id` validation: must reference an existing epic, no self-references, no circular chains
+- Epic completion rule: a `done` epic with non-done children is an error
+- Dependency satisfaction: warnings for todo/in_progress tasks with unfinished dependencies
+- Dangling `depends_on` references produce warnings (not errors)
+
+**Output:** `{ ok, project_id, valid, nodes, edges, cycles, parent_errors, epic_completion_errors, warnings }`
+
+**Standalone epic completion check:**
+
+```javascript
+const { checkEpicCompletion } = require('./scripts/validate-backlog-graph.js');
+const result = checkEpicCompletion('project-id', 'EPIC-1', { projectsDir });
+// { ok, epic_id, project_id, can_complete, incomplete_children }
+```
+
 ### Project Schemas
 
 All project schemas are in `{baseDir}/schemas/`:
@@ -673,6 +704,7 @@ Output schemas:
 - `project-next-pick.output.schema.json`
 - `project-next-drive.output.schema.json`
 - `project-dashboard.output.schema.json`
+- `validate-backlog-graph.output.schema.json`
 
 ### Project Dashboard
 
@@ -694,6 +726,10 @@ Read-only aggregated JSON view of all projects, backlog items, and their compute
 | needs_task_pack | boolean | True if task has no task pack yet |
 | needs_artifacts | boolean | True if linked run needs artifacts |
 | stalled | boolean | True if linked run is stalled |
+| children | string[] | IDs of child items (whose parent_id is this item) |
+| depends_on_status | array | `[{ id, status }]` for each dependency |
+| blocked_by_deps | string[] | Dependency IDs that are not done |
+| is_blocked_by_parent | boolean | True if parent epic is blocked |
 
 Summary includes: `needs_task_pack` and `needs_artifacts` counts in addition to standard totals.
 
@@ -893,6 +929,12 @@ node skills/dev-pipeline/tests/test-responsible-agent.js   # responsible agent f
 node skills/dev-pipeline/tests/test-dashboard-workload.js  # dashboard workload stats tests (13 tests)
 node skills/dev-pipeline/tests/test-picker-owner-role.js   # picker owner_role enforcement tests (8 tests)
 node skills/dev-pipeline/tests/test-role-leakage.js        # role leakage prevention tests (15 tests)
+node skills/dev-pipeline/tests/test-parent-id.js           # parent_id field passthrough tests (9 tests)
+node skills/dev-pipeline/tests/test-validate-backlog-graph.js # DAG validation and cycle detection (16 tests)
+node skills/dev-pipeline/tests/test-picker-graph.js        # graph-aware picker tests (17 tests)
+node skills/dev-pipeline/tests/test-epic-completion.js     # epic completion rule tests (13 tests)
+node skills/dev-pipeline/tests/test-blocked-reason.js      # blocked reason enforcement tests (8 tests)
+node skills/dev-pipeline/tests/test-dashboard-deps.js      # dashboard dependency chain tests (12 tests)
 ```
 
 ## Security

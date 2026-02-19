@@ -80,6 +80,8 @@ Schema: `skills/dev-pipeline/schemas/backlog-item.schema.json`
 
 Required fields: `id`, `project_id`, `type`, `title`, `description`, `created_at`, `updated_at`, `status`, `priority`, `owner_role`, `depends_on`, `run_folder`, `tags`, `artifacts_expected`.
 
+Optional fields: `parent_id` (string or null) — references a parent epic. When set, the parent must exist, must have type `epic`, and must not be self-referencing or circular. Validated by `validate-backlog-graph.js`.
+
 Enum constraints:
 - `type`: `epic`, `task`, `research`, `design`, `dev`, `qa`, `docs`
 - `status`: `todo`, `in_progress`, `blocked`, `done`
@@ -388,11 +390,11 @@ Upgrade the backlog from a flat list to a validated project graph with parent-ch
 
 All of the following must be true before Phase 2 is complete:
 
-1. Dependency cycles are detected and rejected by the validation tool.
-2. A child task cannot start execution if its parent epic is `blocked`.
-3. An epic cannot complete if any of its children are incomplete.
-4. The picker never selects a task whose dependencies are not satisfied.
-5. The project dashboard output includes the dependency chain for each item.
+1. **Dependency cycles are detected and rejected by the validation tool.** Implemented in `validate-backlog-graph.js` via Kahn's algorithm (topological sort). Tested by `test-validate-backlog-graph.js` (16 tests). Schema enforced by `validate-backlog-graph.output.schema.json`.
+2. **A child task cannot start execution if its parent epic is `blocked`.** Implemented in `classifyTask()` (`project-next-pick.js`): checks `parent_id` against siblings, skips if parent is blocked. Warning emitted: `skipped_parent_blocked`. Tested by `test-picker-graph.js` (17 tests).
+3. **An epic cannot complete if any of its children are incomplete.** Implemented in `validateBacklogGraph()`: `epic_completion_errors` array reports done epics with non-done children. Standalone `checkEpicCompletion()` function exported. Tested by `test-epic-completion.js` (13 tests).
+4. **The picker never selects a task whose dependencies are not satisfied.** Implemented in `classifyTask()` (`project-next-pick.js`): checks `depends_on` against siblings, skips if any dep is not done. Warning: `skipped_unsatisfied_deps` with `blocking_deps` array. Tested by `test-picker-graph.js` and `test-blocked-reason.js` (8 tests).
+5. **The project dashboard output includes the dependency chain for each item.** Implemented in `project-dashboard.js` `enrichDependencyChain()`: adds `children`, `depends_on_status`, `blocked_by_deps`, `is_blocked_by_parent`. Schema enforced by `project-dashboard.output.schema.json`. Tested by `test-dashboard-deps.js` (12 tests).
 
 Phase 2 does not introduce artifact semantic classification, artifact indexing, or cross-run knowledge retention. No artifact semantic layer in Phase 2.
 
