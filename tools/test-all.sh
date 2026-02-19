@@ -30,6 +30,7 @@ SUITES=(
   "$TESTS_DIR/test-role-leakage.js"
   "$TESTS_DIR/test-parent-id.js"
   "$TESTS_DIR/test-validate-backlog-graph.js"
+  "$TESTS_DIR/test-picker-graph.js"
 )
 
 total_passed=0

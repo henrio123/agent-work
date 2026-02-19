@@ -51,7 +51,7 @@ function hasTaskPack(projectId, taskId, workspaceRoot) {
 // ---------------------------------------------------------------------------
 // Classify a backlog entry into a priority bucket
 // ---------------------------------------------------------------------------
-function classifyTask(entry, workspaceRoot, projectId) {
+function classifyTask(entry, workspaceRoot, projectId, siblingItems) {
   // Require owner_role
   if (!entry.owner_role || typeof entry.owner_role !== 'string' || entry.owner_role.trim() === '') {
     process.stderr.write(JSON.stringify({
@@ -66,6 +66,45 @@ function classifyTask(entry, workspaceRoot, projectId) {
   if (entry.status !== 'todo' && entry.status !== 'in_progress') return null;
   if (entry.blocked) return null;
   if (entry.stop_signal) return null;
+
+  // Graph constraints (only when siblingItems are provided)
+  if (siblingItems) {
+    const siblingById = new Map();
+    for (const s of siblingItems) siblingById.set(s.id, s);
+
+    // Check depends_on: all dependencies must be done
+    const deps = entry.depends_on || [];
+    const unsatisfied = [];
+    for (const depId of deps) {
+      const dep = siblingById.get(depId);
+      if (dep && dep.status !== 'done') {
+        unsatisfied.push(depId);
+      }
+    }
+    if (unsatisfied.length > 0) {
+      process.stderr.write(JSON.stringify({
+        warning: 'skipped_unsatisfied_deps',
+        task_id: entry.id || '(unknown)',
+        project_id: projectId || '(unknown)',
+        blocking_deps: unsatisfied,
+      }) + '\n');
+      return null;
+    }
+
+    // Check parent: if parent epic is blocked, child is ineligible
+    if (entry.parent_id) {
+      const parent = siblingById.get(entry.parent_id);
+      if (parent && (parent.status === 'blocked' || parent.blocked)) {
+        process.stderr.write(JSON.stringify({
+          warning: 'skipped_parent_blocked',
+          task_id: entry.id || '(unknown)',
+          project_id: projectId || '(unknown)',
+          parent_id: entry.parent_id,
+        }) + '\n');
+        return null;
+      }
+    }
+  }
 
   const pid = projectId || entry.project_id || '';
   const tid = entry.id || '';
@@ -121,7 +160,7 @@ function pickNextTask(options = {}) {
 
   for (const project of indexResult.projects) {
     for (const entry of project.backlog) {
-      const bucket = classifyTask(entry, workspaceRoot, project.project_id);
+      const bucket = classifyTask(entry, workspaceRoot, project.project_id, project.backlog);
       if (bucket === null) continue;
       candidates.push({
         project_id: project.project_id,

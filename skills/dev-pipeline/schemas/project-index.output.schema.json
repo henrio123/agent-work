@@ -34,7 +34,7 @@
               "type": "object",
               "required": [
                 "id", "type", "status", "priority", "owner_role", "parent_id",
-                "run_folder", "stop_signal", "blocked", "stalled"
+                "depends_on", "run_folder", "stop_signal", "blocked", "stalled"
               ],
               "additionalProperties": false,
               "properties": {
@@ -44,6 +44,7 @@
                 "priority": { "type": "string" },
                 "owner_role": { "type": "string" },
                 "parent_id": { "type": ["string", "null"] },
+                "depends_on": { "type": "array", "items": { "type": "string" } },
                 "run_folder": { "type": ["string", "null"] },
                 "stop_signal": { "type": "boolean" },
                 "blocked": { "type": "boolean" },

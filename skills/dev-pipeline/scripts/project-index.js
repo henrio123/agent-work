@@ -128,6 +128,7 @@ function buildBacklogEntry(item, workspaceRoot, stallThresholdMs) {
     priority: item.priority || 'P3',
     owner_role: item.owner_role || '',
     parent_id: item.parent_id || null,
+    depends_on: Array.isArray(item.depends_on) ? item.depends_on : [],
     run_folder: item.run_folder || null,
     stop_signal: false,
     blocked: item.status === 'blocked',
