@@ -31,6 +31,7 @@ SUITES=(
   "$TESTS_DIR/test-parent-id.js"
   "$TESTS_DIR/test-validate-backlog-graph.js"
   "$TESTS_DIR/test-picker-graph.js"
+  "$TESTS_DIR/test-epic-completion.js"
 )
 
 total_passed=0

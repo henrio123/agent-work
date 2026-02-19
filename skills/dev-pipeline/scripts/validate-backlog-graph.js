@@ -160,7 +160,20 @@ function validateBacklogGraph(projectId, options) {
     }
   }
 
-  const valid = cycles.length === 0 && parentErrors.length === 0;
+  // --- Epic completion rule: done epic must not have non-done children ---
+  const epicCompletionErrors = [];
+  for (const item of items) {
+    if (item.type !== 'epic' || item.status !== 'done') continue;
+    const children = items.filter(c => c.parent_id === item.id);
+    const incomplete = children.filter(c => c.status !== 'done');
+    if (incomplete.length > 0) {
+      epicCompletionErrors.push(
+        `${item.id}: epic is done but has ${incomplete.length} non-done child(ren): ${incomplete.map(c => c.id).join(', ')}`
+      );
+    }
+  }
+
+  const valid = cycles.length === 0 && parentErrors.length === 0 && epicCompletionErrors.length === 0;
 
   return {
     ok: true,
@@ -170,6 +183,7 @@ function validateBacklogGraph(projectId, options) {
     edges: { depends_on: dependsOnEdgeCount, parent_child: parentChildEdgeCount },
     cycles,
     parent_errors: parentErrors,
+    epic_completion_errors: epicCompletionErrors,
     warnings,
   };
 }
@@ -229,6 +243,44 @@ function extractCycles(cycleNodeIds, byId) {
 }
 
 // ---------------------------------------------------------------------------
+// checkEpicCompletion — standalone check for a single epic
+// ---------------------------------------------------------------------------
+function checkEpicCompletion(projectId, epicId, options) {
+  const projectsDir = options && options.projectsDir ? options.projectsDir : PROJECTS_DIR;
+  const backlogDir = path.join(projectsDir, projectId, 'backlog');
+
+  if (!fs.existsSync(backlogDir)) {
+    return { ok: false, error: `Backlog directory not found for project: ${projectId}` };
+  }
+
+  const files = fs.readdirSync(backlogDir).filter(f => f.endsWith('.json')).sort();
+  const items = [];
+  for (const file of files) {
+    try {
+      items.push(JSON.parse(fs.readFileSync(path.join(backlogDir, file), 'utf8')));
+    } catch { /* skip */ }
+  }
+
+  const epic = items.find(i => i.id === epicId);
+  if (!epic) {
+    return { ok: false, error: `Epic '${epicId}' not found in project '${projectId}'` };
+  }
+
+  const children = items.filter(i => i.parent_id === epicId);
+  const incompleteChildren = children
+    .filter(c => c.status !== 'done')
+    .map(c => ({ id: c.id, status: c.status }));
+
+  return {
+    ok: true,
+    epic_id: epicId,
+    project_id: projectId,
+    can_complete: incompleteChildren.length === 0,
+    incomplete_children: incompleteChildren,
+  };
+}
+
+// ---------------------------------------------------------------------------
 // CLI
 // ---------------------------------------------------------------------------
 if (require.main === module) {
@@ -259,4 +311,4 @@ if (require.main === module) {
 // ---------------------------------------------------------------------------
 // Exports
 // ---------------------------------------------------------------------------
-module.exports = { validateBacklogGraph };
+module.exports = { validateBacklogGraph, checkEpicCompletion };

@@ -3,7 +3,7 @@
   "title": "validate-backlog-graph output",
   "description": "Output schema for ./tools/validate-backlog-graph.sh — DAG validation for backlog dependency and parent graphs.",
   "type": "object",
-  "required": ["ok", "project_id", "valid", "nodes", "edges", "cycles", "parent_errors", "warnings"],
+  "required": ["ok", "project_id", "valid", "nodes", "edges", "cycles", "parent_errors", "epic_completion_errors", "warnings"],
   "additionalProperties": false,
   "properties": {
     "ok": { "type": "boolean", "const": true },
@@ -27,6 +27,10 @@
       }
     },
     "parent_errors": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "epic_completion_errors": {
       "type": "array",
       "items": { "type": "string" }
     },
