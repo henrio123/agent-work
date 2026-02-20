@@ -18,7 +18,8 @@
           "path": { "type": "string" },
           "schema": { "type": "string" },
           "valid": { "type": "boolean" }
-        }
+        },
+        "additionalProperties": false
       }
     },
     "role_history": {
@@ -31,8 +32,10 @@
           "stage": { "type": "string" },
           "started_at": { "type": "string" },
           "finished_at": { "type": ["string", "null"] }
-        }
+        },
+        "additionalProperties": false
       }
     }
-  }
+  },
+  "additionalProperties": false
 }

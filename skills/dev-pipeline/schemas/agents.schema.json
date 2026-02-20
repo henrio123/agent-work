@@ -16,8 +16,10 @@
           "allowed_actions": { "type": "array", "items": { "type": "string" } },
           "required_outputs": { "type": "array", "items": { "type": "string" } },
           "handoff_contract": { "type": "string" }
-        }
+        },
+        "additionalProperties": false
       }
     }
-  }
+  },
+  "additionalProperties": false
 }

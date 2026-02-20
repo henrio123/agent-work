@@ -22,7 +22,8 @@
         "run_folder": { "type": ["string", "null"] },
         "reason": { "type": "string" },
         "priority_bucket": { "type": "string" }
-      }
+      },
+      "additionalProperties": false
     },
     "run_folder": { "type": "string" },
     "autonomous": {
@@ -38,7 +39,8 @@
         "artifacts_written": { "type": "array" },
         "artifacts_skipped": { "type": "array" },
         "trace": { "type": "array" }
-      }
+      },
+      "additionalProperties": false
     }
   }
 }

@@ -36,6 +36,9 @@
     "tags": { "type": "array", "items": { "type": "string" } },
     "artifacts_expected": { "type": "array", "items": { "type": "string" } },
     "last_summary": { "type": ["object", "null"] },
-    "parent_id": { "type": ["string", "null"] }
-  }
+    "parent_id": { "type": ["string", "null"] },
+    "phase": { "type": "string" },
+    "stop_condition": { "type": "string" }
+  },
+  "additionalProperties": false
 }

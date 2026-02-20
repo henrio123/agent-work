@@ -20,7 +20,8 @@
         "run_folder": { "type": "string" },
         "reason": { "type": "string" },
         "priority_bucket": { "type": "string" }
-      }
+      },
+      "additionalProperties": false
     },
     "autonomous": {
       "type": "object",
@@ -35,7 +36,8 @@
         "artifacts_written": { "type": "array" },
         "artifacts_skipped": { "type": "array" },
         "trace": { "type": "array" }
-      }
+      },
+      "additionalProperties": false
     }
   }
 }

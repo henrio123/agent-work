@@ -34,6 +34,7 @@ SUITES=(
   "$TESTS_DIR/test-epic-completion.js"
   "$TESTS_DIR/test-blocked-reason.js"
   "$TESTS_DIR/test-dashboard-deps.js"
+  "$TESTS_DIR/test-schema-strictness.js"
 )
 
 total_passed=0

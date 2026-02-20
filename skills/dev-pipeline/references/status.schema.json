@@ -95,7 +95,8 @@
             "type": ["string", "null"],
             "description": "The user's answer, null if pending"
           }
-        }
+        },
+        "additionalProperties": false
       }
     },
     "stage_history": {
@@ -128,7 +129,8 @@
             "type": ["string", "null"],
             "description": "Agent ID that drove this stage, null if unassigned"
           }
-        }
+        },
+        "additionalProperties": false
       }
     },
     "responsible_agent": {
@@ -150,8 +152,10 @@
             "type": "string",
             "description": "CLI command to execute this action"
           }
-        }
+        },
+        "additionalProperties": false
       }
     }
-  }
+  },
+  "additionalProperties": false
 }

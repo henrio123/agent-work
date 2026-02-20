@@ -14,7 +14,8 @@
         "properties": {
           "name": { "type": "string" },
           "responsibility": { "type": "string" }
-        }
+        },
+        "additionalProperties": false
       }
     },
     "file_changes": {
@@ -29,7 +30,8 @@
             "enum": ["create", "modify", "delete"]
           },
           "description": { "type": "string" }
-        }
+        },
+        "additionalProperties": false
       }
     },
     "constraints": {
@@ -44,5 +46,6 @@
       "type": "array",
       "items": { "type": "string" }
     }
-  }
+  },
+  "additionalProperties": false
 }

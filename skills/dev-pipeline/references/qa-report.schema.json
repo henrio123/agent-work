@@ -19,12 +19,14 @@
             "type": "string",
             "enum": ["low", "medium", "high", "critical"]
           }
-        }
+        },
+        "additionalProperties": false
       }
     },
     "verdict": {
       "type": "string",
       "enum": ["pass", "fail", "conditional"]
     }
-  }
+  },
+  "additionalProperties": false
 }
