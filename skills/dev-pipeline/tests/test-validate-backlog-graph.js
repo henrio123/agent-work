@@ -312,9 +312,17 @@ test('output validates against schema (invalid graph with cycles)', () => {
 // -------------------------------------------------------------------------
 console.log('\n--- CLI ---');
 
-test('CLI outputs valid JSON for real project', () => {
-  const stdout = execFileSync('node', [SCRIPT, 'ai-organisation-os'], {
+test('CLI outputs valid JSON for temp project', () => {
+  const wsRoot = makeTempProjectsDir();
+  const projectsDir = path.join(wsRoot, 'projects');
+  fs.mkdirSync(projectsDir, { recursive: true });
+  makeProject(projectsDir, 'cli-test-proj', [
+    { id: 'A' },
+    { id: 'B', depends_on: ['A'] },
+  ]);
+  const stdout = execFileSync('node', [SCRIPT, 'cli-test-proj'], {
     encoding: 'utf8', timeout: 10000,
+    env: { ...process.env, WORKSPACE_ROOT: wsRoot },
   });
   const parsed = JSON.parse(stdout);
   assert(parsed.ok === true, 'should succeed');
@@ -338,8 +346,16 @@ test('CLI exits 1 for non-existent project', () => {
 });
 
 test('CLI output validates against schema', () => {
-  const stdout = execFileSync('node', [SCRIPT, 'ai-organisation-os'], {
+  const wsRoot = makeTempProjectsDir();
+  const projectsDir = path.join(wsRoot, 'projects');
+  fs.mkdirSync(projectsDir, { recursive: true });
+  makeProject(projectsDir, 'cli-schema-proj', [
+    { id: 'X', depends_on: ['Y'] },
+    { id: 'Y', depends_on: ['X'] },
+  ]);
+  const stdout = execFileSync('node', [SCRIPT, 'cli-schema-proj'], {
     encoding: 'utf8', timeout: 10000,
+    env: { ...process.env, WORKSPACE_ROOT: wsRoot },
   });
   const parsed = JSON.parse(stdout);
   const v = validateAgainstSchema(parsed, outputSchema);

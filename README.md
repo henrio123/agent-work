@@ -242,13 +242,13 @@ Stops on `.stop` file, max iterations, or no eligible work. Prints JSON summary 
 ### Validate a Project's Backlog Graph
 
 ```bash
-./tools/validate-backlog-graph.sh ai-organisation-os | jq
+./tools/validate-backlog-graph.sh my-project | jq
 ```
 
 ### Update Backlog Item Status (With Guards)
 
 ```bash
-./tools/backlog-update-status.sh ai-organisation-os TASK-01 done
+./tools/backlog-update-status.sh my-project TASK-01 done
 ```
 
 Rejects epic-to-done transitions when children are incomplete.
@@ -370,8 +370,8 @@ Timestamps and git HEAD are the only sources of non-determinism.
 # 1. Run the full test suite
 bash tools/test-all.sh
 
-# 2. Validate the real project graph
-./tools/validate-backlog-graph.sh ai-organisation-os | jq '.valid'
+# 2. Validate a project's backlog graph
+./tools/validate-backlog-graph.sh my-project | jq '.valid'
 
 # 3. Confirm dashboard produces valid output
 ./tools/project-dashboard.sh | jq '.ok'

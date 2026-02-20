@@ -1,8 +1,0 @@
-{
-  "project_id": "barger",
-  "title": "BARGER Booking Platform",
-  "description": "Booking flow improvements for Barger salon. Next.js, Prisma, i18n (ET/EN/RU).",
-  "repo_path": "/Users/henr/Desktop/barger",
-  "created_at": "2026-02-20T00:00:00Z",
-  "updated_at": "2026-02-20T00:00:00Z"
-}

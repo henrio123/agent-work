@@ -2,15 +2,17 @@
 #
 # This file documents the intended agent profiles and workspace setup.
 # It is NOT loaded automatically. Copy and adapt for your deployment.
+#
+# agent-work is a pure engine. All project state lives inside the
+# target repo under .claw/. Set WORKSPACE_ROOT to the target repo path.
 
 gateway:
-  workspace: /Users/henr/dev/agent-work
+  engine_dir: /path/to/agent-work
   skills:
     - path: skills/dev-pipeline
-    - path: skills/barger-flow
 
 # Agent profiles map roles to model configurations and constraints.
-# These correspond to the role definitions in projects/<id>/agents.json.
+# Role definitions live in <target-repo>/.claw/agents.json.
 agents:
   PM:
     model: claude-sonnet-4-6
@@ -19,7 +21,6 @@ agents:
       - "Cannot propose code changes"
     skills:
       - dev-pipeline
-      - barger-flow
 
   UX_ANALYST:
     model: claude-sonnet-4-6
@@ -27,7 +28,7 @@ agents:
     constraints:
       - "Cannot write implementation code"
     skills:
-      - barger-flow
+      - dev-pipeline
 
   ARCHITECT:
     model: claude-sonnet-4-6
@@ -36,7 +37,6 @@ agents:
       - "Cannot write implementation code"
     skills:
       - dev-pipeline
-      - barger-flow
 
   DEV:
     model: claude-sonnet-4-6
@@ -45,7 +45,6 @@ agents:
       - "Cannot change scope or acceptance criteria"
     skills:
       - dev-pipeline
-      - barger-flow
 
   QA:
     model: claude-sonnet-4-6
@@ -54,29 +53,26 @@ agents:
       - "Cannot change product decisions"
     skills:
       - dev-pipeline
-      - barger-flow
 
 # Command dispatch — maps slash commands to tool invocations.
-# The gateway resolves these via the skill's SKILL.md documentation.
+# All commands accept --workspace <target-repo> or WORKSPACE_ROOT env var.
 commands:
-  barger:
+  project:
     status:
-      tool: ./tools/project-dashboard.sh
+      tool: ./tools/project-dashboard.sh --workspace /path/to/target
       description: "Aggregated project dashboard"
     pick:
-      tool: ./tools/project-next-pick.sh
+      tool: ./tools/project-next-pick.sh --workspace /path/to/target
       description: "Deterministic backlog picker"
     drive:
-      tool: ./tools/project-next-drive.sh
-      args: ["--dry_run"]
+      tool: ./tools/project-next-drive.sh --workspace /path/to/target
       description: "One-shot project driver"
     loop:
-      tool: ./tools/project-drive-loop.sh
-      args: ["--sleep", "5", "--max", "100"]
+      tool: ./tools/project-drive-loop.sh --workspace /path/to/target --sleep 5 --max 100
       description: "Drive loop autopilot"
     create-ticket:
-      tool: ./tools/create-ticket.sh
+      tool: ./tools/create-ticket.sh --workspace /path/to/target
       description: "Create ticket + backlog item"
-    audit:
-      type: instructional
-      description: "UX audit — agent follows SKILL.md checklist"
+    init:
+      tool: ./tools/init-workspace.sh --workspace /path/to/target
+      description: "Initialize .claw/ in a target repo"
