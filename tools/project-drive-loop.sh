@@ -19,15 +19,15 @@ set -euo pipefail
 # Respects $WORKSPACE_ROOT/.stop — exits cleanly if present.
 # Prints a JSON summary on exit.
 
-SCRIPT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+source "$(dirname "$0")/_workspace.sh"
 DRIVE_SCRIPT="$SCRIPT_DIR/skills/dev-pipeline/scripts/project-next-drive.js"
 
-WORKSPACE_ROOT="${WORKSPACE_ROOT:-$SCRIPT_DIR}"
 SLEEP_SECONDS="${LOOP_SLEEP_SECONDS:-5}"
 MAX_ITERATIONS="${LOOP_MAX_ITERATIONS:-100}"
 PROJECT_ID="${LOOP_PROJECT_ID:-}"
 
-# Parse CLI args
+# Parse CLI args from ARGS (--workspace already consumed)
+set -- ${ARGS[@]+"${ARGS[@]}"}
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --sleep)    SLEEP_SECONDS="$2"; shift 2 ;;

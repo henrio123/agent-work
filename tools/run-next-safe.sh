@@ -4,10 +4,10 @@ set -euo pipefail
 # run-next-safe.sh — Safe autopilot: one step with decision trace.
 # Never creates runs, never overwrites artifacts, never advances implicitly.
 
-SCRIPT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+source "$(dirname "$0")/_workspace.sh"
 DP="$SCRIPT_DIR/skills/dev-pipeline/scripts/dev-pipeline.js"
 
-if [ -z "${1:-}" ]; then
+if [ ${#ARGS[@]} -eq 0 ]; then
   echo "Usage: ./tools/run-next-safe.sh <run_folder>"
   echo ""
   echo "Performs one safe orchestration step and prints a decision trace."
@@ -15,7 +15,7 @@ if [ -z "${1:-}" ]; then
   exit 1
 fi
 
-RUN_FOLDER="$1"
+RUN_FOLDER="${ARGS[0]}"
 
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "  run-next-safe: $RUN_FOLDER"

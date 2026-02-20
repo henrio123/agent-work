@@ -4,10 +4,10 @@ set -euo pipefail
 # run-next-loop.sh — Loop autopilot: repeat run_next_safe until stop.
 # Never creates runs, never overwrites artifacts, never advances implicitly.
 
-SCRIPT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+source "$(dirname "$0")/_workspace.sh"
 DP="$SCRIPT_DIR/skills/dev-pipeline/scripts/dev-pipeline.js"
 
-if [ -z "${1:-}" ]; then
+if [ ${#ARGS[@]} -eq 0 ]; then
   echo "Usage: ./tools/run-next-loop.sh <run_folder> [--max_steps N]"
   echo ""
   echo "Repeats safe autopilot steps until a stop condition is reached."
@@ -15,13 +15,13 @@ if [ -z "${1:-}" ]; then
   exit 1
 fi
 
-RUN_FOLDER="$1"
-shift
+RUN_FOLDER="${ARGS[0]}"
+REMAINING=(${ARGS[@]:1+"${ARGS[@]:1}"})
 
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "  run-next-loop: $RUN_FOLDER"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
-node "$DP" run_next_loop "$RUN_FOLDER" "$@"
+node "$DP" run_next_loop "$RUN_FOLDER" ${REMAINING[@]+"${REMAINING[@]}"}
 
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"

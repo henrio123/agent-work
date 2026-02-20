@@ -1,2 +1,4 @@
 #!/usr/bin/env bash
-exec node "$(dirname "$0")/../skills/dev-pipeline/scripts/agent-state.js" "$@"
+set -euo pipefail
+source "$(dirname "$0")/_workspace.sh"
+exec node "$SCRIPT_DIR/skills/dev-pipeline/scripts/agent-state.js" ${ARGS[@]+"${ARGS[@]}"}

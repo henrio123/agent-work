@@ -4,10 +4,10 @@ set -euo pipefail
 # run-next.sh — Single entry command for advancing a pipeline run.
 # Wraps orchestrate_one and prints human-readable instructions.
 
-SCRIPT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+source "$(dirname "$0")/_workspace.sh"
 DP="$SCRIPT_DIR/skills/dev-pipeline/scripts/dev-pipeline.js"
 
-if [ -z "${1:-}" ]; then
+if [ ${#ARGS[@]} -eq 0 ]; then
   echo "Usage: ./tools/run-next.sh <run_folder>"
   echo ""
   echo "Runs orchestrate_one and prints the next action."
@@ -18,7 +18,7 @@ if [ -z "${1:-}" ]; then
   exit 1
 fi
 
-RUN_FOLDER="$1"
+RUN_FOLDER="${ARGS[0]}"
 OUTPUT=$(node "$DP" orchestrate_one "$RUN_FOLDER")
 
 # Parse key fields from JSON output

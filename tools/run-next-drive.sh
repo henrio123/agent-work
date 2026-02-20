@@ -5,7 +5,5 @@ set -euo pipefail
 # Picks next eligible run, runs autonomous runner once, outputs JSON.
 # Never backgrounds, never loops forever, never creates run folders.
 
-SCRIPT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-DRIVE="$SCRIPT_DIR/skills/dev-pipeline/scripts/run-next-drive.js"
-
-exec node "$DRIVE" "$@"
+source "$(dirname "$0")/_workspace.sh"
+exec node "$SCRIPT_DIR/skills/dev-pipeline/scripts/run-next-drive.js" ${ARGS[@]+"${ARGS[@]}"}
