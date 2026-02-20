@@ -8,9 +8,17 @@ Rules for how work is done in this system. These rules prevent scope drift, lost
 
 No code, schema, tool, or documentation change is made without a ticket. Tickets live in `tickets/<ticket_id>.md`. The ticket file must exist before work begins. Use `./tools/ticket-guard.sh <ticket_id>` to verify.
 
-### 1.2 Every Tool Output Has a Schema
+### 1.2 Every JSON Structure Has a Schema
 
-Every tool that produces JSON output must have a corresponding schema in `skills/dev-pipeline/schemas/` with `additionalProperties: false`. The schema defines the contract. If the output shape changes, the schema must change first.
+Every JSON structure in the system must have a corresponding schema with `additionalProperties: false`. This rule covers three categories:
+
+| Category | Location | Examples |
+|---|---|---|
+| **Output schemas** | `skills/dev-pipeline/schemas/*.output.schema.json` | Tool command stdout contracts |
+| **Input schemas** | `skills/dev-pipeline/schemas/*.schema.json` | `backlog-item`, `project`, `agents` |
+| **Reference schemas** | `skills/dev-pipeline/references/*.schema.json` | `status`, `pm-brief`, `qa-report` |
+
+All three categories require `additionalProperties: false` at the root level and on any nested object that declares `properties`. If the structure changes, the schema must change first. Fields present in real data but absent from the schema are a governance violation.
 
 ### 1.3 Every Schema Has Tests
 
@@ -32,7 +40,7 @@ A ticket is done when all of the following are true:
 2. `bash tools/test-all.sh` passes with 0 failures.
 3. New tools have shell wrappers in `tools/`.
 4. New tools have tests in `skills/dev-pipeline/tests/`.
-5. New output schemas are in `skills/dev-pipeline/schemas/` with `additionalProperties: false`.
+5. New schemas have `additionalProperties: false` per Rule 1.2.
 6. `skills/dev-pipeline/SKILL.md` is updated if new tools or commands were added.
 7. Changes are committed with the commit message specified in the ticket.
 8. `git status` shows a clean working tree after the commit.
