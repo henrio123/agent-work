@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Capability Manifest",
+  "description": "Schema for capability.json files that define pipeline capability plugins.",
+  "type": "object",
+  "required": ["name", "version", "stages"],
+  "additionalProperties": false,
+  "properties": {
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Unique capability identifier (must match directory name)."
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$",
+      "description": "Semantic version of this capability."
+    },
+    "description": {
+      "type": "string",
+      "description": "Human-readable description of this capability."
+    },
+    "stages": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["name", "after", "role", "requiredArtifacts", "taskFile", "template"],
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Stage identifier (must not conflict with default stages)."
+          },
+          "after": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Name of the stage after which this stage is inserted."
+          },
+          "role": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Role assigned to this stage."
+          },
+          "requiredArtifacts": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Artifact filenames required to pass this stage's gate."
+          },
+          "taskFile": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Filename for the generated task file."
+          },
+          "template": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Template filename used to generate the task file."
+          }
+        }
+      }
+    },
+    "artifactSchemas": {
+      "type": "object",
+      "additionalProperties": { "type": "string" },
+      "description": "Map of artifact filename → schema filename for validation."
+    },
+    "stageMigrations": {
+      "type": "object",
+      "additionalProperties": { "type": "string" },
+      "description": "Map of old stage name → new stage name for backward compatibility."
+    }
+  }
+}

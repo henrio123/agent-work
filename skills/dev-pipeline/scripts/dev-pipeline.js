@@ -589,7 +589,7 @@ function cmdStaleDelete(args) {
 // ---------------------------------------------------------------------------
 // Orchestration: stage machine, roles, schema validation
 // ---------------------------------------------------------------------------
-const STAGE_CONFIG = {
+const DEFAULT_STAGES = {
   'analyze': {
     role: 'Analyst',
     requiredArtifacts: ['10-pm-brief.json'],
@@ -640,13 +640,41 @@ function migrateStage(stage) {
   return STAGE_MIGRATION[stage] || stage;
 }
 
-const ARTIFACT_SCHEMA_MAP = {
+const DEFAULT_ARTIFACT_SCHEMA_MAP = {
   '10-pm-brief.json': 'pm-brief.schema.json',
   '20-arch-design.json': 'arch-design.schema.json',
   '41-dev-notes.json': 'dev-notes.schema.json',
   '50-qa-report.json': 'qa-report.schema.json',
   '60-review-report.json': 'review-report.schema.json',
 };
+
+// ---------------------------------------------------------------------------
+// Capability registry: merge workspace capabilities into stage config
+// ---------------------------------------------------------------------------
+const { loadCapabilities, resolveTemplatePath, resolveSchemaPath } = require('./capability-registry.js');
+
+let STAGE_CONFIG = { ...DEFAULT_STAGES };
+let ARTIFACT_SCHEMA_MAP = { ...DEFAULT_ARTIFACT_SCHEMA_MAP };
+let _capabilityDirs = [];
+
+// Synchronous init: merge capabilities at load time
+(function _initRegistry() {
+  try {
+    const result = loadCapabilities(WORKSPACE_ROOT, ENGINE_ROOT, DEFAULT_STAGES, DEFAULT_ARTIFACT_SCHEMA_MAP);
+    if (result.capabilityDirs.length > 0) {
+      STAGE_CONFIG = result.stageConfig;
+      Object.assign(ARTIFACT_SCHEMA_MAP, result.artifactSchemaMap);
+      Object.assign(STAGE_MIGRATION, result.stageMigrations);
+      _capabilityDirs = result.capabilityDirs;
+    }
+  } catch (e) {
+    // Fail-loud: if capabilities.json exists but is broken, crash immediately
+    if (fs.existsSync(path.join(WORKSPACE_ROOT, '.claw', 'capabilities.json'))) {
+      throw e;
+    }
+    // Otherwise no capabilities file — ignore
+  }
+})();
 
 // Minimal JSON schema validator (supports type, required, properties, enum, items, additionalProperties)
 function validateSchema(value, schema, pathStr) {
@@ -702,8 +730,8 @@ function validateSchema(value, schema, pathStr) {
 function loadArtifactSchema(artifactFilename) {
   const schemaName = ARTIFACT_SCHEMA_MAP[artifactFilename];
   if (!schemaName) return null;
-  const schemaPath = path.join(ENGINE_ROOT, 'skills', 'dev-pipeline', 'references', schemaName);
-  if (!fs.existsSync(schemaPath)) return null;
+  const schemaPath = resolveSchemaPath(schemaName, _capabilityDirs, ENGINE_ROOT);
+  if (!schemaPath) return null;
   return readJSON(schemaPath);
 }
 
@@ -793,10 +821,7 @@ function cmdNextStage(runFolder) {
 }
 
 function renderTemplate(templateName, vars) {
-  const templatePath = path.join(ENGINE_ROOT, 'templates', templateName);
-  if (!fs.existsSync(templatePath)) {
-    throw new Error(`Template not found: templates/${templateName}`);
-  }
+  const templatePath = resolveTemplatePath(templateName, _capabilityDirs, ENGINE_ROOT);
   let content = fs.readFileSync(templatePath, 'utf8');
   content = content
     .replace(/\{\{TICKET_ID\}\}/g, vars.ticket_id)
@@ -1656,6 +1681,7 @@ function checkRoleForStage(agentId, stage, options) {
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     TOOL_VERSION, STAGE_CONFIG, STAGE_MIGRATION, ARTIFACT_SCHEMA_MAP, WORKSPACE_ROOT,
+    DEFAULT_STAGES, DEFAULT_ARTIFACT_SCHEMA_MAP, ENGINE_ROOT,
     generateMinimalValue, validateSchema, resolveRef, migrateStage,
     getNextStageInfo, normalizeStatus, getGitHead,
     safePath, readJSON, writeJSON, readStatus, loadArtifactSchema, validateArtifact,
