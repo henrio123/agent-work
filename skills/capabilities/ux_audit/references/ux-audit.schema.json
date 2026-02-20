@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "UX Audit",
-  "description": "Schema for 15-ux-audit.json — optional UX audit artifact (capability-provided, not a core stage).",
+  "description": "Schema for 15-ux-audit.json — UX audit artifact provided by the ux_audit capability.",
   "type": "object",
   "required": ["ticket_id", "flow_name", "routes_audited", "findings", "summary"],
   "properties": {

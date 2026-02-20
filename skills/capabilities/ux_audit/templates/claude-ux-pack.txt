@@ -7,7 +7,7 @@ ROLE: UX Analyst
 ---
 
 GOAL
-Produce a UX audit of the booking flow for ticket {{TICKET_ID}}.
+Produce a UX audit for ticket {{TICKET_ID}}.
 Identify friction points, accessibility issues, and competitor parity gaps.
 Output a structured audit that the Architect can use to inform the technical design.
 
@@ -19,15 +19,14 @@ Do not change the PM brief scope or acceptance criteria.
 INPUTS ALREADY PRESENT
 Read {{RUN_FOLDER}}/10-pm-brief.json for scope, acceptance criteria, and constraints.
 Read {{RUN_FOLDER}}/00-intake.json for original ticket details.
-If available, read .claw/context/booking-flow.context.json for route map, component graph, i18n keys, analytics events, and UX signals.
-If available, read .claw/artifacts/pm/{{TICKET_ID}}_scope.json for in-scope routes.
+If available, read .claw/context/*.context.json for route map, component graph, i18n keys, analytics events, and UX signals.
 
 STOP CONDITION BEFORE WORK
 If 10-pm-brief.json is missing, stop and report. PM must complete first.
 
 STEPS
 1. Read the PM brief to understand scope, constraints, and success metrics.
-2. Read the context pack (if available) to understand routes, components, and existing UX signals.
+2. Read any available context packs to understand routes, components, and existing UX signals.
 3. For each in-scope route/page, analyze:
    a. User flow: what actions are available, what decisions the user must make
    b. Friction signals: forms, validation, error states, loading states, disabled states
@@ -47,16 +46,16 @@ OUTPUT
 Create {{RUN_FOLDER}}/15-ux-audit.json with this structure:
 {
   "ticket_id": "{{TICKET_ID}}",
-  "flow_name": "booking-flow",
-  "routes_audited": ["/book", "/book/barber", "/book/time", "/book/confirm", "/book/success"],
+  "flow_name": "<flow-under-audit>",
+  "routes_audited": ["<detected routes>"],
   "findings": [
     {
       "id": "UX-001",
-      "route": "/book/confirm",
+      "route": "/example",
       "severity": "high",
       "category": "form-friction",
       "description": "Clear description of the issue",
-      "evidence": ["src/app/book/confirm/page.tsx"],
+      "evidence": ["src/app/example/page.tsx"],
       "recommendation": "Proposed improvement",
       "impact": "Expected conversion impact"
     }

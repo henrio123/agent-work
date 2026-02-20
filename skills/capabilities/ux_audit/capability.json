@@ -1,0 +1,21 @@
+{
+  "name": "ux_audit",
+  "version": "1.0.0",
+  "description": "Injects a UX audit stage between analyze and plan. Produces a structured audit of user flows, friction points, accessibility issues, and competitor parity gaps.",
+  "stages": [
+    {
+      "name": "ux-audit",
+      "after": "analyze",
+      "role": "UX Analyst",
+      "requiredArtifacts": ["15-ux-audit.json"],
+      "taskFile": "36-ux-audit-task.txt",
+      "template": "claude-ux-pack.txt"
+    }
+  ],
+  "artifactSchemas": {
+    "15-ux-audit.json": "ux-audit.schema.json"
+  },
+  "stageMigrations": {
+    "ux-ready": "ux-audit"
+  }
+}
