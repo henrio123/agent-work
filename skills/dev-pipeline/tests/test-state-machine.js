@@ -19,7 +19,7 @@ const {
   getNextStageInfo, normalizeStatus, validateSchema,
 } = require('../scripts/dev-pipeline.js');
 
-const WORKSPACE_ROOT = path.resolve(os.homedir(), 'dev', 'agent-work');
+const WORKSPACE_ROOT = process.env.WORKSPACE_ROOT || path.resolve(os.homedir(), 'dev', 'agent-work');
 
 let passed = 0;
 let failed = 0;

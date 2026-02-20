@@ -10,7 +10,7 @@ const os = require('node:os');
 // Config
 // ---------------------------------------------------------------------------
 const PORT = parseInt(process.argv.find((a) => a.startsWith('--port='))?.split('=')[1] || '18790', 10);
-const WORKSPACE_ROOT = path.resolve(os.homedir(), 'dev', 'agent-work');
+const WORKSPACE_ROOT = process.env.WORKSPACE_ROOT || path.resolve(os.homedir(), 'dev', 'agent-work');
 
 function safePath(p) {
   const resolved = path.resolve(WORKSPACE_ROOT, p);

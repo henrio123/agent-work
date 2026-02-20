@@ -11,7 +11,7 @@ const TOOL_VERSION = '0.1.0';
 // ---------------------------------------------------------------------------
 // Security: all paths must resolve inside WORKSPACE_ROOT
 // ---------------------------------------------------------------------------
-const WORKSPACE_ROOT = path.resolve(os.homedir(), 'dev', 'agent-work');
+const WORKSPACE_ROOT = process.env.WORKSPACE_ROOT || path.resolve(os.homedir(), 'dev', 'agent-work');
 
 function safePath(p) {
   const resolved = path.resolve(WORKSPACE_ROOT, p);

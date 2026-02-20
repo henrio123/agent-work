@@ -11,7 +11,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
 
-const WORKSPACE_ROOT = path.resolve(os.homedir(), 'dev', 'agent-work');
+const WORKSPACE_ROOT = process.env.WORKSPACE_ROOT || path.resolve(os.homedir(), 'dev', 'agent-work');
 const RUNS_DIR = path.join(WORKSPACE_ROOT, 'runs');
 const INDEX_SCRIPT = path.resolve(__dirname, '..', 'scripts', 'run-index.js');
 const INDEX_SHELL = path.join(WORKSPACE_ROOT, 'tools', 'run-index.sh');

@@ -33,7 +33,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
 
-const WORKSPACE_ROOT = path.resolve(os.homedir(), 'dev', 'agent-work');
+const WORKSPACE_ROOT = process.env.WORKSPACE_ROOT || path.resolve(os.homedir(), 'dev', 'agent-work');
 const { buildProjectIndex } = require(path.resolve(__dirname, 'project-index.js'));
 
 const STATUS_RANK = { in_progress: 0, todo: 1, blocked: 2, done: 3 };

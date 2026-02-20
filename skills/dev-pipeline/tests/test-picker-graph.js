@@ -10,7 +10,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
 
-const WORKSPACE_ROOT = path.resolve(os.homedir(), 'dev', 'agent-work');
+const WORKSPACE_ROOT = process.env.WORKSPACE_ROOT || path.resolve(os.homedir(), 'dev', 'agent-work');
 const PICK_SCRIPT = path.resolve(__dirname, '..', 'scripts', 'project-next-pick.js');
 
 const { pickNextTask, classifyTask } = require(PICK_SCRIPT);

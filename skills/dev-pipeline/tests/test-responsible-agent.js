@@ -11,7 +11,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
 
-const WORKSPACE_ROOT = path.resolve(os.homedir(), 'dev', 'agent-work');
+const WORKSPACE_ROOT = process.env.WORKSPACE_ROOT || path.resolve(os.homedir(), 'dev', 'agent-work');
 const DP_SCRIPT = path.resolve(__dirname, '..', 'scripts', 'dev-pipeline.js');
 const AGENT_SCRIPT = path.resolve(__dirname, '..', 'scripts', 'agent-state.js');
 

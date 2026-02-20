@@ -11,7 +11,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
 
-const WORKSPACE_ROOT = path.resolve(os.homedir(), 'dev', 'agent-work');
+const WORKSPACE_ROOT = process.env.WORKSPACE_ROOT || path.resolve(os.homedir(), 'dev', 'agent-work');
 const DASHBOARD_SCRIPT = path.resolve(__dirname, '..', 'scripts', 'project-dashboard.js');
 const DASHBOARD_SHELL = path.join(WORKSPACE_ROOT, 'tools', 'project-dashboard.sh');
 

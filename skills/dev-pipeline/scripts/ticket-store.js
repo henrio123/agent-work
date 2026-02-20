@@ -22,7 +22,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
 
-const WORKSPACE_ROOT = path.resolve(os.homedir(), 'dev', 'agent-work');
+const WORKSPACE_ROOT = process.env.WORKSPACE_ROOT || path.resolve(os.homedir(), 'dev', 'agent-work');
 const TICKETS_DIR = path.join(WORKSPACE_ROOT, 'tickets');
 
 // ---------------------------------------------------------------------------

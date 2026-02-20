@@ -12,7 +12,7 @@ const path = require('node:path');
 const os = require('node:os');
 
 const WATCH = path.resolve(__dirname, '..', 'scripts', 'watch-run.js');
-const WORKSPACE_ROOT = path.resolve(os.homedir(), 'dev', 'agent-work');
+const WORKSPACE_ROOT = process.env.WORKSPACE_ROOT || path.resolve(os.homedir(), 'dev', 'agent-work');
 const RUNS_DIR = path.join(WORKSPACE_ROOT, 'runs');
 
 const { watchRun } = require(path.resolve(__dirname, '..', 'scripts', 'watch-run.js'));

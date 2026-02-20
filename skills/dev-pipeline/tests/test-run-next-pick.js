@@ -11,7 +11,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
 
-const WORKSPACE_ROOT = path.resolve(os.homedir(), 'dev', 'agent-work');
+const WORKSPACE_ROOT = process.env.WORKSPACE_ROOT || path.resolve(os.homedir(), 'dev', 'agent-work');
 const RUNS_DIR = path.join(WORKSPACE_ROOT, 'runs');
 const PICK_SCRIPT = path.resolve(__dirname, '..', 'scripts', 'run-next-pick.js');
 const PICK_SHELL = path.join(WORKSPACE_ROOT, 'tools', 'run-next-pick.sh');
