@@ -174,7 +174,7 @@ test('dev-ready with task file but no artifacts stops with needs_artifacts', () 
       { stage: 'dev-ready', started_at: '2026-01-01T00:00:02.000Z', finished_at: null, artifact_paths: [], role: 'Dev' },
     ],
   });
-  fs.writeFileSync(path.join(absDir, '33-dev-claude-task.txt'), 'dev task', 'utf8');
+  fs.writeFileSync(path.join(absDir, '34-dev-claude-task.txt'), 'dev task', 'utf8');
   const r = runCmd('run_next_loop', relDir);
   if (r.json.final_action !== 'needs_artifacts') throw new Error(`expected needs_artifacts, got ${r.json.final_action}`);
   if (r.json.steps_run !== 1) throw new Error(`expected 1 step`);
@@ -299,7 +299,7 @@ test('loop is idempotent on needs_artifacts', () => {
       { stage: 'dev-ready', started_at: '2026-01-01T00:00:00.000Z', finished_at: null, artifact_paths: [], role: 'Dev' },
     ],
   });
-  fs.writeFileSync(path.join(absDir, '33-dev-claude-task.txt'), 'dev task', 'utf8');
+  fs.writeFileSync(path.join(absDir, '34-dev-claude-task.txt'), 'dev task', 'utf8');
   const r1 = runCmd('run_next_loop', relDir);
   const r2 = runCmd('run_next_loop', relDir);
   if (r1.json.final_action !== 'needs_artifacts') throw new Error('r1 not needs_artifacts');

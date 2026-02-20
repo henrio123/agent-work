@@ -69,8 +69,8 @@ function writeArtifact(name, content) {
 // -------------------------------------------------------------------------
 console.log('\n--- STAGE_CONFIG structure ---');
 
-test('STAGE_CONFIG has all 5 role stages', () => {
-  const expected = ['pm-ready', 'arch-ready', 'dev-ready', 'qa-ready', 'review'];
+test('STAGE_CONFIG has all 6 role stages', () => {
+  const expected = ['pm-ready', 'ux-ready', 'arch-ready', 'dev-ready', 'qa-ready', 'review'];
   for (const stage of expected) {
     assert.ok(STAGE_CONFIG[stage], `missing ${stage}`);
   }
@@ -86,7 +86,7 @@ test('Each stage has role, requiredArtifacts, taskFile, template, next', () => {
   }
 });
 
-test('Stage chain is linear: pm-ready → arch-ready → dev-ready → qa-ready → review → done', () => {
+test('Stage chain is linear: pm-ready → ux-ready → arch-ready → dev-ready → qa-ready → review → done', () => {
   let stage = 'pm-ready';
   const visited = [];
   while (stage !== 'done') {
@@ -95,7 +95,7 @@ test('Stage chain is linear: pm-ready → arch-ready → dev-ready → qa-ready 
     assert.ok(config, `no config for ${stage}`);
     stage = config.next;
   }
-  assert.deepStrictEqual(visited, ['pm-ready', 'arch-ready', 'dev-ready', 'qa-ready', 'review']);
+  assert.deepStrictEqual(visited, ['pm-ready', 'ux-ready', 'arch-ready', 'dev-ready', 'qa-ready', 'review']);
 });
 
 // -------------------------------------------------------------------------
@@ -137,7 +137,7 @@ test('pm-ready without artifacts → gates_pass false, missing artifacts', () =>
   assert.ok(info.missing_artifacts.includes('10-pm-brief.json'));
 });
 
-test('pm-ready with valid artifact → gates_pass true, next arch-ready', () => {
+test('pm-ready with valid artifact → gates_pass true, next ux-ready', () => {
   writeArtifact('10-pm-brief.json', {
     ticket_id: 'TEST-1', title: 't', project: 'p',
     problem_statement: 'x', scope: 'y', acceptance_criteria: [],
@@ -145,7 +145,7 @@ test('pm-ready with valid artifact → gates_pass true, next arch-ready', () => 
   const status = makeStatus('pm-ready');
   const info = getNextStageInfo(TMP_RUN, status);
   assert.strictEqual(info.gates_pass, true);
-  assert.strictEqual(info.next_stage, 'arch-ready');
+  assert.strictEqual(info.next_stage, 'ux-ready');
 });
 
 test('arch-ready without artifact → gates_pass false', () => {

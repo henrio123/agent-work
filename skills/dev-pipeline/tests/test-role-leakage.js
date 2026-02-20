@@ -426,50 +426,50 @@ test('advance --agent_id sets responsible_agent and stage_history agent_id', () 
     '--agent_id', '_leak_ra_pm3'], { encoding: 'utf8' });
   const parsed = JSON.parse(out);
   assert(parsed.ok === true, 'should succeed');
-  assert(parsed.advanced_to === 'arch-ready', `should advance to arch-ready, got ${parsed.advanced_to}`);
+  assert(parsed.advanced_to === 'ux-ready', `should advance to ux-ready, got ${parsed.advanced_to}`);
 
   const status = JSON.parse(fs.readFileSync(path.join(runFolder, 'status.json'), 'utf8'));
   assert(status.responsible_agent === '_leak_ra_pm3', `responsible_agent should be _leak_ra_pm3, got: ${status.responsible_agent}`);
 
-  // Find the arch-ready stage_history entry
-  const archEntry = status.stage_history.find(e => e.stage === 'arch-ready');
-  assert(archEntry, 'should have arch-ready stage_history entry');
-  assert(archEntry.agent_id === '_leak_ra_pm3', `arch-ready agent_id should be _leak_ra_pm3, got: ${archEntry.agent_id}`);
+  // Find the ux-ready stage_history entry
+  const uxEntry = status.stage_history.find(e => e.stage === 'ux-ready');
+  assert(uxEntry, 'should have ux-ready stage_history entry');
+  assert(uxEntry.agent_id === '_leak_ra_pm3', `ux-ready agent_id should be _leak_ra_pm3, got: ${uxEntry.agent_id}`);
 });
 
 test('responsible_agent persists across multi-stage advance chain', () => {
   createWorkspaceAgent('_leak_ra_chain_pm', 'PM');
+  createWorkspaceAgent('_leak_ra_chain_ux', 'UX');
   createWorkspaceAgent('_leak_ra_chain_arch', 'Architect');
 
   // Create run at pm-ready with PM agent
   const runFolder = createWorkspaceRun('pm-ready');
   createMinimalArtifact(runFolder, 'pm-brief.schema.json', '10-pm-brief.json', { ticket_id: 'TEST-LEAK' });
 
-  // PM advances pm-ready → arch-ready
+  // PM advances pm-ready → ux-ready
   execFileSync('node', [DP_SCRIPT, 'advance', runFolder, '--confirm',
     '--agent_id', '_leak_ra_chain_pm'], { encoding: 'utf8' });
 
   let status = JSON.parse(fs.readFileSync(path.join(runFolder, 'status.json'), 'utf8'));
   assert(status.responsible_agent === '_leak_ra_chain_pm', 'responsible_agent should be PM after first advance');
-  assert(status.current_stage === 'arch-ready', 'should be at arch-ready');
+  assert(status.current_stage === 'ux-ready', 'should be at ux-ready');
 
-  // Architect records artifact and advances arch-ready → dev-ready
-  createMinimalArtifact(runFolder, 'arch-design.schema.json', '20-arch-design.json', { ticket_id: 'TEST-LEAK' });
+  // UX records artifact and advances ux-ready → arch-ready
+  createMinimalArtifact(runFolder, 'ux-audit.schema.json', '15-ux-audit.json', { ticket_id: 'TEST-LEAK' });
   execFileSync('node', [DP_SCRIPT, 'record_artifact', runFolder,
-    path.join(runFolder, '20-arch-design.json'), '--agent_id', '_leak_ra_chain_arch'], { encoding: 'utf8' });
+    path.join(runFolder, '15-ux-audit.json'), '--agent_id', '_leak_ra_chain_ux'], { encoding: 'utf8' });
   execFileSync('node', [DP_SCRIPT, 'advance', runFolder, '--confirm',
-    '--agent_id', '_leak_ra_chain_arch'], { encoding: 'utf8' });
+    '--agent_id', '_leak_ra_chain_ux'], { encoding: 'utf8' });
 
   status = JSON.parse(fs.readFileSync(path.join(runFolder, 'status.json'), 'utf8'));
-  assert(status.responsible_agent === '_leak_ra_chain_arch', `responsible_agent should be Architect, got: ${status.responsible_agent}`);
-  assert(status.current_stage === 'dev-ready', 'should be at dev-ready');
+  assert(status.responsible_agent === '_leak_ra_chain_ux', `responsible_agent should be UX, got: ${status.responsible_agent}`);
+  assert(status.current_stage === 'arch-ready', 'should be at arch-ready');
 
-  // Verify all stage_history entries have agent_id
-  const pmEntry = status.stage_history.find(e => e.stage === 'pm-ready');
+  // Verify stage_history entries have correct agent_ids
+  const uxEntry = status.stage_history.find(e => e.stage === 'ux-ready');
   const archEntry = status.stage_history.find(e => e.stage === 'arch-ready');
-  const devEntry = status.stage_history.find(e => e.stage === 'dev-ready');
-  assert(archEntry && archEntry.agent_id === '_leak_ra_chain_pm', 'arch-ready entry should have PM agent_id');
-  assert(devEntry && devEntry.agent_id === '_leak_ra_chain_arch', 'dev-ready entry should have Architect agent_id');
+  assert(uxEntry && uxEntry.agent_id === '_leak_ra_chain_pm', 'ux-ready entry should have PM agent_id');
+  assert(archEntry && archEntry.agent_id === '_leak_ra_chain_ux', 'arch-ready entry should have UX agent_id');
 });
 
 // ---------------------------------------------------------------------------

@@ -188,17 +188,17 @@ test('advance with --agent_id updates responsible_agent and stage_history', () =
     '--agent_id', '_test_ra_pm_adv'], { encoding: 'utf8' });
   const parsed = JSON.parse(out);
   assert(parsed.ok === true, 'should be ok');
-  assert(parsed.advanced_to === 'arch-ready', 'should advance to arch-ready');
+  assert(parsed.advanced_to === 'ux-ready', 'should advance to ux-ready');
 
   const status = JSON.parse(fs.readFileSync(path.join(runFolder, 'status.json'), 'utf8'));
   assert(status.responsible_agent === '_test_ra_pm_adv',
     `responsible_agent should be _test_ra_pm_adv, got: ${status.responsible_agent}`);
 
-  // Find the arch-ready stage_history entry
-  const archEntry = status.stage_history.find(e => e.stage === 'arch-ready');
-  assert(archEntry, 'should have arch-ready stage_history entry');
-  assert(archEntry.agent_id === '_test_ra_pm_adv',
-    `arch-ready agent_id should be _test_ra_pm_adv, got: ${archEntry.agent_id}`);
+  // Find the ux-ready stage_history entry
+  const uxEntry = status.stage_history.find(e => e.stage === 'ux-ready');
+  assert(uxEntry, 'should have ux-ready stage_history entry');
+  assert(uxEntry.agent_id === '_test_ra_pm_adv',
+    `ux-ready agent_id should be _test_ra_pm_adv, got: ${uxEntry.agent_id}`);
 });
 
 test('advance without --agent_id preserves existing responsible_agent', () => {
@@ -222,9 +222,9 @@ test('advance without --agent_id preserves existing responsible_agent', () => {
     `responsible_agent should be preserved as original-agent, got: ${status.responsible_agent}`);
 
   // stage_history entry should have agent_id: null
-  const archEntry = status.stage_history.find(e => e.stage === 'arch-ready');
-  assert(archEntry, 'should have arch-ready entry');
-  assert(archEntry.agent_id === null, `agent_id should be null, got: ${archEntry.agent_id}`);
+  const uxEntry = status.stage_history.find(e => e.stage === 'ux-ready');
+  assert(uxEntry, 'should have ux-ready entry');
+  assert(uxEntry.agent_id === null, `agent_id should be null, got: ${uxEntry.agent_id}`);
 });
 
 // ---------------------------------------------------------------------------

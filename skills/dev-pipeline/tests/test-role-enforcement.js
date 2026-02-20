@@ -277,7 +277,7 @@ test('advance accepts correct role via --agent_id', () => {
     '--agent_id', '_test_cli_pm_adv'], { encoding: 'utf8' });
   const parsed = JSON.parse(out);
   assert(parsed.ok === true, 'should be ok');
-  assert(parsed.advanced_to === 'arch-ready', 'should advance to arch-ready');
+  assert(parsed.advanced_to === 'ux-ready', 'should advance to ux-ready');
 });
 
 // ---------------------------------------------------------------------------

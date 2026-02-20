@@ -222,7 +222,7 @@ test('dev-ready: scaffold adapter writes diff and notes, advances to qa-ready', 
       { stage: 'dev-ready', started_at: '2026-01-01T00:00:02.000Z', finished_at: null, artifact_paths: [], role: 'Dev' },
     ],
   });
-  fs.writeFileSync(path.join(absDir, '33-dev-claude-task.txt'), 'Dev task content', 'utf8');
+  fs.writeFileSync(path.join(absDir, '34-dev-claude-task.txt'), 'Dev task content', 'utf8');
 
   const result = runAutonomous(relDir, {
     maxSteps: 10,

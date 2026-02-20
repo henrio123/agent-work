@@ -193,10 +193,10 @@ test('pm-ready with valid artifact delegates to orchestrate_one', () => {
     problem_statement: 'x', scope: 'y', acceptance_criteria: [],
   }, null, 2), 'utf8');
   const r = runCmd('run_next_safe', relDir);
-  // orchestrate_one should advance to arch-ready
+  // orchestrate_one should advance to ux-ready
   if (!r.json) throw new Error(`No JSON: stdout=${r.stdout} stderr=${r.stderr}`);
   if (r.json.action !== 'advanced_and_generated') throw new Error(`expected advanced_and_generated, got ${r.json.action}`);
-  if (r.json.advanced_to !== 'arch-ready') throw new Error(`expected arch-ready, got ${r.json.advanced_to}`);
+  if (r.json.advanced_to !== 'ux-ready') throw new Error(`expected ux-ready, got ${r.json.advanced_to}`);
 });
 
 // -------------------------------------------------------------------------
