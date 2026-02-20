@@ -24,7 +24,6 @@ const path = require('node:path');
 const os = require('node:os');
 
 const WORKSPACE_ROOT = process.env.WORKSPACE_ROOT || path.resolve(os.homedir(), 'dev', 'agent-work');
-const PROJECTS_DIR = path.join(WORKSPACE_ROOT, 'projects');
 
 function safePath(p, workspaceRoot) {
   const root = workspaceRoot || WORKSPACE_ROOT;
@@ -52,11 +51,10 @@ function loadTaskPackSchema() {
 // ---------------------------------------------------------------------------
 function generateTaskPack(projectId, taskId, options = {}) {
   const workspaceRoot = options.workspaceRoot || WORKSPACE_ROOT;
-  const projectsDir = options.projectsDir || path.join(workspaceRoot, 'projects');
-  const projectDir = path.join(projectsDir, projectId);
+  const clawRoot = path.join(workspaceRoot, '.claw');
 
   // Validate project exists
-  const projectJsonPath = path.join(projectDir, 'project.json');
+  const projectJsonPath = options.projectJsonPath || path.join(clawRoot, 'project.json');
   if (!fs.existsSync(projectJsonPath)) {
     return { ok: false, error: `project ${projectId} does not exist` };
   }
@@ -69,7 +67,7 @@ function generateTaskPack(projectId, taskId, options = {}) {
   }
 
   // Find the backlog item
-  const backlogDir = path.join(projectDir, 'backlog');
+  const backlogDir = options.backlogDir || path.join(clawRoot, 'backlog');
   let taskItem = null;
   if (fs.existsSync(backlogDir)) {
     const files = fs.readdirSync(backlogDir).filter((f) => f.endsWith('.json'));
@@ -97,14 +95,14 @@ function generateTaskPack(projectId, taskId, options = {}) {
 
   // project.json
   inputsPresent.push('project.json');
-  references.push(`projects/${projectId}/project.json`);
+  references.push('.claw/project.json');
 
   // agents.json
-  const agentsPath = path.join(projectDir, 'agents.json');
+  const agentsPath = path.join(clawRoot, 'agents.json');
   let agents = [];
   if (fs.existsSync(agentsPath)) {
     inputsPresent.push('agents.json');
-    references.push(`projects/${projectId}/agents.json`);
+    references.push('.claw/agents.json');
     try {
       const agentsData = JSON.parse(fs.readFileSync(agentsPath, 'utf8'));
       agents = agentsData.agents || [];
@@ -117,7 +115,7 @@ function generateTaskPack(projectId, taskId, options = {}) {
 
   // Backlog item itself
   inputsPresent.push(`backlog/${taskId}.json`);
-  references.push(`projects/${projectId}/backlog/${taskId}.json`);
+  references.push(`.claw/backlog/${taskId}.json`);
 
   // Check linked run folder
   if (taskItem.run_folder) {
@@ -225,14 +223,14 @@ function generateTaskPack(projectId, taskId, options = {}) {
   };
 
   // Write the task pack
-  const taskPacksDir = path.join(projectDir, 'task-packs');
+  const taskPacksDir = options.taskPacksDir || path.join(clawRoot, 'task-packs');
   fs.mkdirSync(taskPacksDir, { recursive: true });
   const taskPackPath = path.join(taskPacksDir, `${taskId}.json`);
   fs.writeFileSync(taskPackPath, JSON.stringify(taskPack, null, 2) + '\n', 'utf8');
 
   return {
     ok: true,
-    task_pack_path: `projects/${projectId}/task-packs/${taskId}.json`,
+    task_pack_path: `.claw/task-packs/${taskId}.json`,
     task_pack: taskPack,
   };
 }
@@ -268,45 +266,31 @@ function validateTaskPack(taskPackPathOrData, options = {}) {
 // ---------------------------------------------------------------------------
 function listTaskPacks(options = {}) {
   const workspaceRoot = options.workspaceRoot || WORKSPACE_ROOT;
-  const projectsDir = options.projectsDir || path.join(workspaceRoot, 'projects');
-  const filterProjectId = options.projectId || null;
+  const taskPacksDir = options.taskPacksDir || path.join(workspaceRoot, '.claw', 'task-packs');
 
-  if (!fs.existsSync(projectsDir)) {
+  if (!fs.existsSync(taskPacksDir)) {
     return { ok: true, task_packs: [] };
   }
 
-  const projectDirs = fs.readdirSync(projectsDir, { withFileTypes: true })
-    .filter((e) => e.isDirectory())
-    .map((e) => e.name)
+  const taskPacks = [];
+  const files = fs.readdirSync(taskPacksDir)
+    .filter((f) => f.endsWith('.json'))
     .sort();
 
-  const taskPacks = [];
-
-  for (const projectId of projectDirs) {
-    if (filterProjectId && projectId !== filterProjectId) continue;
-
-    const taskPacksDir = path.join(projectsDir, projectId, 'task-packs');
-    if (!fs.existsSync(taskPacksDir)) continue;
-
-    const files = fs.readdirSync(taskPacksDir)
-      .filter((f) => f.endsWith('.json'))
-      .sort();
-
-    for (const file of files) {
-      try {
-        const data = JSON.parse(fs.readFileSync(path.join(taskPacksDir, file), 'utf8'));
-        taskPacks.push({
-          project_id: projectId,
-          task_id: data.task_id || file.replace('.json', ''),
-          title: data.title || '',
-          owner_role: data.owner_role || '',
-          open_questions_count: (data.open_questions || []).length,
-          file_path: `projects/${projectId}/task-packs/${file}`,
-          created_at: data.created_at || null,
-        });
-      } catch {
-        // Skip invalid
-      }
+  for (const file of files) {
+    try {
+      const data = JSON.parse(fs.readFileSync(path.join(taskPacksDir, file), 'utf8'));
+      taskPacks.push({
+        project_id: data.project_id || '',
+        task_id: data.task_id || file.replace('.json', ''),
+        title: data.title || '',
+        owner_role: data.owner_role || '',
+        open_questions_count: (data.open_questions || []).length,
+        file_path: `.claw/task-packs/${file}`,
+        created_at: data.created_at || null,
+      });
+    } catch {
+      // Skip invalid
     }
   }
 

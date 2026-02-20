@@ -42,7 +42,7 @@ function safePath(p) {
 // Helpers
 // ---------------------------------------------------------------------------
 function agentsDir(options) {
-  return options && options.agentsDir ? options.agentsDir : path.join(WORKSPACE_ROOT, 'agents');
+  return options && options.agentsDir ? options.agentsDir : path.join(WORKSPACE_ROOT, '.claw', 'agents');
 }
 
 function agentDir(agentId, options) {
@@ -73,7 +73,7 @@ function validate(state) {
 function readAgentState(agentId, options) {
   const fp = options && options.agentsDir
     ? path.join(options.agentsDir, agentId, 'state.json')
-    : safePath(path.join('agents', agentId, 'state.json'));
+    : safePath(path.join('.claw', 'agents', agentId, 'state.json'));
 
   if (!fs.existsSync(fp)) return null;
   const state = JSON.parse(fs.readFileSync(fp, 'utf8'));
@@ -92,7 +92,7 @@ function writeAgentState(agentId, state, options) {
 
   const dir = options && options.agentsDir
     ? path.join(options.agentsDir, agentId)
-    : safePath(path.join('agents', agentId));
+    : safePath(path.join('.claw', 'agents', agentId));
 
   fs.mkdirSync(dir, { recursive: true });
 

@@ -21,20 +21,18 @@ const path = require('node:path');
 const os = require('node:os');
 
 const WORKSPACE_ROOT = process.env.WORKSPACE_ROOT || path.resolve(os.homedir(), 'dev', 'agent-work');
-const PROJECTS_DIR = path.join(WORKSPACE_ROOT, 'projects');
 
 // ---------------------------------------------------------------------------
 // Core validator
 // ---------------------------------------------------------------------------
 function validateBacklogGraph(projectId, options) {
-  const projectsDir = options && options.projectsDir ? options.projectsDir : PROJECTS_DIR;
+  const backlogDir = options && options.backlogDir
+    ? options.backlogDir
+    : path.join((options && options.workspaceRoot) || WORKSPACE_ROOT, '.claw', 'backlog');
 
-  const projectDir = path.join(projectsDir, projectId);
-  if (!fs.existsSync(projectDir)) {
-    return { ok: false, error: `Project directory not found: ${projectId}` };
+  if (!fs.existsSync(backlogDir)) {
+    return { ok: false, error: `Backlog directory not found: ${projectId}` };
   }
-
-  const backlogDir = path.join(projectDir, 'backlog');
   const items = [];
 
   if (fs.existsSync(backlogDir)) {
@@ -261,8 +259,9 @@ function extractCycles(cycleNodeIds, byId) {
 // checkEpicCompletion — standalone check for a single epic
 // ---------------------------------------------------------------------------
 function checkEpicCompletion(projectId, epicId, options) {
-  const projectsDir = options && options.projectsDir ? options.projectsDir : PROJECTS_DIR;
-  const backlogDir = path.join(projectsDir, projectId, 'backlog');
+  const backlogDir = options && options.backlogDir
+    ? options.backlogDir
+    : path.join((options && options.workspaceRoot) || WORKSPACE_ROOT, '.claw', 'backlog');
 
   if (!fs.existsSync(backlogDir)) {
     return { ok: false, error: `Backlog directory not found for project: ${projectId}` };
@@ -301,20 +300,20 @@ function checkEpicCompletion(projectId, epicId, options) {
 if (require.main === module) {
   const args = process.argv.slice(2);
 
-  const projDirIdx = args.indexOf('--projects_dir');
-  let projectsDir = PROJECTS_DIR;
-  if (projDirIdx !== -1) {
-    projectsDir = args[projDirIdx + 1] || PROJECTS_DIR;
-    args.splice(projDirIdx, 2);
+  const wsIdx = args.indexOf('--workspace');
+  let workspaceRoot = WORKSPACE_ROOT;
+  if (wsIdx !== -1) {
+    workspaceRoot = args[wsIdx + 1] || WORKSPACE_ROOT;
+    args.splice(wsIdx, 2);
   }
 
   const projectId = args[0];
   if (!projectId) {
-    process.stderr.write(JSON.stringify({ ok: false, error: 'Usage: validate-backlog-graph <project_id> [--projects_dir <path>]' }, null, 2) + '\n');
+    process.stderr.write(JSON.stringify({ ok: false, error: 'Usage: validate-backlog-graph <project_id> [--workspace <path>]' }, null, 2) + '\n');
     process.exit(1);
   }
 
-  const result = validateBacklogGraph(projectId, { projectsDir });
+  const result = validateBacklogGraph(projectId, { workspaceRoot });
   if (!result.ok) {
     process.stderr.write(JSON.stringify(result, null, 2) + '\n');
     process.exit(1);

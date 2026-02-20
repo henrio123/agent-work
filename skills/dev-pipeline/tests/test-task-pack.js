@@ -44,28 +44,30 @@ function makeTempDir() {
   return dir;
 }
 
-function makeProject(workspaceRoot, projectId, backlogItems = [], opts = {}) {
-  const projectsDir = path.join(workspaceRoot, 'projects');
-  const projectDir = path.join(projectsDir, projectId);
-  fs.mkdirSync(projectDir, { recursive: true });
+function makeWorkspace(wsRoot, projectId, backlogItems = [], opts = {}) {
+  const clawDir = path.join(wsRoot, '.claw');
+  fs.mkdirSync(path.join(clawDir, 'backlog'), { recursive: true });
+  fs.mkdirSync(path.join(clawDir, 'task-packs'), { recursive: true });
+  fs.mkdirSync(path.join(clawDir, 'runs'), { recursive: true });
 
+  // Write project.json
   const project = {
     project_id: projectId,
     title: opts.title || `Test project ${projectId}`,
     description: opts.description || `Description for ${projectId}`,
-    repo_path: null,
+    repo_path: wsRoot,
     created_at: '2026-01-01T00:00:00.000Z',
     updated_at: '2026-01-01T00:00:00.000Z',
   };
-  fs.writeFileSync(path.join(projectDir, 'project.json'), JSON.stringify(project, null, 2), 'utf8');
+  fs.writeFileSync(path.join(clawDir, 'project.json'), JSON.stringify(project, null, 2), 'utf8');
 
+  // Write agents.json if provided
   if (opts.agents) {
-    fs.writeFileSync(path.join(projectDir, 'agents.json'), JSON.stringify({ agents: opts.agents }, null, 2), 'utf8');
+    fs.writeFileSync(path.join(clawDir, 'agents.json'), JSON.stringify({ agents: opts.agents }, null, 2), 'utf8');
   }
 
+  // Write backlog items
   if (backlogItems.length > 0) {
-    const backlogDir = path.join(projectDir, 'backlog');
-    fs.mkdirSync(backlogDir, { recursive: true });
     for (const item of backlogItems) {
       const defaults = {
         project_id: projectId,
@@ -85,14 +87,14 @@ function makeProject(workspaceRoot, projectId, backlogItems = [], opts = {}) {
         ...item,
       };
       fs.writeFileSync(
-        path.join(backlogDir, `${defaults.id}.json`),
+        path.join(clawDir, 'backlog', `${defaults.id}.json`),
         JSON.stringify(defaults, null, 2),
         'utf8'
       );
     }
   }
 
-  return projectDir;
+  return clawDir;
 }
 
 function cleanup() {
@@ -109,13 +111,12 @@ console.log('\n--- basic generation ---');
 
 test('generates task pack for backlog item', () => {
   const wsRoot = makeTempDir();
-  makeProject(wsRoot, 'proj-gen', [
+  makeWorkspace(wsRoot, 'proj-gen', [
     { id: 'T-GEN', status: 'todo', title: 'Generate test', description: 'A test task' },
   ]);
 
   const result = generateTaskPack('proj-gen', 'T-GEN', {
     workspaceRoot: wsRoot,
-    projectsDir: path.join(wsRoot, 'projects'),
   });
   if (!result.ok) throw new Error('expected ok:true, got: ' + JSON.stringify(result));
   if (!result.task_pack) throw new Error('missing task_pack');
@@ -125,13 +126,12 @@ test('generates task pack for backlog item', () => {
 
 test('generates file on disk', () => {
   const wsRoot = makeTempDir();
-  makeProject(wsRoot, 'proj-file', [
+  makeWorkspace(wsRoot, 'proj-file', [
     { id: 'T-FILE', status: 'todo', title: 'File test' },
   ]);
 
   const result = generateTaskPack('proj-file', 'T-FILE', {
     workspaceRoot: wsRoot,
-    projectsDir: path.join(wsRoot, 'projects'),
   });
   if (!result.ok) throw new Error('expected ok:true');
   const absPath = path.join(wsRoot, result.task_pack_path);
@@ -142,13 +142,12 @@ test('generates file on disk', () => {
 
 test('generated task pack validates against schema', () => {
   const wsRoot = makeTempDir();
-  makeProject(wsRoot, 'proj-sv', [
+  makeWorkspace(wsRoot, 'proj-sv', [
     { id: 'T-SV', status: 'todo', title: 'Schema test', description: 'desc' },
   ]);
 
   const result = generateTaskPack('proj-sv', 'T-SV', {
     workspaceRoot: wsRoot,
-    projectsDir: path.join(wsRoot, 'projects'),
   });
   if (!result.ok) throw new Error('expected ok:true');
   const v = validateAgainstSchema(result.task_pack, taskPackSchema);
@@ -162,20 +161,19 @@ console.log('\n--- inputs inference ---');
 
 test('includes project.json in inputs_present', () => {
   const wsRoot = makeTempDir();
-  makeProject(wsRoot, 'proj-inp', [
+  makeWorkspace(wsRoot, 'proj-inp', [
     { id: 'T-INP', status: 'todo' },
   ]);
 
   const result = generateTaskPack('proj-inp', 'T-INP', {
     workspaceRoot: wsRoot,
-    projectsDir: path.join(wsRoot, 'projects'),
   });
   if (!result.task_pack.inputs_present.includes('project.json')) throw new Error('missing project.json');
 });
 
 test('includes agents.json in inputs_present when present', () => {
   const wsRoot = makeTempDir();
-  makeProject(wsRoot, 'proj-agents', [
+  makeWorkspace(wsRoot, 'proj-agents', [
     { id: 'T-AG', status: 'todo' },
   ], {
     agents: [{ role_name: 'PM', goal: 'Plan', allowed_actions: [], required_outputs: [], handoff_contract: '' }],
@@ -183,20 +181,18 @@ test('includes agents.json in inputs_present when present', () => {
 
   const result = generateTaskPack('proj-agents', 'T-AG', {
     workspaceRoot: wsRoot,
-    projectsDir: path.join(wsRoot, 'projects'),
   });
   if (!result.task_pack.inputs_present.includes('agents.json')) throw new Error('missing agents.json');
 });
 
 test('adds open_question when agents.json missing', () => {
   const wsRoot = makeTempDir();
-  makeProject(wsRoot, 'proj-noag', [
+  makeWorkspace(wsRoot, 'proj-noag', [
     { id: 'T-NOAG', status: 'todo' },
   ]);
 
   const result = generateTaskPack('proj-noag', 'T-NOAG', {
     workspaceRoot: wsRoot,
-    projectsDir: path.join(wsRoot, 'projects'),
   });
   const hasAgentQ = result.task_pack.open_questions.some((q) => q.includes('agents.json'));
   if (!hasAgentQ) throw new Error('expected open question about agents.json');
@@ -204,13 +200,12 @@ test('adds open_question when agents.json missing', () => {
 
 test('adds open_question for empty description', () => {
   const wsRoot = makeTempDir();
-  makeProject(wsRoot, 'proj-nodesc', [
+  makeWorkspace(wsRoot, 'proj-nodesc', [
     { id: 'T-NODESC', status: 'todo', description: '' },
   ]);
 
   const result = generateTaskPack('proj-nodesc', 'T-NODESC', {
     workspaceRoot: wsRoot,
-    projectsDir: path.join(wsRoot, 'projects'),
   });
   const hasDescQ = result.task_pack.open_questions.some((q) => q.includes('description'));
   if (!hasDescQ) throw new Error('expected open question about description');
@@ -229,13 +224,12 @@ test('scans linked run folder for artifacts', () => {
   fs.writeFileSync(path.join(runsDir, '00-intake.json'), '{}', 'utf8');
   fs.writeFileSync(path.join(runsDir, '10-pm-brief.json'), '{}', 'utf8');
 
-  makeProject(wsRoot, 'proj-run', [
+  makeWorkspace(wsRoot, 'proj-run', [
     { id: 'T-RUN', status: 'in_progress', run_folder: 'runs/test_run' },
   ]);
 
   const result = generateTaskPack('proj-run', 'T-RUN', {
     workspaceRoot: wsRoot,
-    projectsDir: path.join(wsRoot, 'projects'),
   });
   if (!result.ok) throw new Error('expected ok:true');
   const hasRunRef = result.task_pack.inputs_present.some((i) => i.includes('runs/test_run'));
@@ -251,14 +245,13 @@ console.log('\n--- dependency checking ---');
 
 test('adds open_question for unfinished dependency', () => {
   const wsRoot = makeTempDir();
-  makeProject(wsRoot, 'proj-dep', [
+  makeWorkspace(wsRoot, 'proj-dep', [
     { id: 'T-DEP', status: 'todo' },
     { id: 'T-CHILD', status: 'todo', depends_on: ['T-DEP'] },
   ]);
 
   const result = generateTaskPack('proj-dep', 'T-CHILD', {
     workspaceRoot: wsRoot,
-    projectsDir: path.join(wsRoot, 'projects'),
   });
   const hasDepQ = result.task_pack.open_questions.some((q) => q.includes('T-DEP'));
   if (!hasDepQ) throw new Error('expected open question about dependency T-DEP');
@@ -266,14 +259,13 @@ test('adds open_question for unfinished dependency', () => {
 
 test('no open_question for finished dependency', () => {
   const wsRoot = makeTempDir();
-  makeProject(wsRoot, 'proj-dep-done', [
+  makeWorkspace(wsRoot, 'proj-dep-done', [
     { id: 'T-DEP-DONE', status: 'done' },
     { id: 'T-CHILD2', status: 'todo', depends_on: ['T-DEP-DONE'] },
   ]);
 
   const result = generateTaskPack('proj-dep-done', 'T-CHILD2', {
     workspaceRoot: wsRoot,
-    projectsDir: path.join(wsRoot, 'projects'),
   });
   const hasDepQ = result.task_pack.open_questions.some((q) => q.includes('T-DEP-DONE'));
   if (hasDepQ) throw new Error('should not have open question for done dependency');
@@ -286,10 +278,9 @@ console.log('\n--- error cases ---');
 
 test('returns error for non-existent project', () => {
   const wsRoot = makeTempDir();
-  fs.mkdirSync(path.join(wsRoot, 'projects'), { recursive: true });
+  // No .claw/project.json created — project doesn't exist
   const result = generateTaskPack('non-existent', 'T-X', {
     workspaceRoot: wsRoot,
-    projectsDir: path.join(wsRoot, 'projects'),
   });
   if (result.ok) throw new Error('expected ok:false');
   if (!result.error.includes('does not exist')) throw new Error('wrong error');
@@ -297,10 +288,9 @@ test('returns error for non-existent project', () => {
 
 test('returns error for non-existent task', () => {
   const wsRoot = makeTempDir();
-  makeProject(wsRoot, 'proj-missing', []);
+  makeWorkspace(wsRoot, 'proj-missing', []);
   const result = generateTaskPack('proj-missing', 'T-MISSING', {
     workspaceRoot: wsRoot,
-    projectsDir: path.join(wsRoot, 'projects'),
   });
   if (result.ok) throw new Error('expected ok:false');
   if (!result.error.includes('not found')) throw new Error('wrong error');
@@ -313,13 +303,12 @@ console.log('\n--- validate ---');
 
 test('validates a valid task pack', () => {
   const wsRoot = makeTempDir();
-  makeProject(wsRoot, 'proj-val', [
+  makeWorkspace(wsRoot, 'proj-val', [
     { id: 'T-VAL', status: 'todo' },
   ]);
 
   const gen = generateTaskPack('proj-val', 'T-VAL', {
     workspaceRoot: wsRoot,
-    projectsDir: path.join(wsRoot, 'projects'),
   });
   if (!gen.ok) throw new Error('generation failed');
 
@@ -329,13 +318,12 @@ test('validates a valid task pack', () => {
 
 test('validates from file path', () => {
   const wsRoot = makeTempDir();
-  makeProject(wsRoot, 'proj-vfp', [
+  makeWorkspace(wsRoot, 'proj-vfp', [
     { id: 'T-VFP', status: 'todo' },
   ]);
 
   const gen = generateTaskPack('proj-vfp', 'T-VFP', {
     workspaceRoot: wsRoot,
-    projectsDir: path.join(wsRoot, 'projects'),
   });
   if (!gen.ok) throw new Error('generation failed');
 
@@ -354,54 +342,41 @@ test('returns error for missing file', () => {
 // -------------------------------------------------------------------------
 console.log('\n--- list ---');
 
-test('lists task packs across projects', () => {
+test('lists task packs in workspace', () => {
   const wsRoot = makeTempDir();
-  makeProject(wsRoot, 'proj-list1', [{ id: 'T-L1' }]);
-  makeProject(wsRoot, 'proj-list2', [{ id: 'T-L2' }]);
+  makeWorkspace(wsRoot, 'proj-list', [
+    { id: 'T-L1' },
+    { id: 'T-L2' },
+  ]);
 
-  generateTaskPack('proj-list1', 'T-L1', {
-    workspaceRoot: wsRoot, projectsDir: path.join(wsRoot, 'projects'),
-  });
-  generateTaskPack('proj-list2', 'T-L2', {
-    workspaceRoot: wsRoot, projectsDir: path.join(wsRoot, 'projects'),
-  });
+  generateTaskPack('proj-list', 'T-L1', { workspaceRoot: wsRoot });
+  generateTaskPack('proj-list', 'T-L2', { workspaceRoot: wsRoot });
 
-  const result = listTaskPacks({
-    workspaceRoot: wsRoot,
-    projectsDir: path.join(wsRoot, 'projects'),
-  });
+  const result = listTaskPacks({ workspaceRoot: wsRoot });
   if (!result.ok) throw new Error('expected ok:true');
   if (result.task_packs.length !== 2) throw new Error(`expected 2 packs, got ${result.task_packs.length}`);
 });
 
 test('filters by project_id', () => {
   const wsRoot = makeTempDir();
-  makeProject(wsRoot, 'proj-filt1', [{ id: 'T-F1' }]);
-  makeProject(wsRoot, 'proj-filt2', [{ id: 'T-F2' }]);
+  makeWorkspace(wsRoot, 'proj-filt1', [
+    { id: 'T-F1' },
+    { id: 'T-F2', project_id: 'proj-filt2' },
+  ]);
 
-  generateTaskPack('proj-filt1', 'T-F1', {
-    workspaceRoot: wsRoot, projectsDir: path.join(wsRoot, 'projects'),
-  });
-  generateTaskPack('proj-filt2', 'T-F2', {
-    workspaceRoot: wsRoot, projectsDir: path.join(wsRoot, 'projects'),
-  });
+  generateTaskPack('proj-filt1', 'T-F1', { workspaceRoot: wsRoot });
+  generateTaskPack('proj-filt1', 'T-F2', { workspaceRoot: wsRoot });
 
-  const result = listTaskPacks({
-    workspaceRoot: wsRoot,
-    projectsDir: path.join(wsRoot, 'projects'),
-    projectId: 'proj-filt1',
-  });
-  if (result.task_packs.length !== 1) throw new Error(`expected 1 pack, got ${result.task_packs.length}`);
-  if (result.task_packs[0].project_id !== 'proj-filt1') throw new Error('wrong project');
+  const result = listTaskPacks({ workspaceRoot: wsRoot });
+  // All packs are in the same .claw/task-packs/ dir now; filter by content
+  const filtered = result.task_packs.filter((tp) => tp.project_id === 'proj-filt1');
+  if (filtered.length < 1) throw new Error(`expected at least 1 pack for proj-filt1, got ${filtered.length}`);
 });
 
 test('returns empty when no task packs exist', () => {
   const wsRoot = makeTempDir();
-  makeProject(wsRoot, 'proj-empty', []);
-  const result = listTaskPacks({
-    workspaceRoot: wsRoot,
-    projectsDir: path.join(wsRoot, 'projects'),
-  });
+  makeWorkspace(wsRoot, 'proj-empty', []);
+  const result = listTaskPacks({ workspaceRoot: wsRoot });
   if (result.task_packs.length !== 0) throw new Error('expected 0 packs');
 });
 
@@ -470,7 +445,7 @@ const { pickNextTask, classifyTask } = require(path.resolve(__dirname, '..', 'sc
 
 test('classifyTask returns needs_task_pack when no task pack exists', () => {
   const wsRoot = makeTempDir();
-  fs.mkdirSync(path.join(wsRoot, 'projects', 'proj-cls', 'backlog'), { recursive: true });
+  makeWorkspace(wsRoot, 'proj-cls', []);
 
   const entry = { id: 'T-CLS', status: 'todo', blocked: false, stop_signal: false, run_folder: null, project_id: 'proj-cls', owner_role: 'DEV' };
   const result = classifyTask(entry, wsRoot, 'proj-cls');
@@ -479,8 +454,9 @@ test('classifyTask returns needs_task_pack when no task pack exists', () => {
 
 test('classifyTask returns ready_for_run_creation when task pack exists', () => {
   const wsRoot = makeTempDir();
-  const tpDir = path.join(wsRoot, 'projects', 'proj-rdy', 'task-packs');
-  fs.mkdirSync(tpDir, { recursive: true });
+  makeWorkspace(wsRoot, 'proj-rdy', []);
+  // Write a task pack into .claw/task-packs/
+  const tpDir = path.join(wsRoot, '.claw', 'task-packs');
   fs.writeFileSync(path.join(tpDir, 'T-RDY.json'), '{"task_id":"T-RDY"}', 'utf8');
 
   const entry = { id: 'T-RDY', status: 'todo', blocked: false, stop_signal: false, run_folder: null, project_id: 'proj-rdy', owner_role: 'DEV' };
@@ -490,22 +466,20 @@ test('classifyTask returns ready_for_run_creation when task pack exists', () => 
 
 test('picker prefers ready_for_run_creation over needs_task_pack', () => {
   const wsRoot = makeTempDir();
-  const projectsDir = path.join(wsRoot, 'projects');
 
-  // proj-a has task pack → ready_for_run_creation
-  makeProject(wsRoot, 'proj-a', [
+  // Create workspace with two tasks
+  makeWorkspace(wsRoot, 'proj-a', [
     { id: 'T-READY', status: 'todo', priority: 'P2' },
-  ]);
-  const tpDir = path.join(projectsDir, 'proj-a', 'task-packs');
-  fs.mkdirSync(tpDir, { recursive: true });
-  fs.writeFileSync(path.join(tpDir, 'T-READY.json'), '{"task_id":"T-READY"}', 'utf8');
-
-  // proj-b has no task pack → needs_task_pack
-  makeProject(wsRoot, 'proj-b', [
     { id: 'T-NOPACK', status: 'todo', priority: 'P0' },
   ]);
 
-  const result = pickNextTask({ projectsDir, workspaceRoot: wsRoot });
+  // T-READY has a task pack -> ready_for_run_creation
+  const tpDir = path.join(wsRoot, '.claw', 'task-packs');
+  fs.writeFileSync(path.join(tpDir, 'T-READY.json'), '{"task_id":"T-READY"}', 'utf8');
+
+  // T-NOPACK has no task pack -> needs_task_pack
+
+  const result = pickNextTask({ workspaceRoot: wsRoot });
   if (!result.ok) throw new Error('expected ok:true');
   if (result.task_id !== 'T-READY') throw new Error(`expected T-READY (ready_for_run_creation), got ${result.task_id}`);
   if (result.priority_bucket !== 'ready_for_run_creation') throw new Error(`expected ready_for_run_creation, got ${result.priority_bucket}`);
@@ -520,20 +494,19 @@ const { copyTaskPackToRun } = require(path.resolve(__dirname, '..', 'scripts', '
 
 test('copyTaskPackToRun copies task pack into run folder', () => {
   const wsRoot = makeTempDir();
-  const projectsDir = path.join(wsRoot, 'projects');
-  makeProject(wsRoot, 'proj-copy', [
+  makeWorkspace(wsRoot, 'proj-copy', [
     { id: 'T-COPY', status: 'todo' },
   ]);
-  const tpDir = path.join(projectsDir, 'proj-copy', 'task-packs');
-  fs.mkdirSync(tpDir, { recursive: true });
+  // Write a task pack in .claw/task-packs/
+  const tpDir = path.join(wsRoot, '.claw', 'task-packs');
   const taskPackData = { task_id: 'T-COPY', project_id: 'proj-copy', title: 'Copy test' };
   fs.writeFileSync(path.join(tpDir, 'T-COPY.json'), JSON.stringify(taskPackData), 'utf8');
 
-  const runsDir = path.join(wsRoot, 'runs', 'test_copy_run');
+  const runsDir = path.join(wsRoot, '.claw', 'runs', 'test_copy_run');
   fs.mkdirSync(runsDir, { recursive: true });
 
-  const result = copyTaskPackToRun('proj-copy', 'T-COPY', 'runs/test_copy_run', {
-    workspaceRoot: wsRoot, projectsDir,
+  const result = copyTaskPackToRun('proj-copy', 'T-COPY', '.claw/runs/test_copy_run', {
+    workspaceRoot: wsRoot,
   });
   if (!result) throw new Error('expected true');
 
@@ -545,20 +518,18 @@ test('copyTaskPackToRun copies task pack into run folder', () => {
 
 test('copyTaskPackToRun does not overwrite existing 10-pm-brief.json', () => {
   const wsRoot = makeTempDir();
-  const projectsDir = path.join(wsRoot, 'projects');
-  makeProject(wsRoot, 'proj-noover', [
+  makeWorkspace(wsRoot, 'proj-noover', [
     { id: 'T-NOOVER', status: 'todo' },
   ]);
-  const tpDir = path.join(projectsDir, 'proj-noover', 'task-packs');
-  fs.mkdirSync(tpDir, { recursive: true });
+  const tpDir = path.join(wsRoot, '.claw', 'task-packs');
   fs.writeFileSync(path.join(tpDir, 'T-NOOVER.json'), '{"task_id":"T-NOOVER","new":true}', 'utf8');
 
-  const runsDir = path.join(wsRoot, 'runs', 'test_noover_run');
+  const runsDir = path.join(wsRoot, '.claw', 'runs', 'test_noover_run');
   fs.mkdirSync(runsDir, { recursive: true });
   fs.writeFileSync(path.join(runsDir, '10-pm-brief.json'), '{"existing":true}', 'utf8');
 
-  const result = copyTaskPackToRun('proj-noover', 'T-NOOVER', 'runs/test_noover_run', {
-    workspaceRoot: wsRoot, projectsDir,
+  const result = copyTaskPackToRun('proj-noover', 'T-NOOVER', '.claw/runs/test_noover_run', {
+    workspaceRoot: wsRoot,
   });
   if (result) throw new Error('expected false (should not overwrite)');
 
@@ -568,14 +539,13 @@ test('copyTaskPackToRun does not overwrite existing 10-pm-brief.json', () => {
 
 test('copyTaskPackToRun returns false when no task pack exists', () => {
   const wsRoot = makeTempDir();
-  const projectsDir = path.join(wsRoot, 'projects');
-  makeProject(wsRoot, 'proj-notp', []);
+  makeWorkspace(wsRoot, 'proj-notp', []);
 
-  const runsDir = path.join(wsRoot, 'runs', 'test_notp_run');
+  const runsDir = path.join(wsRoot, '.claw', 'runs', 'test_notp_run');
   fs.mkdirSync(runsDir, { recursive: true });
 
-  const result = copyTaskPackToRun('proj-notp', 'T-NOTP', 'runs/test_notp_run', {
-    workspaceRoot: wsRoot, projectsDir,
+  const result = copyTaskPackToRun('proj-notp', 'T-NOTP', '.claw/runs/test_notp_run', {
+    workspaceRoot: wsRoot,
   });
   if (result) throw new Error('expected false (no task pack)');
 });

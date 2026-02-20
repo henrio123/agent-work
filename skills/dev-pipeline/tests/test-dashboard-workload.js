@@ -43,10 +43,14 @@ function makeTempDir() {
   return dir;
 }
 
-function makeProject(projectsDir, projectId, backlogItems = []) {
-  const projectDir = path.join(projectsDir, projectId);
-  fs.mkdirSync(projectDir, { recursive: true });
-  fs.writeFileSync(path.join(projectDir, 'project.json'), JSON.stringify({
+function makeTempWorkspace(projectId, backlogItems = []) {
+  const wsRoot = path.join(os.tmpdir(), `_test_dw_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`);
+  const clawRoot = path.join(wsRoot, '.claw');
+  const backlogDir = path.join(clawRoot, 'backlog');
+  fs.mkdirSync(backlogDir, { recursive: true });
+  tmpDirs.push(wsRoot);
+
+  fs.writeFileSync(path.join(clawRoot, 'project.json'), JSON.stringify({
     project_id: projectId,
     title: `Test ${projectId}`,
     description: `Desc ${projectId}`,
@@ -55,24 +59,20 @@ function makeProject(projectsDir, projectId, backlogItems = []) {
     updated_at: '2026-01-01T00:00:00.000Z',
   }, null, 2), 'utf8');
 
-  if (backlogItems.length > 0) {
-    const backlogDir = path.join(projectDir, 'backlog');
-    fs.mkdirSync(backlogDir, { recursive: true });
-    for (const item of backlogItems) {
-      const defaults = {
-        project_id: projectId, type: 'task', title: `Task ${item.id}`,
-        description: '', created_at: '2026-01-01T00:00:00.000Z',
-        updated_at: '2026-01-01T00:00:00.000Z', status: 'todo',
-        priority: 'P2', owner_role: 'DEV', depends_on: [], run_folder: null,
-        tags: [], artifacts_expected: [], last_summary: null,
-        ...item,
-      };
-      fs.writeFileSync(
-        path.join(backlogDir, `${defaults.id}.json`),
-        JSON.stringify(defaults, null, 2), 'utf8');
-    }
+  for (const item of backlogItems) {
+    const defaults = {
+      project_id: projectId, type: 'task', title: `Task ${item.id}`,
+      description: '', created_at: '2026-01-01T00:00:00.000Z',
+      updated_at: '2026-01-01T00:00:00.000Z', status: 'todo',
+      priority: 'P2', owner_role: 'DEV', depends_on: [], run_folder: null,
+      tags: [], artifacts_expected: [], last_summary: null,
+      ...item,
+    };
+    fs.writeFileSync(
+      path.join(backlogDir, `${defaults.id}.json`),
+      JSON.stringify(defaults, null, 2), 'utf8');
   }
-  return projectDir;
+  return { wsRoot, backlogDir };
 }
 
 function makeRunFolder(statusData) {
@@ -111,9 +111,8 @@ console.log('\n--- workload_by_agent ---');
 // ---------------------------------------------------------------------------
 
 test('no runs -> workload_by_agent empty array', () => {
-  const projectsDir = makeTempDir();
-  makeProject(projectsDir, 'proj-empty', [{ id: 'T-1', status: 'todo' }]);
-  const result = buildDashboard({ projectsDir });
+  const { wsRoot } = makeTempWorkspace('proj-empty', [{ id: 'T-1', status: 'todo' }]);
+  const result = buildDashboard({ workspaceRoot: wsRoot });
   assert(result.ok, 'should be ok');
   const proj = result.projects[0];
   assert(Array.isArray(proj.workload_by_agent), 'should be array');
@@ -121,9 +120,8 @@ test('no runs -> workload_by_agent empty array', () => {
 });
 
 test('no runs -> workload_summary exists with empty objects', () => {
-  const projectsDir = makeTempDir();
-  makeProject(projectsDir, 'proj-empty2', [{ id: 'T-1', status: 'todo' }]);
-  const result = buildDashboard({ projectsDir });
+  const { wsRoot } = makeTempWorkspace('proj-empty2', [{ id: 'T-1', status: 'todo' }]);
+  const result = buildDashboard({ workspaceRoot: wsRoot });
   assert(result.summary.workload_summary, 'should have workload_summary');
   assert(typeof result.summary.workload_summary.runs_per_role === 'object', 'runs_per_role should be object');
   assert(typeof result.summary.workload_summary.stages_per_role === 'object', 'stages_per_role should be object');
@@ -137,12 +135,11 @@ test('responsible_agent counts runs_responsible', () => {
     responsible_agent: 'agent-pm-1',
     stage_history: [],
   });
-  const projectsDir = makeTempDir();
   const agentsDir = makeAgentsDir([{ agent_id: 'agent-pm-1', role: 'PM' }]);
-  makeProject(projectsDir, 'proj-rr', [
+  const { wsRoot } = makeTempWorkspace('proj-rr', [
     { id: 'T-RR', status: 'in_progress', run_folder: runDir },
   ]);
-  const result = buildDashboard({ projectsDir, workspaceRoot: '/', agentsDir, _roleCache: {} });
+  const result = buildDashboard({ workspaceRoot: wsRoot, agentsDir, _roleCache: {} });
   const wl = result.projects[0].workload_by_agent;
   assert(wl.length === 1, `expected 1 agent, got ${wl.length}`);
   assert(wl[0].agent_id === 'agent-pm-1', 'wrong agent_id');
@@ -159,15 +156,14 @@ test('stage_history counts stages_driven', () => {
       { stage: 'arch-ready', agent_id: 'agent-b' },
     ],
   });
-  const projectsDir = makeTempDir();
   const agentsDir = makeAgentsDir([
     { agent_id: 'agent-a', role: 'PM' },
     { agent_id: 'agent-b', role: 'Architect' },
   ]);
-  makeProject(projectsDir, 'proj-sd', [
+  const { wsRoot } = makeTempWorkspace('proj-sd', [
     { id: 'T-SD', status: 'in_progress', run_folder: runDir },
   ]);
-  const result = buildDashboard({ projectsDir, workspaceRoot: '/', agentsDir, _roleCache: {} });
+  const result = buildDashboard({ workspaceRoot: wsRoot, agentsDir, _roleCache: {} });
   const wl = result.projects[0].workload_by_agent;
   const a = wl.find(w => w.agent_id === 'agent-a');
   const b = wl.find(w => w.agent_id === 'agent-b');
@@ -188,13 +184,12 @@ test('active_runs counts only when current_stage != done', () => {
     responsible_agent: 'agent-x',
     stage_history: [],
   });
-  const projectsDir = makeTempDir();
   const agentsDir = makeAgentsDir([{ agent_id: 'agent-x', role: 'Dev' }]);
-  makeProject(projectsDir, 'proj-ar', [
+  const { wsRoot } = makeTempWorkspace('proj-ar', [
     { id: 'T-AR1', status: 'in_progress', run_folder: runActive },
     { id: 'T-AR2', status: 'done', run_folder: runDone },
   ]);
-  const result = buildDashboard({ projectsDir, workspaceRoot: '/', agentsDir, _roleCache: {} });
+  const result = buildDashboard({ workspaceRoot: wsRoot, agentsDir, _roleCache: {} });
   const wl = result.projects[0].workload_by_agent;
   assert(wl.length === 1, `expected 1 agent, got ${wl.length}`);
   assert(wl[0].runs_responsible === 2, `expected 2 runs_responsible, got ${wl[0].runs_responsible}`);
@@ -210,11 +205,10 @@ test('null agent_id excluded from all counts', () => {
       { stage: 'pm-ready', agent_id: null },
     ],
   });
-  const projectsDir = makeTempDir();
-  makeProject(projectsDir, 'proj-null', [
+  const { wsRoot } = makeTempWorkspace('proj-null', [
     { id: 'T-NULL', status: 'in_progress', run_folder: runDir },
   ]);
-  const result = buildDashboard({ projectsDir, workspaceRoot: '/' });
+  const result = buildDashboard({ workspaceRoot: wsRoot });
   assert(result.projects[0].workload_by_agent.length === 0,
     `expected empty workload, got ${result.projects[0].workload_by_agent.length}`);
 });
@@ -225,12 +219,11 @@ test('role resolved from agent-state', () => {
     responsible_agent: 'agent-role-test',
     stage_history: [{ stage: 'intake', agent_id: 'agent-role-test' }],
   });
-  const projectsDir = makeTempDir();
   const agentsDir = makeAgentsDir([{ agent_id: 'agent-role-test', role: 'QA' }]);
-  makeProject(projectsDir, 'proj-role', [
+  const { wsRoot } = makeTempWorkspace('proj-role', [
     { id: 'T-ROLE', status: 'in_progress', run_folder: runDir },
   ]);
-  const result = buildDashboard({ projectsDir, workspaceRoot: '/', agentsDir, _roleCache: {} });
+  const result = buildDashboard({ workspaceRoot: wsRoot, agentsDir, _roleCache: {} });
   const wl = result.projects[0].workload_by_agent;
   assert(wl[0].role === 'QA', `expected QA, got ${wl[0].role}`);
 });
@@ -241,12 +234,11 @@ test('unknown role when agent state missing', () => {
     responsible_agent: 'ghost-agent',
     stage_history: [],
   });
-  const projectsDir = makeTempDir();
   const agentsDir = makeAgentsDir([]); // no agents registered
-  makeProject(projectsDir, 'proj-ghost', [
+  const { wsRoot } = makeTempWorkspace('proj-ghost', [
     { id: 'T-GHOST', status: 'in_progress', run_folder: runDir },
   ]);
-  const result = buildDashboard({ projectsDir, workspaceRoot: '/', agentsDir, _roleCache: {} });
+  const result = buildDashboard({ workspaceRoot: wsRoot, agentsDir, _roleCache: {} });
   const wl = result.projects[0].workload_by_agent;
   assert(wl[0].role === 'unknown', `expected unknown, got ${wl[0].role}`);
 });
@@ -255,7 +247,7 @@ test('unknown role when agent state missing', () => {
 console.log('\n--- workload_summary ---');
 // ---------------------------------------------------------------------------
 
-test('workload_summary aggregates runs_per_role across projects', () => {
+test('workload_summary aggregates runs_per_role across multiple runs', () => {
   const run1 = makeRunFolder({
     current_stage: 'pm-ready', blocked: false,
     responsible_agent: 'pm-1',
@@ -271,20 +263,17 @@ test('workload_summary aggregates runs_per_role across projects', () => {
     responsible_agent: 'pm-2',
     stage_history: [],
   });
-  const projectsDir = makeTempDir();
   const agentsDir = makeAgentsDir([
     { agent_id: 'pm-1', role: 'PM' },
     { agent_id: 'pm-2', role: 'PM' },
     { agent_id: 'dev-1', role: 'Dev' },
   ]);
-  makeProject(projectsDir, 'proj-s1', [
+  const { wsRoot } = makeTempWorkspace('proj-s1', [
     { id: 'T-S1', status: 'in_progress', run_folder: run1 },
     { id: 'T-S2', status: 'in_progress', run_folder: run2 },
-  ]);
-  makeProject(projectsDir, 'proj-s2', [
     { id: 'T-S3', status: 'in_progress', run_folder: run3 },
   ]);
-  const result = buildDashboard({ projectsDir, workspaceRoot: '/', agentsDir, _roleCache: {} });
+  const result = buildDashboard({ workspaceRoot: wsRoot, agentsDir, _roleCache: {} });
   const rpr = result.summary.workload_summary.runs_per_role;
   assert(rpr.PM === 2, `expected PM=2, got ${rpr.PM}`);
   assert(rpr.Dev === 1, `expected Dev=1, got ${rpr.Dev}`);
@@ -300,15 +289,14 @@ test('workload_summary aggregates stages_per_role', () => {
       { stage: 'arch-ready', agent_id: 'arch-1' },
     ],
   });
-  const projectsDir = makeTempDir();
   const agentsDir = makeAgentsDir([
     { agent_id: 'pm-1', role: 'PM' },
     { agent_id: 'arch-1', role: 'Architect' },
   ]);
-  makeProject(projectsDir, 'proj-spr', [
+  const { wsRoot } = makeTempWorkspace('proj-spr', [
     { id: 'T-SPR', status: 'in_progress', run_folder: run1 },
   ]);
-  const result = buildDashboard({ projectsDir, workspaceRoot: '/', agentsDir, _roleCache: {} });
+  const result = buildDashboard({ workspaceRoot: wsRoot, agentsDir, _roleCache: {} });
   const spr = result.summary.workload_summary.stages_per_role;
   assert(spr.PM === 2, `expected PM=2, got ${spr.PM}`);
   assert(spr.Architect === 1, `expected Architect=1, got ${spr.Architect}`);
@@ -327,12 +315,11 @@ test('workload_by_agent sorted by agent_id', () => {
       { stage: 'pm-ready', agent_id: 'mmm-agent' },
     ],
   });
-  const projectsDir = makeTempDir();
   const agentsDir = makeAgentsDir([]);
-  makeProject(projectsDir, 'proj-det', [
+  const { wsRoot } = makeTempWorkspace('proj-det', [
     { id: 'T-DET', status: 'in_progress', run_folder: runDir },
   ]);
-  const result = buildDashboard({ projectsDir, workspaceRoot: '/', agentsDir, _roleCache: {} });
+  const result = buildDashboard({ workspaceRoot: wsRoot, agentsDir, _roleCache: {} });
   const ids = result.projects[0].workload_by_agent.map(w => w.agent_id);
   assert(ids[0] === 'aaa-agent', `first should be aaa-agent, got ${ids[0]}`);
   assert(ids[1] === 'mmm-agent', `second should be mmm-agent, got ${ids[1]}`);
@@ -349,21 +336,19 @@ test('full output validates against updated schema', () => {
     responsible_agent: 'agent-sv',
     stage_history: [{ stage: 'intake', agent_id: 'agent-sv' }],
   });
-  const projectsDir = makeTempDir();
   const agentsDir = makeAgentsDir([{ agent_id: 'agent-sv', role: 'PM' }]);
-  makeProject(projectsDir, 'proj-sv', [
+  const { wsRoot } = makeTempWorkspace('proj-sv', [
     { id: 'T-SV1', status: 'in_progress', run_folder: run1 },
     { id: 'T-SV2', status: 'done' },
   ]);
-  const result = buildDashboard({ projectsDir, workspaceRoot: '/', agentsDir, _roleCache: {} });
+  const result = buildDashboard({ workspaceRoot: wsRoot, agentsDir, _roleCache: {} });
   const v = validateAgainstSchema(result, dashboardSchema);
   assert(v.ok, `schema validation failed: ${v.ok ? '' : v.details.join('; ')}`);
 });
 
 test('empty dashboard validates against schema', () => {
-  const projectsDir = makeTempDir();
-  makeProject(projectsDir, 'proj-empty-sv', []);
-  const result = buildDashboard({ projectsDir });
+  const { wsRoot } = makeTempWorkspace('proj-empty-sv', []);
+  const result = buildDashboard({ workspaceRoot: wsRoot });
   const v = validateAgainstSchema(result, dashboardSchema);
   assert(v.ok, `schema validation failed: ${v.ok ? '' : v.details.join('; ')}`);
 });

@@ -28,8 +28,6 @@ const { writeTicket, validateTicketFormat, resolveTicketPath } = require(path.re
 const { validateAgainstSchema } = require(path.resolve(__dirname, 'validate-json-schema.js'));
 
 const WORKSPACE_ROOT = process.env.WORKSPACE_ROOT || path.resolve(os.homedir(), 'dev', 'agent-work');
-const TICKETS_DIR = path.join(WORKSPACE_ROOT, 'tickets');
-const PROJECTS_DIR = path.join(WORKSPACE_ROOT, 'projects');
 
 const backlogSchema = JSON.parse(
   fs.readFileSync(path.resolve(__dirname, '..', 'schemas', 'backlog-item.schema.json'), 'utf8')
@@ -49,8 +47,9 @@ const REQUIRED_PARAMS = [
 // Core
 // ---------------------------------------------------------------------------
 function createTicketAndBacklog(params, options = {}) {
-  const ticketsDir = options.ticketsDir || TICKETS_DIR;
-  const projectsDir = options.projectsDir || PROJECTS_DIR;
+  const wsRoot = options.workspaceRoot || WORKSPACE_ROOT;
+  const ticketsDir = options.ticketsDir || path.join(wsRoot, '.claw', 'tickets');
+  const backlogBaseDir = options.backlogDir || path.join(wsRoot, '.claw', 'backlog');
 
   // 1. Validate required params
   for (const key of REQUIRED_PARAMS) {
@@ -82,7 +81,7 @@ function createTicketAndBacklog(params, options = {}) {
     return { ok: false, error: `Ticket file already exists: ${params.ticket_id}.md` };
   }
 
-  const backlogDir = path.join(projectsDir, params.project_id, 'backlog');
+  const backlogDir = backlogBaseDir;
   const backlogPath = path.join(backlogDir, `${params.ticket_id}.json`);
   if (fs.existsSync(backlogPath)) {
     return { ok: false, error: `Backlog item already exists: ${params.ticket_id}.json` };
@@ -210,8 +209,9 @@ if (require.main === module) {
   }
 
   const options = {};
+  if (getArg('workspace')) options.workspaceRoot = getArg('workspace');
   if (getArg('tickets_dir')) options.ticketsDir = getArg('tickets_dir');
-  if (getArg('projects_dir')) options.projectsDir = getArg('projects_dir');
+  if (getArg('backlog_dir')) options.backlogDir = getArg('backlog_dir');
 
   const result = createTicketAndBacklog(params, options);
   if (!result.ok) {

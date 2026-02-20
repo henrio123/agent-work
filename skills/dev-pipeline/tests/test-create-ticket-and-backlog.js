@@ -37,34 +37,25 @@ function assert(cond, msg) {
   if (!cond) throw new Error(msg || 'assertion failed');
 }
 
-function makeTempDir() {
-  const dir = path.join(os.tmpdir(), `_test_ctab_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`);
-  fs.mkdirSync(dir, { recursive: true });
-  tmpDirs.push(dir);
-  return dir;
-}
-
-function makeWorkspace() {
-  const root = makeTempDir();
-  const ticketsDir = path.join(root, 'tickets');
-  const projectsDir = path.join(root, 'projects');
+function makeTempWorkspace() {
+  const wsRoot = path.join(os.tmpdir(), `_test_ctab_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`);
+  const ticketsDir = path.join(wsRoot, '.claw', 'tickets');
+  const backlogDir = path.join(wsRoot, '.claw', 'backlog');
   fs.mkdirSync(ticketsDir, { recursive: true });
-  fs.mkdirSync(projectsDir, { recursive: true });
-  return { root, ticketsDir, projectsDir };
-}
+  fs.mkdirSync(backlogDir, { recursive: true });
+  tmpDirs.push(wsRoot);
 
-function makeProject(projectsDir, projectId) {
-  const projectDir = path.join(projectsDir, projectId);
-  fs.mkdirSync(path.join(projectDir, 'backlog'), { recursive: true });
-  const project = {
-    project_id: projectId,
-    title: `Test project ${projectId}`,
-    description: `Description for ${projectId}`,
+  // Write project.json at .claw/project.json
+  fs.writeFileSync(path.join(wsRoot, '.claw', 'project.json'), JSON.stringify({
+    project_id: 'test-proj',
+    title: 'Test project test-proj',
+    description: 'Description for test-proj',
     repo_path: null,
     created_at: '2026-01-01T00:00:00.000Z',
     updated_at: '2026-01-01T00:00:00.000Z',
-  };
-  fs.writeFileSync(path.join(projectDir, 'project.json'), JSON.stringify(project, null, 2), 'utf8');
+  }, null, 2), 'utf8');
+
+  return { wsRoot, ticketsDir, backlogDir };
 }
 
 function baseParams(overrides = {}) {
@@ -95,10 +86,9 @@ process.on('exit', cleanup);
 console.log('\n--- happy path ---');
 
 test('creates both ticket and backlog files', () => {
-  const { ticketsDir, projectsDir } = makeWorkspace();
-  makeProject(projectsDir, 'test-proj');
+  const { ticketsDir, backlogDir } = makeTempWorkspace();
 
-  const result = createTicketAndBacklog(baseParams(), { ticketsDir, projectsDir });
+  const result = createTicketAndBacklog(baseParams(), { ticketsDir, backlogDir });
   assert(result.ok === true, `expected ok: true, got error: ${result.error}`);
   assert(result.action === 'created', 'expected action: created');
   assert(result.ticket_id === 'T-TEST-01', 'expected ticket_id');
@@ -107,10 +97,9 @@ test('creates both ticket and backlog files', () => {
 });
 
 test('ticket has correct frontmatter', () => {
-  const { ticketsDir, projectsDir } = makeWorkspace();
-  makeProject(projectsDir, 'test-proj');
+  const { ticketsDir, backlogDir } = makeTempWorkspace();
 
-  createTicketAndBacklog(baseParams(), { ticketsDir, projectsDir });
+  createTicketAndBacklog(baseParams(), { ticketsDir, backlogDir });
   const content = fs.readFileSync(path.join(ticketsDir, 'T-TEST-01.md'), 'utf8');
   assert(content.includes('ticket_id: T-TEST-01'), 'missing ticket_id in frontmatter');
   assert(content.includes('title: Test ticket'), 'missing title in frontmatter');
@@ -120,18 +109,16 @@ test('ticket has correct frontmatter', () => {
 });
 
 test('backlog item validates against schema', () => {
-  const { ticketsDir, projectsDir } = makeWorkspace();
-  makeProject(projectsDir, 'test-proj');
+  const { ticketsDir, backlogDir } = makeTempWorkspace();
 
-  createTicketAndBacklog(baseParams(), { ticketsDir, projectsDir });
-  const data = JSON.parse(fs.readFileSync(path.join(projectsDir, 'test-proj', 'backlog', 'T-TEST-01.json'), 'utf8'));
+  createTicketAndBacklog(baseParams(), { ticketsDir, backlogDir });
+  const data = JSON.parse(fs.readFileSync(path.join(backlogDir, 'T-TEST-01.json'), 'utf8'));
   const schemaResult = validateAgainstSchema(data, backlogSchema);
   assert(schemaResult.ok, `schema validation failed: ${JSON.stringify(schemaResult.details)}`);
 });
 
 test('respects optional fields (tags, depends_on, parent_id, phase, stop_condition)', () => {
-  const { ticketsDir, projectsDir } = makeWorkspace();
-  makeProject(projectsDir, 'test-proj');
+  const { ticketsDir, backlogDir } = makeTempWorkspace();
 
   const result = createTicketAndBacklog(baseParams({
     ticket_id: 'T-OPT-01',
@@ -140,7 +127,7 @@ test('respects optional fields (tags, depends_on, parent_id, phase, stop_conditi
     parent_id: 'EPIC-1',
     phase: 'Phase 1',
     stop_condition: 'All tests pass',
-  }), { ticketsDir, projectsDir });
+  }), { ticketsDir, backlogDir });
   assert(result.ok === true, `expected ok: true, got: ${result.error}`);
 
   const data = JSON.parse(fs.readFileSync(result.backlog_path, 'utf8'));
@@ -152,38 +139,34 @@ test('respects optional fields (tags, depends_on, parent_id, phase, stop_conditi
 });
 
 test('creates backlog dir when it does not exist', () => {
-  const { ticketsDir, projectsDir } = makeWorkspace();
-  // Create project dir but NOT backlog subdir
-  const projectDir = path.join(projectsDir, 'new-proj');
-  fs.mkdirSync(projectDir, { recursive: true });
-  fs.writeFileSync(path.join(projectDir, 'project.json'), JSON.stringify({
-    project_id: 'new-proj', title: 'New', description: 'New proj',
-    repo_path: null, created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z',
-  }), 'utf8');
+  const wsRoot = path.join(os.tmpdir(), `_test_ctab_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`);
+  const ticketsDir = path.join(wsRoot, '.claw', 'tickets');
+  const backlogDir = path.join(wsRoot, '.claw', 'backlog');
+  // Only create tickets dir, NOT backlog dir
+  fs.mkdirSync(ticketsDir, { recursive: true });
+  tmpDirs.push(wsRoot);
 
-  const result = createTicketAndBacklog(baseParams({ project_id: 'new-proj' }), { ticketsDir, projectsDir });
+  const result = createTicketAndBacklog(baseParams({ project_id: 'new-proj' }), { ticketsDir, backlogDir });
   assert(result.ok === true, `expected ok: true, got: ${result.error}`);
-  assert(fs.existsSync(path.join(projectDir, 'backlog', 'T-TEST-01.json')), 'backlog dir should be created');
+  assert(fs.existsSync(path.join(backlogDir, 'T-TEST-01.json')), 'backlog dir should be created');
 });
 
 test('backlog item defaults: status=todo, run_folder=null', () => {
-  const { ticketsDir, projectsDir } = makeWorkspace();
-  makeProject(projectsDir, 'test-proj');
+  const { ticketsDir, backlogDir } = makeTempWorkspace();
 
-  createTicketAndBacklog(baseParams(), { ticketsDir, projectsDir });
-  const data = JSON.parse(fs.readFileSync(path.join(projectsDir, 'test-proj', 'backlog', 'T-TEST-01.json'), 'utf8'));
+  createTicketAndBacklog(baseParams(), { ticketsDir, backlogDir });
+  const data = JSON.parse(fs.readFileSync(path.join(backlogDir, 'T-TEST-01.json'), 'utf8'));
   assert(data.status === 'todo', 'status should default to todo');
   assert(data.run_folder === null, 'run_folder should default to null');
 });
 
 test('steps as comma-separated string', () => {
-  const { ticketsDir, projectsDir } = makeWorkspace();
-  makeProject(projectsDir, 'test-proj');
+  const { ticketsDir, backlogDir } = makeTempWorkspace();
 
   const result = createTicketAndBacklog(baseParams({
     ticket_id: 'T-CSV-01',
     steps: 'Step one, Step two, Step three',
-  }), { ticketsDir, projectsDir });
+  }), { ticketsDir, backlogDir });
   assert(result.ok === true, `expected ok: true, got: ${result.error}`);
 
   const content = fs.readFileSync(result.ticket_path, 'utf8');
@@ -198,27 +181,24 @@ test('steps as comma-separated string', () => {
 console.log('\n--- conflict detection ---');
 
 test('rejects duplicate ticket_id', () => {
-  const { ticketsDir, projectsDir } = makeWorkspace();
-  makeProject(projectsDir, 'test-proj');
+  const { ticketsDir, backlogDir } = makeTempWorkspace();
 
   // Create first
-  createTicketAndBacklog(baseParams(), { ticketsDir, projectsDir });
+  createTicketAndBacklog(baseParams(), { ticketsDir, backlogDir });
 
   // Try duplicate
-  const result = createTicketAndBacklog(baseParams(), { ticketsDir, projectsDir });
+  const result = createTicketAndBacklog(baseParams(), { ticketsDir, backlogDir });
   assert(result.ok === false, 'expected ok: false');
   assert(result.error.includes('already exists'), `unexpected error: ${result.error}`);
 });
 
 test('rejects duplicate backlog item', () => {
-  const { ticketsDir, projectsDir } = makeWorkspace();
-  makeProject(projectsDir, 'test-proj');
+  const { ticketsDir, backlogDir } = makeTempWorkspace();
 
   // Pre-create backlog item but not ticket
-  const backlogDir = path.join(projectsDir, 'test-proj', 'backlog');
   fs.writeFileSync(path.join(backlogDir, 'T-TEST-01.json'), '{}', 'utf8');
 
-  const result = createTicketAndBacklog(baseParams(), { ticketsDir, projectsDir });
+  const result = createTicketAndBacklog(baseParams(), { ticketsDir, backlogDir });
   assert(result.ok === false, 'expected ok: false');
   assert(result.error.includes('Backlog item already exists'), `unexpected error: ${result.error}`);
 });
@@ -229,45 +209,45 @@ test('rejects duplicate backlog item', () => {
 console.log('\n--- validation errors ---');
 
 test('rejects missing required field (ticket_id)', () => {
-  const { ticketsDir, projectsDir } = makeWorkspace();
+  const { ticketsDir, backlogDir } = makeTempWorkspace();
   const params = baseParams();
   delete params.ticket_id;
 
-  const result = createTicketAndBacklog(params, { ticketsDir, projectsDir });
+  const result = createTicketAndBacklog(params, { ticketsDir, backlogDir });
   assert(result.ok === false, 'expected ok: false');
   assert(result.error.includes('ticket_id'), `unexpected error: ${result.error}`);
 });
 
 test('rejects missing required field (goal)', () => {
-  const { ticketsDir, projectsDir } = makeWorkspace();
+  const { ticketsDir, backlogDir } = makeTempWorkspace();
   const params = baseParams();
   delete params.goal;
 
-  const result = createTicketAndBacklog(params, { ticketsDir, projectsDir });
+  const result = createTicketAndBacklog(params, { ticketsDir, backlogDir });
   assert(result.ok === false, 'expected ok: false');
   assert(result.error.includes('goal'), `unexpected error: ${result.error}`);
 });
 
 test('rejects invalid type', () => {
-  const { ticketsDir, projectsDir } = makeWorkspace();
+  const { ticketsDir, backlogDir } = makeTempWorkspace();
 
-  const result = createTicketAndBacklog(baseParams({ type: 'invalid' }), { ticketsDir, projectsDir });
+  const result = createTicketAndBacklog(baseParams({ type: 'invalid' }), { ticketsDir, backlogDir });
   assert(result.ok === false, 'expected ok: false');
   assert(result.error.includes('Invalid type'), `unexpected error: ${result.error}`);
 });
 
 test('rejects invalid priority', () => {
-  const { ticketsDir, projectsDir } = makeWorkspace();
+  const { ticketsDir, backlogDir } = makeTempWorkspace();
 
-  const result = createTicketAndBacklog(baseParams({ priority: 'P9' }), { ticketsDir, projectsDir });
+  const result = createTicketAndBacklog(baseParams({ priority: 'P9' }), { ticketsDir, backlogDir });
   assert(result.ok === false, 'expected ok: false');
   assert(result.error.includes('Invalid priority'), `unexpected error: ${result.error}`);
 });
 
 test('rejects invalid owner_role', () => {
-  const { ticketsDir, projectsDir } = makeWorkspace();
+  const { ticketsDir, backlogDir } = makeTempWorkspace();
 
-  const result = createTicketAndBacklog(baseParams({ owner_role: 'CEO' }), { ticketsDir, projectsDir });
+  const result = createTicketAndBacklog(baseParams({ owner_role: 'CEO' }), { ticketsDir, backlogDir });
   assert(result.ok === false, 'expected ok: false');
   assert(result.error.includes('Invalid owner_role'), `unexpected error: ${result.error}`);
 });

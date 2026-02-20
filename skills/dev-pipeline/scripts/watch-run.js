@@ -51,7 +51,7 @@ function watchRun(runFolder, options = {}) {
     return { ok: false, events_emitted: 0, error: e.message };
   }
 
-  const runsDir = safePath('runs');
+  const runsDir = safePath('.claw/runs');
   if (!resolvedFolder.startsWith(runsDir + path.sep)) {
     const msg = 'run folder must be under runs/';
     onEvent({ ts: new Date().toISOString(), event: 'error', error: msg });
@@ -224,11 +224,11 @@ if (require.main === module) {
 
   // Path validation (same rules as stop/resume helpers)
   if (runFolder.startsWith('/')) {
-    process.stderr.write(JSON.stringify({ ok: false, error: 'absolute paths not allowed — use runs/<folder>' }) + '\n');
+    process.stderr.write(JSON.stringify({ ok: false, error: 'absolute paths not allowed — use .claw/runs/<folder>' }) + '\n');
     process.exit(1);
   }
-  if (!runFolder.startsWith('runs/')) {
-    process.stderr.write(JSON.stringify({ ok: false, error: 'path must start with runs/' }) + '\n');
+  if (!runFolder.startsWith('.claw/runs/')) {
+    process.stderr.write(JSON.stringify({ ok: false, error: 'path must start with .claw/runs/' }) + '\n');
     process.exit(1);
   }
   if (runFolder.includes('..')) {

@@ -65,7 +65,7 @@ function createRunForTask(taskItem, projectId, options = {}) {
   const workspaceRoot = options.workspaceRoot || WORKSPACE_ROOT;
   const ts = timestamp();
   const folderName = `${ts}_${taskItem.id}`;
-  const runFolder = `runs/${folderName}`;
+  const runFolder = `.claw/runs/${folderName}`;
   const absRunFolder = safePath(runFolder, workspaceRoot);
 
   fs.mkdirSync(absRunFolder, { recursive: true });
@@ -113,8 +113,7 @@ function createRunForTask(taskItem, projectId, options = {}) {
 // ---------------------------------------------------------------------------
 function copyTaskPackToRun(projectId, taskId, runFolder, options = {}) {
   const workspaceRoot = options.workspaceRoot || WORKSPACE_ROOT;
-  const projectsDir = options.projectsDir || path.join(workspaceRoot, 'projects');
-  const taskPackPath = path.join(projectsDir, projectId, 'task-packs', `${taskId}.json`);
+  const taskPackPath = options.taskPackPath || path.join(workspaceRoot, '.claw', 'task-packs', `${taskId}.json`);
 
   if (!fs.existsSync(taskPackPath)) return false;
 
@@ -137,8 +136,7 @@ function copyTaskPackToRun(projectId, taskId, runFolder, options = {}) {
 // ---------------------------------------------------------------------------
 function linkRunToBacklogItem(taskId, projectId, runFolder, options = {}) {
   const workspaceRoot = options.workspaceRoot || WORKSPACE_ROOT;
-  const projectsDir = options.projectsDir || path.join(workspaceRoot, 'projects');
-  const backlogDir = path.join(projectsDir, projectId, 'backlog');
+  const backlogDir = options.backlogDir || path.join(workspaceRoot, '.claw', 'backlog');
 
   // Find and update the backlog item
   if (fs.existsSync(backlogDir)) {
@@ -191,8 +189,8 @@ function projectDriveOnce(options = {}) {
   const taskId = pickResult.task_id;
 
   // Preflight: validate backlog graph before creating or driving a run
-  const graphOpts = {};
-  if (options.projectsDir) graphOpts.projectsDir = options.projectsDir;
+  const graphOpts = { workspaceRoot };
+  if (options.backlogDir) graphOpts.backlogDir = options.backlogDir;
   const graphResult = validateBacklogGraph(projectId, graphOpts);
   if (graphResult.ok && !graphResult.valid) {
     const warning = {
@@ -226,8 +224,7 @@ function projectDriveOnce(options = {}) {
     }
 
     // Read the full backlog item for title/description
-    const projectsDir = options.projectsDir || path.join(workspaceRoot, 'projects');
-    const backlogDir = path.join(projectsDir, projectId, 'backlog');
+    const backlogDir = options.backlogDir || path.join(workspaceRoot, '.claw', 'backlog');
     let taskItem = { id: taskId, title: taskId, description: '' };
     if (fs.existsSync(backlogDir)) {
       const files = fs.readdirSync(backlogDir).filter((f) => f.endsWith('.json'));
@@ -268,7 +265,7 @@ function projectDriveOnce(options = {}) {
   const { pickNextRun } = require(path.resolve(__dirname, 'run-next-pick.js'));
 
   // Safety snapshot
-  const runsDir = safePath('runs', workspaceRoot);
+  const runsDir = safePath('.claw/runs', workspaceRoot);
   const runsBefore = fs.existsSync(runsDir)
     ? fs.readdirSync(runsDir, { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => e.name).sort()
     : [];
@@ -312,8 +309,7 @@ function projectDriveOnce(options = {}) {
 
   // Update backlog item with last_summary
   try {
-    const projectsDir = options.projectsDir || path.join(workspaceRoot, 'projects');
-    const backlogDir = path.join(projectsDir, projectId, 'backlog');
+    const backlogDir = options.backlogDir || path.join(workspaceRoot, '.claw', 'backlog');
     if (fs.existsSync(backlogDir)) {
       const files = fs.readdirSync(backlogDir).filter((f) => f.endsWith('.json'));
       for (const file of files) {

@@ -44,7 +44,7 @@ const BUCKET_PRIORITY = { ready_for_run_creation: 0, needs_task_pack: 1, needs_a
 // Check if a task pack exists for a given task
 // ---------------------------------------------------------------------------
 function hasTaskPack(projectId, taskId, workspaceRoot) {
-  const taskPackPath = path.join(workspaceRoot, 'projects', projectId, 'task-packs', `${taskId}.json`);
+  const taskPackPath = path.join(workspaceRoot, '.claw', 'task-packs', `${taskId}.json`);
   return fs.existsSync(taskPackPath);
 }
 

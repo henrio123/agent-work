@@ -3,30 +3,29 @@ set -euo pipefail
 
 # run-next-resume.sh — Remove stop signal so the autonomous runner can continue.
 # Removes .stop file from the run folder. Safe and idempotent.
-# Only accepts relative paths under runs/ (e.g. runs/20260218_150000_TICKET-1).
+# Only accepts relative paths under .claw/runs/ (e.g. .claw/runs/20260218_150000_TICKET-1).
 
-SCRIPT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-RUNS_DIR="$SCRIPT_DIR/runs"
+source "$(dirname "$0")/_workspace.sh"
 
-if [ -z "${1:-}" ]; then
-  echo "Usage: ./tools/run-next-resume.sh runs/<run_folder>"
+if [ ${#ARGS[@]} -eq 0 ]; then
+  echo "Usage: ./tools/run-next-resume.sh .claw/runs/<run_folder>"
   echo ""
-  echo "Removes runs/<run_folder>/.stop — the runner will continue on next invocation."
-  echo "Argument must be a relative path starting with runs/."
+  echo "Removes .claw/runs/<run_folder>/.stop — the runner will continue on next invocation."
+  echo "Argument must be a relative path starting with .claw/runs/."
   exit 1
 fi
 
-ARG="$1"
+ARG="${ARGS[0]}"
 
 # Refuse absolute paths
 if [[ "$ARG" == /* ]]; then
-  echo '{"ok":false,"error":"absolute paths not allowed — use runs/<folder>"}' >&2
+  echo '{"ok":false,"error":"absolute paths not allowed — use .claw/runs/<folder>"}' >&2
   exit 1
 fi
 
-# Must start with runs/
-if [[ "$ARG" != runs/* ]]; then
-  echo '{"ok":false,"error":"path must start with runs/"}' >&2
+# Must start with .claw/runs/
+if [[ "$ARG" != .claw/runs/* ]]; then
+  echo '{"ok":false,"error":"path must start with .claw/runs/"}' >&2
   exit 1
 fi
 
@@ -37,7 +36,7 @@ if [[ "$ARG" == *..* ]]; then
 fi
 
 # Resolve: join workspace root + relative arg (safe after traversal check)
-RESOLVED="$SCRIPT_DIR/$ARG"
+RESOLVED="$WORKSPACE_ROOT/$ARG"
 
 if [ ! -d "$RESOLVED" ]; then
   echo '{"ok":false,"error":"run folder does not exist"}' >&2

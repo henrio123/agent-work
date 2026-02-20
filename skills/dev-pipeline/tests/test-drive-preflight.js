@@ -10,7 +10,6 @@ const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
 
-const WORKSPACE_ROOT = process.env.WORKSPACE_ROOT || path.resolve(os.homedir(), 'dev', 'agent-work');
 const { projectDriveOnce } = require(path.resolve(__dirname, '..', 'scripts', 'project-next-drive.js'));
 
 let passed = 0;
@@ -33,58 +32,51 @@ function assert(cond, msg) {
   if (!cond) throw new Error(msg || 'assertion failed');
 }
 
-function makeTempDir() {
-  const dir = path.join(os.tmpdir(), `_test_preflight_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`);
-  fs.mkdirSync(dir, { recursive: true });
-  tmpDirs.push(dir);
-  return dir;
-}
+function makeTempWorkspace(projectId, backlogItems = []) {
+  const wsRoot = path.join(os.tmpdir(), `_test_preflight_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`);
+  const clawRoot = path.join(wsRoot, '.claw');
+  const backlogDir = path.join(clawRoot, 'backlog');
+  fs.mkdirSync(backlogDir, { recursive: true });
+  fs.mkdirSync(path.join(clawRoot, 'runs'), { recursive: true });
+  tmpDirs.push(wsRoot);
 
-function makeProject(projectsDir, projectId, backlogItems = []) {
-  const projectDir = path.join(projectsDir, projectId);
-  fs.mkdirSync(projectDir, { recursive: true });
-
-  const project = {
+  fs.writeFileSync(path.join(clawRoot, 'project.json'), JSON.stringify({
     project_id: projectId,
-    title: `Test project ${projectId}`,
-    description: `Description for ${projectId}`,
+    title: `Test ${projectId}`,
+    description: 'test',
     repo_path: null,
-    created_at: '2026-01-01T00:00:00.000Z',
-    updated_at: '2026-01-01T00:00:00.000Z',
-  };
-  fs.writeFileSync(path.join(projectDir, 'project.json'), JSON.stringify(project, null, 2), 'utf8');
+    created_at: '2026-01-01T00:00:00Z',
+    updated_at: '2026-01-01T00:00:00Z',
+  }, null, 2), 'utf8');
 
-  if (backlogItems.length > 0) {
-    const backlogDir = path.join(projectDir, 'backlog');
-    fs.mkdirSync(backlogDir, { recursive: true });
-    for (const item of backlogItems) {
-      const defaults = {
-        project_id: projectId,
-        type: 'task',
-        title: `Task ${item.id}`,
-        description: 'Test task',
-        created_at: '2026-01-01T00:00:00.000Z',
-        updated_at: '2026-01-01T00:00:00.000Z',
-        status: 'todo',
-        priority: 'P2',
-        owner_role: 'DEV',
-        depends_on: [],
-        run_folder: null,
-        tags: [],
-        artifacts_expected: [],
-        last_summary: null,
-        parent_id: null,
-        phase: 'Test',
-        stop_condition: 'Test',
-        ...item,
-      };
-      fs.writeFileSync(
-        path.join(backlogDir, `${defaults.id}.json`),
-        JSON.stringify(defaults, null, 2),
-        'utf8'
-      );
-    }
+  for (const item of backlogItems) {
+    const defaults = {
+      project_id: projectId,
+      type: 'task',
+      title: `Task ${item.id}`,
+      description: 'Test task',
+      created_at: '2026-01-01T00:00:00Z',
+      updated_at: '2026-01-01T00:00:00Z',
+      status: 'todo',
+      priority: 'P2',
+      owner_role: 'DEV',
+      depends_on: [],
+      run_folder: null,
+      tags: [],
+      artifacts_expected: [],
+      last_summary: null,
+      parent_id: null,
+      phase: 'Test',
+      stop_condition: 'Test',
+      ...item,
+    };
+    fs.writeFileSync(
+      path.join(backlogDir, `${defaults.id}.json`),
+      JSON.stringify(defaults, null, 2),
+      'utf8'
+    );
   }
+  return { wsRoot, backlogDir };
 }
 
 function cleanup() {
@@ -114,9 +106,8 @@ function restoreStderr() {
 console.log('\n--- preflight: invalid graph ---');
 
 test('drive_skipped when backlog has dependency cycle (with eligible task)', () => {
-  const projectsDir = makeTempDir();
   // C is eligible (no deps), but A<->B form a cycle, so graph is invalid
-  makeProject(projectsDir, 'proj-cycle', [
+  const { wsRoot } = makeTempWorkspace('proj-cycle', [
     { id: 'A', depends_on: ['B'] },
     { id: 'B', depends_on: ['A'] },
     { id: 'C', status: 'todo', priority: 'P0' },
@@ -124,7 +115,7 @@ test('drive_skipped when backlog has dependency cycle (with eligible task)', () 
 
   captureStderr();
   try {
-    const result = projectDriveOnce({ projectsDir, dryRun: true });
+    const result = projectDriveOnce({ workspaceRoot: wsRoot, dryRun: true });
     restoreStderr();
     assert(result.ok === true, 'expected ok: true');
     assert(result.action === 'drive_skipped', `expected drive_skipped, got ${result.action}`);
@@ -136,8 +127,7 @@ test('drive_skipped when backlog has dependency cycle (with eligible task)', () 
 });
 
 test('stderr contains skipped_invalid_graph warning for cycle', () => {
-  const projectsDir = makeTempDir();
-  makeProject(projectsDir, 'proj-cycle2', [
+  const { wsRoot } = makeTempWorkspace('proj-cycle2', [
     { id: 'X', depends_on: ['Y'] },
     { id: 'Y', depends_on: ['X'] },
     { id: 'Z', status: 'todo', priority: 'P0' },
@@ -145,7 +135,7 @@ test('stderr contains skipped_invalid_graph warning for cycle', () => {
 
   captureStderr();
   try {
-    projectDriveOnce({ projectsDir, dryRun: true });
+    projectDriveOnce({ workspaceRoot: wsRoot, dryRun: true });
     restoreStderr();
     const warning = JSON.parse(capturedStderr.split('\n').find(l => l.includes('skipped_invalid_graph')));
     assert(warning.warning === 'skipped_invalid_graph', 'expected warning key');
@@ -158,15 +148,14 @@ test('stderr contains skipped_invalid_graph warning for cycle', () => {
 });
 
 test('drive_skipped when epic is done but child is not', () => {
-  const projectsDir = makeTempDir();
-  makeProject(projectsDir, 'proj-epic-bad', [
+  const { wsRoot } = makeTempWorkspace('proj-epic-bad', [
     { id: 'EPIC-1', type: 'epic', status: 'done' },
     { id: 'CHILD-1', parent_id: 'EPIC-1', status: 'todo' },
   ]);
 
   captureStderr();
   try {
-    const result = projectDriveOnce({ projectsDir, dryRun: true });
+    const result = projectDriveOnce({ workspaceRoot: wsRoot, dryRun: true });
     restoreStderr();
     assert(result.ok === true, 'expected ok: true');
     assert(result.action === 'drive_skipped', `expected drive_skipped, got ${result.action}`);
@@ -178,15 +167,14 @@ test('drive_skipped when epic is done but child is not', () => {
 });
 
 test('drive_skipped when parent_id references non-epic', () => {
-  const projectsDir = makeTempDir();
-  makeProject(projectsDir, 'proj-parent-bad', [
+  const { wsRoot } = makeTempWorkspace('proj-parent-bad', [
     { id: 'TASK-A', type: 'task', status: 'todo' },
     { id: 'TASK-B', parent_id: 'TASK-A', status: 'todo' },
   ]);
 
   captureStderr();
   try {
-    const result = projectDriveOnce({ projectsDir, dryRun: true });
+    const result = projectDriveOnce({ workspaceRoot: wsRoot, dryRun: true });
     restoreStderr();
     assert(result.ok === true, 'expected ok: true');
     assert(result.action === 'drive_skipped', `expected drive_skipped, got ${result.action}`);
@@ -203,15 +191,14 @@ test('drive_skipped when parent_id references non-epic', () => {
 console.log('\n--- preflight: valid graph ---');
 
 test('valid graph proceeds to drive (dry_run)', () => {
-  const projectsDir = makeTempDir();
-  makeProject(projectsDir, 'proj-valid', [
+  const { wsRoot } = makeTempWorkspace('proj-valid', [
     { id: 'T-1', status: 'todo', priority: 'P0' },
     { id: 'T-2', status: 'todo', depends_on: ['T-1'] },
   ]);
 
   captureStderr();
   try {
-    const result = projectDriveOnce({ projectsDir, dryRun: true });
+    const result = projectDriveOnce({ workspaceRoot: wsRoot, dryRun: true });
     restoreStderr();
     assert(result.ok === true, 'expected ok: true');
     assert(result.action === 'drive_skipped', `expected drive_skipped (dry_run), got ${result.action}`);
@@ -224,14 +211,13 @@ test('valid graph proceeds to drive (dry_run)', () => {
 });
 
 test('valid graph with no issues proceeds', () => {
-  const projectsDir = makeTempDir();
-  makeProject(projectsDir, 'proj-clean', [
+  const { wsRoot } = makeTempWorkspace('proj-clean', [
     { id: 'SOLO', status: 'todo', priority: 'P1' },
   ]);
 
   captureStderr();
   try {
-    const result = projectDriveOnce({ projectsDir, dryRun: true });
+    const result = projectDriveOnce({ workspaceRoot: wsRoot, dryRun: true });
     restoreStderr();
     assert(result.ok === true, 'expected ok');
     assert(!result.graph_invalid, 'should not have graph_invalid');

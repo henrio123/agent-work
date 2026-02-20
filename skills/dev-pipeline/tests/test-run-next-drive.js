@@ -12,7 +12,8 @@ const path = require('node:path');
 const os = require('node:os');
 
 const WORKSPACE_ROOT = process.env.WORKSPACE_ROOT || path.resolve(os.homedir(), 'dev', 'agent-work');
-const RUNS_DIR = path.join(WORKSPACE_ROOT, 'runs');
+const RUNS_DIR = path.join(WORKSPACE_ROOT, '.claw', 'runs');
+fs.mkdirSync(RUNS_DIR, { recursive: true });
 const DRIVE_SCRIPT = path.resolve(__dirname, '..', 'scripts', 'run-next-drive.js');
 const DRIVE_SHELL = path.join(WORKSPACE_ROOT, 'tools', 'run-next-drive.sh');
 const AUDIT_FILENAME = 'autonomous-audit.jsonl';
@@ -42,7 +43,7 @@ function makeTempRun(name, statusOverrides = {}, extras = {}) {
   fs.mkdirSync(absDir, { recursive: true });
   tmpDirs.push(absDir);
 
-  const relDir = `runs/${folderName}`;
+  const relDir = `.claw/runs/${folderName}`;
 
   if (extras.skipStatus) {
     return { folderName, absDir, relDir };
@@ -114,7 +115,7 @@ test('drive_skipped when all runs done/blocked/stopped', () => {
 });
 
 test('drive_skipped returns exit 0 via CLI when no eligible', () => {
-  // The real runs/ has active runs so we can't easily test this via CLI.
+  // The real .claw/runs/ has active runs so we can't easily test this via CLI.
   // But we can test the output contract is JSON.
   const stdout = execFileSync('node', [DRIVE_SCRIPT, '--dry_run'], {
     encoding: 'utf8',
@@ -402,7 +403,7 @@ test('drive_skipped output validates against schema', () => {
 // -------------------------------------------------------------------------
 console.log('\n--- read-only safety ---');
 
-test('no new run folders created in real runs/', () => {
+test('no new run folders created in real .claw/runs/', () => {
   const allRuns = fs.readdirSync(RUNS_DIR, { withFileTypes: true })
     .filter((e) => e.isDirectory())
     .map((e) => e.name);

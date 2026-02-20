@@ -24,7 +24,6 @@ const path = require('node:path');
 const os = require('node:os');
 
 const WORKSPACE_ROOT = process.env.WORKSPACE_ROOT || path.resolve(os.homedir(), 'dev', 'agent-work');
-const PROJECTS_DIR = path.join(WORKSPACE_ROOT, 'projects');
 
 const VALID_STATUSES = ['todo', 'in_progress', 'blocked', 'done'];
 
@@ -32,13 +31,13 @@ const VALID_STATUSES = ['todo', 'in_progress', 'blocked', 'done'];
 // Core
 // ---------------------------------------------------------------------------
 function updateBacklogStatus(projectId, itemId, newStatus, options) {
-  const projectsDir = options && options.projectsDir ? options.projectsDir : PROJECTS_DIR;
-
   if (!VALID_STATUSES.includes(newStatus)) {
     return { ok: false, error: `Invalid status '${newStatus}'. Must be one of: ${VALID_STATUSES.join(', ')}` };
   }
 
-  const backlogDir = path.join(projectsDir, projectId, 'backlog');
+  const backlogDir = options && options.backlogDir
+    ? options.backlogDir
+    : path.join((options && options.workspaceRoot) || WORKSPACE_ROOT, '.claw', 'backlog');
   if (!fs.existsSync(backlogDir)) {
     return { ok: false, error: `Backlog directory not found for project: ${projectId}` };
   }
@@ -109,11 +108,18 @@ function updateBacklogStatus(projectId, itemId, newStatus, options) {
 if (require.main === module) {
   const args = process.argv.slice(2);
 
-  const projDirIdx = args.indexOf('--projects_dir');
-  let projectsDir = PROJECTS_DIR;
-  if (projDirIdx !== -1) {
-    projectsDir = args[projDirIdx + 1] || PROJECTS_DIR;
-    args.splice(projDirIdx, 2);
+  const wsIdx = args.indexOf('--workspace');
+  let workspaceRoot = WORKSPACE_ROOT;
+  if (wsIdx !== -1) {
+    workspaceRoot = args[wsIdx + 1] || WORKSPACE_ROOT;
+    args.splice(wsIdx, 2);
+  }
+
+  const backlogDirIdx = args.indexOf('--backlog_dir');
+  let backlogDir = null;
+  if (backlogDirIdx !== -1) {
+    backlogDir = args[backlogDirIdx + 1];
+    args.splice(backlogDirIdx, 2);
   }
 
   const projectId = args[0];
@@ -128,7 +134,9 @@ if (require.main === module) {
     process.exit(1);
   }
 
-  const result = updateBacklogStatus(projectId, itemId, newStatus, { projectsDir });
+  const opts = { workspaceRoot };
+  if (backlogDir) opts.backlogDir = backlogDir;
+  const result = updateBacklogStatus(projectId, itemId, newStatus, opts);
   if (!result.ok) {
     process.stderr.write(JSON.stringify(result, null, 2) + '\n');
     process.exit(1);

@@ -14,7 +14,8 @@ const os = require('node:os');
 
 const DP = path.resolve(__dirname, '..', 'scripts', 'dev-pipeline.js');
 const WORKSPACE_ROOT = process.env.WORKSPACE_ROOT || path.resolve(os.homedir(), 'dev', 'agent-work');
-const RUNS_DIR = path.join(WORKSPACE_ROOT, 'runs');
+const RUNS_DIR = path.join(WORKSPACE_ROOT, '.claw', 'runs');
+fs.mkdirSync(RUNS_DIR, { recursive: true });
 
 let passed = 0;
 let failed = 0;
@@ -50,15 +51,15 @@ function runCmd(command, runFolder) {
   }
 }
 
-// Create a temporary run folder inside runs/ (so safePath accepts it).
-// Returns the relative path like "runs/<name>".
+// Create a temporary run folder inside .claw/runs/ (so safePath accepts it).
+// Returns the relative path like ".claw/runs/<name>".
 function makeTempRun(name, statusOverrides = {}) {
   const folderName = `_test_${name}_${Date.now()}`;
   const absDir = path.join(RUNS_DIR, folderName);
   fs.mkdirSync(absDir, { recursive: true });
   tmpDirs.push(absDir);
 
-  const relDir = `runs/${folderName}`;
+  const relDir = `.claw/runs/${folderName}`;
 
   // 00-intake.json
   fs.writeFileSync(path.join(absDir, '00-intake.json'), JSON.stringify({
@@ -227,7 +228,7 @@ test('run_next_safe is idempotent on done', () => {
 console.log('\n--- non-existent folder ---');
 
 test('non-existent folder returns action error and creates no directory', () => {
-  const ghostFolder = `runs/_test_ghost_${Date.now()}`;
+  const ghostFolder = `.claw/runs/_test_ghost_${Date.now()}`;
   const absGhost = path.join(WORKSPACE_ROOT, ghostFolder);
 
   // Snapshot directory listing before

@@ -12,7 +12,8 @@ const path = require('node:path');
 const os = require('node:os');
 
 const WORKSPACE_ROOT = process.env.WORKSPACE_ROOT || path.resolve(os.homedir(), 'dev', 'agent-work');
-const RUNS_DIR = path.join(WORKSPACE_ROOT, 'runs');
+const RUNS_DIR = path.join(WORKSPACE_ROOT, '.claw', 'runs');
+fs.mkdirSync(RUNS_DIR, { recursive: true });
 const PICK_SCRIPT = path.resolve(__dirname, '..', 'scripts', 'run-next-pick.js');
 const PICK_SHELL = path.join(WORKSPACE_ROOT, 'tools', 'run-next-pick.sh');
 
@@ -123,7 +124,7 @@ test('stopped run is not picked', () => {
   const { folderName, absDir } = makeTempRun('stopped', { current_stage: 'pm-ready' });
   fs.writeFileSync(path.join(absDir, '.stop'), '', 'utf8');
   const result = pickNextRun();
-  if (result.ok && result.action === 'picked_run' && result.run_folder === `runs/${folderName}`) {
+  if (result.ok && result.action === 'picked_run' && result.run_folder === `.claw/runs/${folderName}`) {
     throw new Error('should not pick stopped run');
   }
 });
@@ -131,7 +132,7 @@ test('stopped run is not picked', () => {
 test('blocked run is not picked', () => {
   const { folderName } = makeTempRun('blocked', { current_stage: 'blocked', blocked: true });
   const result = pickNextRun();
-  if (result.ok && result.action === 'picked_run' && result.run_folder === `runs/${folderName}`) {
+  if (result.ok && result.action === 'picked_run' && result.run_folder === `.claw/runs/${folderName}`) {
     throw new Error('should not pick blocked run');
   }
 });
@@ -139,7 +140,7 @@ test('blocked run is not picked', () => {
 test('done run is not picked', () => {
   const { folderName } = makeTempRun('done', { current_stage: 'done' });
   const result = pickNextRun();
-  if (result.ok && result.action === 'picked_run' && result.run_folder === `runs/${folderName}`) {
+  if (result.ok && result.action === 'picked_run' && result.run_folder === `.claw/runs/${folderName}`) {
     throw new Error('should not pick done run');
   }
 });
@@ -160,7 +161,7 @@ test('needs_task_pack outranks needs_artifacts', () => {
   const result = pickNextRun();
   if (!result.ok || result.action !== 'picked_run') throw new Error('expected picked_run');
   // The intake run should be picked (needs_task_pack > needs_artifacts)
-  if (result.run_folder === `runs/${f2}` && result.priority_bucket === 'needs_artifacts') {
+  if (result.run_folder === `.claw/runs/${f2}` && result.priority_bucket === 'needs_artifacts') {
     // Check that f1 wasn't eligible for some reason
     // Actually just verify the bucket is needs_task_pack
     throw new Error('needs_artifacts was picked over needs_task_pack');
@@ -207,7 +208,7 @@ test('returns no_eligible_runs when all done/blocked/stopped', () => {
   if (result.action !== 'no_eligible_runs') throw new Error(`expected no_eligible_runs, got ${result.action}`);
 });
 
-test('returns no_eligible_runs when runs/ is empty', () => {
+test('returns no_eligible_runs when .claw/runs/ is empty', () => {
   const tmpRunsDir = path.join(os.tmpdir(), `_test_pick_truly_empty_${Date.now()}`);
   fs.mkdirSync(tmpRunsDir, { recursive: true });
   tmpDirs.push(tmpRunsDir);

@@ -12,7 +12,8 @@ const path = require('node:path');
 const os = require('node:os');
 
 const WORKSPACE_ROOT = process.env.WORKSPACE_ROOT || path.resolve(os.homedir(), 'dev', 'agent-work');
-const RUNS_DIR = path.join(WORKSPACE_ROOT, 'runs');
+const RUNS_DIR = path.join(WORKSPACE_ROOT, '.claw', 'runs');
+fs.mkdirSync(RUNS_DIR, { recursive: true });
 const INDEX_SCRIPT = path.resolve(__dirname, '..', 'scripts', 'run-index.js');
 const INDEX_SHELL = path.join(WORKSPACE_ROOT, 'tools', 'run-index.sh');
 
@@ -104,7 +105,7 @@ test('includes run with status.json and reads fields', () => {
     blocked_reason: 'need input',
   });
   const result = buildIndex();
-  const entry = result.runs.find((r) => r.run_folder === `runs/${folderName}`);
+  const entry = result.runs.find((r) => r.run_folder === `.claw/runs/${folderName}`);
   if (!entry) throw new Error('test run not found in index');
   if (!entry.has_status) throw new Error('expected has_status true');
   if (entry.current_stage !== 'arch-ready') throw new Error(`wrong stage: ${entry.current_stage}`);
@@ -120,7 +121,7 @@ console.log('\n--- run without status ---');
 test('includes run without status.json (has_status false)', () => {
   const { folderName } = makeTempRun('no-status', {}, { skipStatus: true });
   const result = buildIndex();
-  const entry = result.runs.find((r) => r.run_folder === `runs/${folderName}`);
+  const entry = result.runs.find((r) => r.run_folder === `.claw/runs/${folderName}`);
   if (!entry) throw new Error('test run not found in index');
   if (entry.has_status) throw new Error('expected has_status false');
   if (entry.current_stage !== null) throw new Error('expected null stage');
@@ -135,14 +136,14 @@ test('detects .stop file', () => {
   const { folderName, absDir } = makeTempRun('with-stop');
   fs.writeFileSync(path.join(absDir, '.stop'), '', 'utf8');
   const result = buildIndex();
-  const entry = result.runs.find((r) => r.run_folder === `runs/${folderName}`);
+  const entry = result.runs.find((r) => r.run_folder === `.claw/runs/${folderName}`);
   if (!entry.stop_signal) throw new Error('expected stop_signal true');
 });
 
 test('no stop signal when .stop absent', () => {
   const { folderName } = makeTempRun('no-stop');
   const result = buildIndex();
-  const entry = result.runs.find((r) => r.run_folder === `runs/${folderName}`);
+  const entry = result.runs.find((r) => r.run_folder === `.claw/runs/${folderName}`);
   if (entry.stop_signal) throw new Error('expected stop_signal false');
 });
 
@@ -162,7 +163,7 @@ test('reads last_autonomous_summary and last_autonomous_run_at', () => {
     },
   });
   const result = buildIndex();
-  const entry = result.runs.find((r) => r.run_folder === `runs/${folderName}`);
+  const entry = result.runs.find((r) => r.run_folder === `.claw/runs/${folderName}`);
   if (!entry.last_autonomous_run_at) throw new Error('expected last_autonomous_run_at');
   if (!entry.last_autonomous_summary) throw new Error('expected last_autonomous_summary');
   if (entry.last_autonomous_summary.final_action !== 'needs_artifacts') throw new Error('wrong final_action');
@@ -236,14 +237,14 @@ test('detects audit log presence', () => {
   const auditLine = JSON.stringify({ ts: '2026-01-01T00:00:00.000Z', step: 1, action: 'x', stage: 'y', event: 'step', detail: 'test' });
   fs.writeFileSync(path.join(absDir, 'autonomous-audit.jsonl'), auditLine + '\n', 'utf8');
   const result = buildIndex();
-  const entry = result.runs.find((r) => r.run_folder === `runs/${folderName}`);
+  const entry = result.runs.find((r) => r.run_folder === `.claw/runs/${folderName}`);
   if (!entry.has_audit_log) throw new Error('expected has_audit_log true');
 });
 
 test('no audit log when file absent', () => {
   const { folderName } = makeTempRun('no-audit');
   const result = buildIndex();
-  const entry = result.runs.find((r) => r.run_folder === `runs/${folderName}`);
+  const entry = result.runs.find((r) => r.run_folder === `.claw/runs/${folderName}`);
   if (entry.has_audit_log) throw new Error('expected has_audit_log false');
 });
 
@@ -255,7 +256,7 @@ console.log('\n--- stalled detection ---');
 test('stalled=false when no summary present', () => {
   const { folderName } = makeTempRun('stale-no-summary');
   const result = buildIndex();
-  const entry = result.runs.find((r) => r.run_folder === `runs/${folderName}`);
+  const entry = result.runs.find((r) => r.run_folder === `.claw/runs/${folderName}`);
   if (entry.stalled) throw new Error('expected stalled false');
 });
 
@@ -270,7 +271,7 @@ test('stalled=true when needs_artifacts and audit is old', () => {
   fs.utimesSync(auditPath, oldTime, oldTime);
 
   const result = buildIndex();
-  const entry = result.runs.find((r) => r.run_folder === `runs/${folderName}`);
+  const entry = result.runs.find((r) => r.run_folder === `.claw/runs/${folderName}`);
   if (!entry.stalled) throw new Error('expected stalled true');
 });
 
@@ -283,7 +284,7 @@ test('stalled=false when needs_artifacts but audit is recent', () => {
   // mtime is now (just written) — within threshold
 
   const result = buildIndex({ stallThresholdMs: 30 * 60 * 1000 });
-  const entry = result.runs.find((r) => r.run_folder === `runs/${folderName}`);
+  const entry = result.runs.find((r) => r.run_folder === `.claw/runs/${folderName}`);
   if (entry.stalled) throw new Error('expected stalled false for recent audit');
 });
 
@@ -319,11 +320,11 @@ test('no new run folders created', () => {
 });
 
 // -------------------------------------------------------------------------
-// Test 11: Error on missing runs/
+// Test 11: Error on missing .claw/runs/
 // -------------------------------------------------------------------------
 console.log('\n--- error handling ---');
 
-test('returns error if runs/ does not exist', () => {
+test('returns error if .claw/runs/ does not exist', () => {
   const result = buildIndex({ runsDir: '/tmp/_nonexistent_runs_dir_xyz' });
   if (result.ok) throw new Error('expected ok:false');
   if (!result.error.includes('does not exist')) throw new Error('wrong error: ' + result.error);

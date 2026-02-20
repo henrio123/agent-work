@@ -20,7 +20,7 @@ const path = require('node:path');
 const os = require('node:os');
 
 const WORKSPACE_ROOT = process.env.WORKSPACE_ROOT || path.resolve(os.homedir(), 'dev', 'agent-work');
-const RUNS_DIR = path.join(WORKSPACE_ROOT, 'runs');
+const RUNS_DIR = path.join(WORKSPACE_ROOT, '.claw', 'runs');
 const AUDIT_FILENAME = 'autonomous-audit.jsonl';
 const STOP_FILENAME = '.stop';
 
@@ -44,7 +44,7 @@ function buildIndex(options = {}) {
 
   for (const folderName of entries) {
     const absDir = path.join(runsDir, folderName);
-    const runFolder = `runs/${folderName}`;
+    const runFolder = `.claw/runs/${folderName}`;
     const statusPath = path.join(absDir, 'status.json');
 
     const entry = {

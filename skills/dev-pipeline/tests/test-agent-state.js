@@ -265,7 +265,7 @@ test('CLI init creates agent', () => {
   // CLI uses real WORKSPACE_ROOT, so we test via programmatic init + CLI read pattern
   // Instead, test the real CLI with a unique agent name and clean up after
   const agentId = `_test_cli_${Date.now()}`;
-  const agentsRealDir = path.join(WORKSPACE_ROOT, 'agents');
+  const agentsRealDir = path.join(WORKSPACE_ROOT, '.claw', 'agents');
   try {
     const out = execFileSync('node', [SCRIPT, 'init', agentId, 'Dev'], { encoding: 'utf8' });
     const parsed = JSON.parse(out);
@@ -281,7 +281,7 @@ test('CLI init creates agent', () => {
 
 test('CLI read outputs valid JSON', () => {
   const agentId = `_test_cli_read_${Date.now()}`;
-  const agentsRealDir = path.join(WORKSPACE_ROOT, 'agents');
+  const agentsRealDir = path.join(WORKSPACE_ROOT, '.claw', 'agents');
   try {
     execFileSync('node', [SCRIPT, 'init', agentId, 'QA'], { encoding: 'utf8' });
     const out = execFileSync('node', [SCRIPT, 'read', agentId], { encoding: 'utf8' });
@@ -303,7 +303,7 @@ test('CLI list outputs valid JSON', () => {
 
 test('CLI init duplicate exits 1', () => {
   const agentId = `_test_cli_dup_${Date.now()}`;
-  const agentsRealDir = path.join(WORKSPACE_ROOT, 'agents');
+  const agentsRealDir = path.join(WORKSPACE_ROOT, '.claw', 'agents');
   try {
     execFileSync('node', [SCRIPT, 'init', agentId, 'PM'], { encoding: 'utf8' });
     let exitedNonZero = false;
@@ -355,7 +355,7 @@ test('safePath rejects path traversal', () => {
 });
 
 test('safePath accepts valid workspace path', () => {
-  const result = safePath('agents/test');
+  const result = safePath('.claw/agents/test');
   assert(result.startsWith(WORKSPACE_ROOT), 'should be inside workspace');
 });
 

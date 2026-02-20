@@ -14,7 +14,8 @@ const os = require('node:os');
 
 const DP = path.resolve(__dirname, '..', 'scripts', 'dev-pipeline.js');
 const WORKSPACE_ROOT = process.env.WORKSPACE_ROOT || path.resolve(os.homedir(), 'dev', 'agent-work');
-const RUNS_DIR = path.join(WORKSPACE_ROOT, 'runs');
+const RUNS_DIR = path.join(WORKSPACE_ROOT, '.claw', 'runs');
+fs.mkdirSync(RUNS_DIR, { recursive: true });
 
 let passed = 0;
 let failed = 0;
@@ -55,7 +56,7 @@ function makeTempRun(name, statusOverrides = {}) {
   fs.mkdirSync(absDir, { recursive: true });
   tmpDirs.push(absDir);
 
-  const relDir = `runs/${folderName}`;
+  const relDir = `.claw/runs/${folderName}`;
 
   fs.writeFileSync(path.join(absDir, '00-intake.json'), JSON.stringify({
     ticket_id: 'TEST-LOOP',
@@ -101,7 +102,7 @@ process.on('exit', cleanup);
 console.log('\n--- non-existent folder ---');
 
 test('non-existent folder returns final_action error, creates nothing', () => {
-  const ghostFolder = `runs/_test_loop_ghost_${Date.now()}`;
+  const ghostFolder = `.claw/runs/_test_loop_ghost_${Date.now()}`;
   const absGhost = path.join(WORKSPACE_ROOT, ghostFolder);
 
   const before = fs.readdirSync(RUNS_DIR, { withFileTypes: true })

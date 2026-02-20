@@ -52,7 +52,7 @@ function makeTempDir() {
 // Create a test run inside WORKSPACE_ROOT/runs/ so CLI commands and safePath work
 function createWorkspaceRun(stage, ticketId) {
   const suffix = `_test_role_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-  const runsDir = path.join(WORKSPACE_ROOT, 'runs');
+  const runsDir = path.join(WORKSPACE_ROOT, '.claw', 'runs');
   fs.mkdirSync(runsDir, { recursive: true });
   const runFolder = path.join(runsDir, suffix);
   fs.mkdirSync(runFolder, { recursive: true });
@@ -81,7 +81,7 @@ function createWorkspaceRun(stage, ticketId) {
 }
 
 function createWorkspaceAgent(agentId, role) {
-  const fp = path.join(WORKSPACE_ROOT, 'agents', agentId, 'state.json');
+  const fp = path.join(WORKSPACE_ROOT, '.claw', 'agents', agentId, 'state.json');
   if (!fs.existsSync(fp)) {
     initAgent(agentId, role);
     wsTestAgents.push(agentId);
@@ -103,7 +103,7 @@ function cleanup() {
   for (const dir of wsTestDirs) {
     try { fs.rmSync(dir, { recursive: true }); } catch (_) {}
   }
-  const agentsDir = path.join(WORKSPACE_ROOT, 'agents');
+  const agentsDir = path.join(WORKSPACE_ROOT, '.claw', 'agents');
   for (const id of wsTestAgents) {
     try { fs.rmSync(path.join(agentsDir, id), { recursive: true }); } catch (_) {}
   }

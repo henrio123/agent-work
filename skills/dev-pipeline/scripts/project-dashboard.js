@@ -21,7 +21,6 @@ const path = require('node:path');
 const os = require('node:os');
 
 const WORKSPACE_ROOT = process.env.WORKSPACE_ROOT || path.resolve(os.homedir(), 'dev', 'agent-work');
-const PROJECTS_DIR = path.join(WORKSPACE_ROOT, 'projects');
 const STOP_FILENAME = '.stop';
 const AUDIT_FILENAME = 'autonomous-audit.jsonl';
 
@@ -46,18 +45,11 @@ function sortObjectKeys(obj) {
 // Core dashboard builder
 // ---------------------------------------------------------------------------
 function buildDashboard(options = {}) {
-  const projectsDir = options.projectsDir || PROJECTS_DIR;
   const workspaceRoot = options.workspaceRoot || WORKSPACE_ROOT;
+  const clawRoot = path.join(workspaceRoot, '.claw');
+  const backlogDir = options.backlogDir || path.join(clawRoot, 'backlog');
+  const projectJsonPath = options.projectJsonPath || path.join(clawRoot, 'project.json');
   const stallThresholdMs = options.stallThresholdMs || 30 * 60 * 1000;
-
-  if (!fs.existsSync(projectsDir)) {
-    return { ok: false, error: 'projects/ directory does not exist' };
-  }
-
-  const projectDirs = fs.readdirSync(projectsDir, { withFileTypes: true })
-    .filter((e) => e.isDirectory())
-    .map((e) => e.name)
-    .sort();
 
   const projects = [];
   const summary = {
@@ -74,134 +66,128 @@ function buildDashboard(options = {}) {
     workload_summary: { runs_per_role: {}, stages_per_role: {} },
   };
 
-  for (const projectId of projectDirs) {
-    const projectDir = path.join(projectsDir, projectId);
-    const projectJsonPath = path.join(projectDir, 'project.json');
-
-    if (!fs.existsSync(projectJsonPath)) continue;
-
-    let projectMeta;
-    try {
-      projectMeta = JSON.parse(fs.readFileSync(projectJsonPath, 'utf8'));
-    } catch {
-      continue;
-    }
-
-    const backlogDir = path.join(projectDir, 'backlog');
-    const backlogItems = [];
-    const totals = { total: 0, todo: 0, in_progress: 0, blocked: 0, done: 0 };
-
-    if (fs.existsSync(backlogDir)) {
-      const files = fs.readdirSync(backlogDir)
-        .filter((f) => f.endsWith('.json'))
-        .sort();
-
-      for (const file of files) {
-        try {
-          const item = JSON.parse(fs.readFileSync(path.join(backlogDir, file), 'utf8'));
-          const entry = buildDashboardEntry(item, projectId, workspaceRoot, stallThresholdMs);
-          backlogItems.push(entry);
-
-          totals.total++;
-          if (entry.status === 'todo') totals.todo++;
-          else if (entry.status === 'in_progress') totals.in_progress++;
-          else if (entry.status === 'blocked') totals.blocked++;
-          else if (entry.status === 'done') totals.done++;
-
-          summary.tasks_total++;
-          if (entry.status === 'todo') summary.todo++;
-          else if (entry.status === 'in_progress') summary.in_progress++;
-          else if (entry.status === 'blocked') summary.blocked++;
-          else if (entry.status === 'done') summary.done++;
-          if (entry.run_stop) summary.stopped++;
-          if (entry.stalled) summary.stalled++;
-          if (entry.needs_task_pack) summary.needs_task_pack++;
-          if (entry.needs_artifacts) summary.needs_artifacts++;
-        } catch {
-          // Invalid JSON — skip item
-        }
-      }
-    }
-
-    // Enrich dependency chain fields (second pass over all items in project)
-    enrichDependencyChain(backlogItems);
-
-    // Build per-project workload from linked runs
-    const agentStats = {}; // agent_id -> { runs_responsible, stages_driven, active_runs }
-    const roleCache = options._roleCache || {};
-    const agentsDir = options.agentsDir || null;
-
-    for (const entry of backlogItems) {
-      if (!entry.run_folder) continue;
-      const runAbsDir = path.resolve(workspaceRoot, entry.run_folder);
-      const statusPath = path.join(runAbsDir, 'status.json');
-      if (!fs.existsSync(statusPath)) continue;
-
-      let status;
-      try {
-        status = JSON.parse(fs.readFileSync(statusPath, 'utf8'));
-      } catch { continue; }
-
-      // Count responsible_agent
-      const ra = status.responsible_agent;
-      if (ra && typeof ra === 'string') {
-        if (!agentStats[ra]) agentStats[ra] = { runs_responsible: 0, stages_driven: 0, active_runs: 0 };
-        agentStats[ra].runs_responsible++;
-        if (status.current_stage !== 'done') agentStats[ra].active_runs++;
-      }
-
-      // Count stage_history agent_ids
-      if (Array.isArray(status.stage_history)) {
-        for (const sh of status.stage_history) {
-          const aid = sh.agent_id;
-          if (aid && typeof aid === 'string') {
-            if (!agentStats[aid]) agentStats[aid] = { runs_responsible: 0, stages_driven: 0, active_runs: 0 };
-            agentStats[aid].stages_driven++;
-          }
-        }
-      }
-    }
-
-    // Resolve roles and build workload_by_agent
-    const workloadByAgent = Object.keys(agentStats).sort().map((agentId) => {
-      if (!(agentId in roleCache)) {
-        try {
-          const agentMod = getAgentStateModule();
-          const opts = agentsDir ? { agentsDir } : {};
-          const state = agentMod.readAgentState(agentId, opts);
-          roleCache[agentId] = state ? state.role : 'unknown';
-        } catch {
-          roleCache[agentId] = 'unknown';
-        }
-      }
-      const role = roleCache[agentId];
-      const stats = agentStats[agentId];
-
-      // Aggregate into top-level summary
-      summary.workload_summary.runs_per_role[role] =
-        (summary.workload_summary.runs_per_role[role] || 0) + stats.runs_responsible;
-      summary.workload_summary.stages_per_role[role] =
-        (summary.workload_summary.stages_per_role[role] || 0) + stats.stages_driven;
-
-      return {
-        agent_id: agentId,
-        role,
-        runs_responsible: stats.runs_responsible,
-        stages_driven: stats.stages_driven,
-        active_runs: stats.active_runs,
-      };
-    });
-
-    projects.push({
-      project_id: projectId,
-      title: projectMeta.title || projectId,
-      description: projectMeta.description || '',
-      totals,
-      backlog: backlogItems,
-      workload_by_agent: workloadByAgent,
-    });
-    summary.projects++;
+  // Read single project from .claw/project.json
+  if (!fs.existsSync(projectJsonPath)) {
+    return { ok: true, generated_at: new Date().toISOString(), projects: [], summary };
   }
+
+  let projectMeta;
+  try {
+    projectMeta = JSON.parse(fs.readFileSync(projectJsonPath, 'utf8'));
+  } catch {
+    return { ok: true, generated_at: new Date().toISOString(), projects: [], summary };
+  }
+
+  const projectId = projectMeta.project_id || 'unknown';
+  const backlogItems = [];
+  const totals = { total: 0, todo: 0, in_progress: 0, blocked: 0, done: 0 };
+
+  if (fs.existsSync(backlogDir)) {
+    const files = fs.readdirSync(backlogDir)
+      .filter((f) => f.endsWith('.json'))
+      .sort();
+
+    for (const file of files) {
+      try {
+        const item = JSON.parse(fs.readFileSync(path.join(backlogDir, file), 'utf8'));
+        const entry = buildDashboardEntry(item, projectId, workspaceRoot, stallThresholdMs);
+        backlogItems.push(entry);
+
+        totals.total++;
+        if (entry.status === 'todo') totals.todo++;
+        else if (entry.status === 'in_progress') totals.in_progress++;
+        else if (entry.status === 'blocked') totals.blocked++;
+        else if (entry.status === 'done') totals.done++;
+
+        summary.tasks_total++;
+        if (entry.status === 'todo') summary.todo++;
+        else if (entry.status === 'in_progress') summary.in_progress++;
+        else if (entry.status === 'blocked') summary.blocked++;
+        else if (entry.status === 'done') summary.done++;
+        if (entry.run_stop) summary.stopped++;
+        if (entry.stalled) summary.stalled++;
+        if (entry.needs_task_pack) summary.needs_task_pack++;
+        if (entry.needs_artifacts) summary.needs_artifacts++;
+      } catch {
+        // Invalid JSON — skip item
+      }
+    }
+  }
+
+  // Enrich dependency chain fields (second pass over all items in project)
+  enrichDependencyChain(backlogItems);
+
+  // Build per-project workload from linked runs
+  const agentStats = {};
+  const roleCache = options._roleCache || {};
+  const agentsDir = options.agentsDir || null;
+
+  for (const entry of backlogItems) {
+    if (!entry.run_folder) continue;
+    const runAbsDir = path.resolve(workspaceRoot, entry.run_folder);
+    const statusPath = path.join(runAbsDir, 'status.json');
+    if (!fs.existsSync(statusPath)) continue;
+
+    let status;
+    try {
+      status = JSON.parse(fs.readFileSync(statusPath, 'utf8'));
+    } catch { continue; }
+
+    const ra = status.responsible_agent;
+    if (ra && typeof ra === 'string') {
+      if (!agentStats[ra]) agentStats[ra] = { runs_responsible: 0, stages_driven: 0, active_runs: 0 };
+      agentStats[ra].runs_responsible++;
+      if (status.current_stage !== 'done') agentStats[ra].active_runs++;
+    }
+
+    if (Array.isArray(status.stage_history)) {
+      for (const sh of status.stage_history) {
+        const aid = sh.agent_id;
+        if (aid && typeof aid === 'string') {
+          if (!agentStats[aid]) agentStats[aid] = { runs_responsible: 0, stages_driven: 0, active_runs: 0 };
+          agentStats[aid].stages_driven++;
+        }
+      }
+    }
+  }
+
+  const workloadByAgent = Object.keys(agentStats).sort().map((agentId) => {
+    if (!(agentId in roleCache)) {
+      try {
+        const agentMod = getAgentStateModule();
+        const opts = agentsDir ? { agentsDir } : {};
+        const state = agentMod.readAgentState(agentId, opts);
+        roleCache[agentId] = state ? state.role : 'unknown';
+      } catch {
+        roleCache[agentId] = 'unknown';
+      }
+    }
+    const role = roleCache[agentId];
+    const stats = agentStats[agentId];
+
+    summary.workload_summary.runs_per_role[role] =
+      (summary.workload_summary.runs_per_role[role] || 0) + stats.runs_responsible;
+    summary.workload_summary.stages_per_role[role] =
+      (summary.workload_summary.stages_per_role[role] || 0) + stats.stages_driven;
+
+    return {
+      agent_id: agentId,
+      role,
+      runs_responsible: stats.runs_responsible,
+      stages_driven: stats.stages_driven,
+      active_runs: stats.active_runs,
+    };
+  });
+
+  projects.push({
+    project_id: projectId,
+    title: projectMeta.title || projectId,
+    description: projectMeta.description || '',
+    totals,
+    backlog: backlogItems,
+    workload_by_agent: workloadByAgent,
+  });
+  summary.projects = 1;
 
   // Ensure deterministic key ordering in workload_summary
   summary.workload_summary.runs_per_role = sortObjectKeys(summary.workload_summary.runs_per_role);
@@ -239,7 +225,7 @@ function buildDashboardEntry(item, projectId, workspaceRoot, stallThresholdMs) {
   };
 
   // Check for task pack existence
-  const taskPackPath = path.join(workspaceRoot, 'projects', projectId, 'task-packs', `${entry.id}.json`);
+  const taskPackPath = path.join(workspaceRoot, '.claw', 'task-packs', `${entry.id}.json`);
   const hasTaskPack = fs.existsSync(taskPackPath);
 
   // Enrich from linked run folder

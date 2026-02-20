@@ -39,57 +39,38 @@ function assert(cond, msg) {
   if (!cond) throw new Error(msg || 'assertion failed');
 }
 
-function makeTempProjectsDir() {
-  const dir = path.join(os.tmpdir(), `_test_parent_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`);
-  fs.mkdirSync(dir, { recursive: true });
-  tmpDirs.push(dir);
-  return dir;
-}
+function makeTempWorkspace(projectId, backlogItems = []) {
+  const wsRoot = path.join(os.tmpdir(), `_test_parent_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`);
+  const clawRoot = path.join(wsRoot, '.claw');
+  const backlogDir = path.join(clawRoot, 'backlog');
+  fs.mkdirSync(backlogDir, { recursive: true });
+  tmpDirs.push(wsRoot);
 
-function makeProject(projectsDir, projectId, backlogItems = []) {
-  const projectDir = path.join(projectsDir, projectId);
-  fs.mkdirSync(projectDir, { recursive: true });
-
-  const project = {
+  fs.writeFileSync(path.join(clawRoot, 'project.json'), JSON.stringify({
     project_id: projectId,
-    title: `Test project ${projectId}`,
-    description: `Description for ${projectId}`,
+    title: `Test ${projectId}`,
+    description: 'test',
     repo_path: null,
-    created_at: '2026-01-01T00:00:00.000Z',
-    updated_at: '2026-01-01T00:00:00.000Z',
-  };
-  fs.writeFileSync(path.join(projectDir, 'project.json'), JSON.stringify(project, null, 2), 'utf8');
+    created_at: '2026-01-01T00:00:00Z',
+    updated_at: '2026-01-01T00:00:00Z',
+  }, null, 2), 'utf8');
 
-  if (backlogItems.length > 0) {
-    const backlogDir = path.join(projectDir, 'backlog');
-    fs.mkdirSync(backlogDir, { recursive: true });
-    for (const item of backlogItems) {
-      const defaults = {
-        project_id: projectId,
-        type: 'task',
-        title: `Task ${item.id}`,
-        description: '',
-        created_at: '2026-01-01T00:00:00.000Z',
-        updated_at: '2026-01-01T00:00:00.000Z',
-        status: 'todo',
-        priority: 'P2',
-        owner_role: 'DEV',
-        depends_on: [],
-        run_folder: null,
-        tags: [],
-        artifacts_expected: [],
-        last_summary: null,
-        ...item,
-      };
-      fs.writeFileSync(
-        path.join(backlogDir, `${defaults.id}.json`),
-        JSON.stringify(defaults, null, 2),
-        'utf8'
-      );
-    }
+  for (const item of backlogItems) {
+    const defaults = {
+      project_id: projectId, type: 'task', title: `Task ${item.id}`,
+      description: '', created_at: '2026-01-01T00:00:00Z',
+      updated_at: '2026-01-01T00:00:00Z', status: 'todo',
+      priority: 'P2', owner_role: 'DEV', depends_on: [],
+      parent_id: null, run_folder: null, tags: [],
+      artifacts_expected: [], last_summary: null,
+      ...item,
+    };
+    fs.writeFileSync(
+      path.join(backlogDir, `${defaults.id}.json`),
+      JSON.stringify(defaults, null, 2), 'utf8'
+    );
   }
-
-  return projectDir;
+  return { wsRoot, backlogDir };
 }
 
 function cleanup() {
@@ -105,36 +86,33 @@ process.on('exit', cleanup);
 console.log('\n--- project-index: parent_id ---');
 
 test('item with parent_id set appears in project-index output', () => {
-  const projectsDir = makeTempProjectsDir();
-  makeProject(projectsDir, 'proj-pi', [
+  const { wsRoot } = makeTempWorkspace('proj-pi', [
     { id: 'EPIC-1', type: 'epic', parent_id: null },
     { id: 'CHILD-1', parent_id: 'EPIC-1' },
   ]);
-  const result = buildProjectIndex({ projectsDir });
+  const result = buildProjectIndex({ workspaceRoot: wsRoot });
   assert(result.ok === true, 'should succeed');
-  const proj = result.projects.find(p => p.project_id === 'proj-pi');
+  const proj = result.projects[0];
   const child = proj.backlog.find(b => b.id === 'CHILD-1');
   assert(child.parent_id === 'EPIC-1', `parent_id should be EPIC-1, got: ${child.parent_id}`);
 });
 
 test('item without parent_id defaults to null in project-index', () => {
-  const projectsDir = makeTempProjectsDir();
-  makeProject(projectsDir, 'proj-pi2', [
+  const { wsRoot } = makeTempWorkspace('proj-pi2', [
     { id: 'T-NOPARENT' },
   ]);
-  const result = buildProjectIndex({ projectsDir });
-  const proj = result.projects.find(p => p.project_id === 'proj-pi2');
+  const result = buildProjectIndex({ workspaceRoot: wsRoot });
+  const proj = result.projects[0];
   const item = proj.backlog.find(b => b.id === 'T-NOPARENT');
   assert(item.parent_id === null, `parent_id should be null, got: ${item.parent_id}`);
 });
 
 test('epic with null parent_id appears correctly', () => {
-  const projectsDir = makeTempProjectsDir();
-  makeProject(projectsDir, 'proj-pi3', [
+  const { wsRoot } = makeTempWorkspace('proj-pi3', [
     { id: 'EPIC-2', type: 'epic', parent_id: null },
   ]);
-  const result = buildProjectIndex({ projectsDir });
-  const proj = result.projects.find(p => p.project_id === 'proj-pi3');
+  const result = buildProjectIndex({ workspaceRoot: wsRoot });
+  const proj = result.projects[0];
   const epic = proj.backlog.find(b => b.id === 'EPIC-2');
   assert(epic.parent_id === null, 'epic parent_id should be null');
   assert(epic.type === 'epic', 'type should be epic');
@@ -146,25 +124,23 @@ test('epic with null parent_id appears correctly', () => {
 console.log('\n--- project-dashboard: parent_id ---');
 
 test('item with parent_id set appears in project-dashboard output', () => {
-  const projectsDir = makeTempProjectsDir();
-  makeProject(projectsDir, 'proj-pd', [
+  const { wsRoot } = makeTempWorkspace('proj-pd', [
     { id: 'EPIC-D1', type: 'epic', parent_id: null },
     { id: 'CHILD-D1', parent_id: 'EPIC-D1' },
   ]);
-  const result = buildDashboard({ projectsDir });
+  const result = buildDashboard({ workspaceRoot: wsRoot });
   assert(result.ok === true, 'should succeed');
-  const proj = result.projects.find(p => p.project_id === 'proj-pd');
+  const proj = result.projects[0];
   const child = proj.backlog.find(b => b.id === 'CHILD-D1');
   assert(child.parent_id === 'EPIC-D1', `parent_id should be EPIC-D1, got: ${child.parent_id}`);
 });
 
 test('item without parent_id defaults to null in project-dashboard', () => {
-  const projectsDir = makeTempProjectsDir();
-  makeProject(projectsDir, 'proj-pd2', [
+  const { wsRoot } = makeTempWorkspace('proj-pd2', [
     { id: 'T-NOPD' },
   ]);
-  const result = buildDashboard({ projectsDir });
-  const proj = result.projects.find(p => p.project_id === 'proj-pd2');
+  const result = buildDashboard({ workspaceRoot: wsRoot });
+  const proj = result.projects[0];
   const item = proj.backlog.find(b => b.id === 'T-NOPD');
   assert(item.parent_id === null, `parent_id should be null, got: ${item.parent_id}`);
 });
@@ -175,25 +151,23 @@ test('item without parent_id defaults to null in project-dashboard', () => {
 console.log('\n--- schema validation ---');
 
 test('project-index output with parent_id validates against schema', () => {
-  const projectsDir = makeTempProjectsDir();
-  makeProject(projectsDir, 'proj-sv1', [
+  const { wsRoot } = makeTempWorkspace('proj-sv1', [
     { id: 'EPIC-S1', type: 'epic', parent_id: null },
     { id: 'CHILD-S1', parent_id: 'EPIC-S1' },
     { id: 'T-SOLO' },
   ]);
-  const result = buildProjectIndex({ projectsDir });
+  const result = buildProjectIndex({ workspaceRoot: wsRoot });
   const v = validateAgainstSchema(result, indexSchema);
   assert(v.ok, `schema validation failed: ${(v.details || []).join('; ')}`);
 });
 
 test('project-dashboard output with parent_id validates against schema', () => {
-  const projectsDir = makeTempProjectsDir();
-  makeProject(projectsDir, 'proj-sv2', [
+  const { wsRoot } = makeTempWorkspace('proj-sv2', [
     { id: 'EPIC-S2', type: 'epic', parent_id: null },
     { id: 'CHILD-S2', parent_id: 'EPIC-S2' },
     { id: 'T-SOLO2' },
   ]);
-  const result = buildDashboard({ projectsDir });
+  const result = buildDashboard({ workspaceRoot: wsRoot });
   const v = validateAgainstSchema(result, dashboardSchema);
   assert(v.ok, `schema validation failed: ${(v.details || []).join('; ')}`);
 });
@@ -204,46 +178,48 @@ test('project-dashboard output with parent_id validates against schema', () => {
 console.log('\n--- backward compatibility ---');
 
 test('existing backlog items without parent_id field work in project-index', () => {
-  const projectsDir = makeTempProjectsDir();
-  const projectDir = path.join(projectsDir, 'proj-bc');
-  fs.mkdirSync(path.join(projectDir, 'backlog'), { recursive: true });
-  fs.writeFileSync(path.join(projectDir, 'project.json'), JSON.stringify({
+  const wsRoot = path.join(os.tmpdir(), `_test_parent_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`);
+  const clawRoot = path.join(wsRoot, '.claw');
+  fs.mkdirSync(path.join(clawRoot, 'backlog'), { recursive: true });
+  tmpDirs.push(wsRoot);
+  fs.writeFileSync(path.join(clawRoot, 'project.json'), JSON.stringify({
     project_id: 'proj-bc', title: 'BC test', description: 'test',
     repo_path: null, created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z',
   }), 'utf8');
   // Write a backlog item that has NO parent_id key at all
-  fs.writeFileSync(path.join(projectDir, 'backlog', 'T-OLD.json'), JSON.stringify({
+  fs.writeFileSync(path.join(clawRoot, 'backlog', 'T-OLD.json'), JSON.stringify({
     id: 'T-OLD', project_id: 'proj-bc', type: 'task', title: 'Old task',
     description: '', created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z',
     status: 'todo', priority: 'P2', owner_role: 'DEV', depends_on: [],
     run_folder: null, tags: [], artifacts_expected: [],
   }), 'utf8');
 
-  const result = buildProjectIndex({ projectsDir });
+  const result = buildProjectIndex({ workspaceRoot: wsRoot });
   assert(result.ok === true, 'should succeed');
-  const proj = result.projects.find(p => p.project_id === 'proj-bc');
+  const proj = result.projects[0];
   const item = proj.backlog.find(b => b.id === 'T-OLD');
   assert(item.parent_id === null, `parent_id should default to null, got: ${item.parent_id}`);
 });
 
 test('existing backlog items without parent_id field work in project-dashboard', () => {
-  const projectsDir = makeTempProjectsDir();
-  const projectDir = path.join(projectsDir, 'proj-bc2');
-  fs.mkdirSync(path.join(projectDir, 'backlog'), { recursive: true });
-  fs.writeFileSync(path.join(projectDir, 'project.json'), JSON.stringify({
+  const wsRoot = path.join(os.tmpdir(), `_test_parent_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`);
+  const clawRoot = path.join(wsRoot, '.claw');
+  fs.mkdirSync(path.join(clawRoot, 'backlog'), { recursive: true });
+  tmpDirs.push(wsRoot);
+  fs.writeFileSync(path.join(clawRoot, 'project.json'), JSON.stringify({
     project_id: 'proj-bc2', title: 'BC test 2', description: 'test',
     repo_path: null, created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z',
   }), 'utf8');
-  fs.writeFileSync(path.join(projectDir, 'backlog', 'T-OLD2.json'), JSON.stringify({
+  fs.writeFileSync(path.join(clawRoot, 'backlog', 'T-OLD2.json'), JSON.stringify({
     id: 'T-OLD2', project_id: 'proj-bc2', type: 'task', title: 'Old task 2',
     description: '', created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z',
     status: 'todo', priority: 'P2', owner_role: 'DEV', depends_on: [],
     run_folder: null, tags: [], artifacts_expected: [],
   }), 'utf8');
 
-  const result = buildDashboard({ projectsDir });
+  const result = buildDashboard({ workspaceRoot: wsRoot });
   assert(result.ok === true, 'should succeed');
-  const proj = result.projects.find(p => p.project_id === 'proj-bc2');
+  const proj = result.projects[0];
   const item = proj.backlog.find(b => b.id === 'T-OLD2');
   assert(item.parent_id === null, `parent_id should default to null, got: ${item.parent_id}`);
 });

@@ -35,51 +35,38 @@ function assert(cond, msg) {
   if (!cond) throw new Error(msg || 'assertion failed');
 }
 
-function makeTempProjectsDir() {
-  const dir = path.join(os.tmpdir(), `_test_pgraph_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`);
-  fs.mkdirSync(dir, { recursive: true });
-  tmpDirs.push(dir);
-  return dir;
-}
+function makeTempWorkspace(projectId, backlogItems = []) {
+  const wsRoot = path.join(os.tmpdir(), `_test_pgraph_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`);
+  const clawRoot = path.join(wsRoot, '.claw');
+  const backlogDir = path.join(clawRoot, 'backlog');
+  fs.mkdirSync(backlogDir, { recursive: true });
+  tmpDirs.push(wsRoot);
 
-function makeProject(projectsDir, projectId, backlogItems = []) {
-  const projectDir = path.join(projectsDir, projectId);
-  fs.mkdirSync(projectDir, { recursive: true });
+  fs.writeFileSync(path.join(clawRoot, 'project.json'), JSON.stringify({
+    project_id: projectId,
+    title: `Test ${projectId}`,
+    description: 'test',
+    repo_path: null,
+    created_at: '2026-01-01T00:00:00Z',
+    updated_at: '2026-01-01T00:00:00Z',
+  }, null, 2), 'utf8');
 
-  fs.writeFileSync(path.join(projectDir, 'project.json'), JSON.stringify({
-    project_id: projectId, title: `Project ${projectId}`, description: 'test',
-    repo_path: null, created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z',
-  }), 'utf8');
-
-  if (backlogItems.length > 0) {
-    const backlogDir = path.join(projectDir, 'backlog');
-    fs.mkdirSync(backlogDir, { recursive: true });
-    for (const item of backlogItems) {
-      const defaults = {
-        project_id: projectId,
-        type: 'task',
-        title: `Task ${item.id}`,
-        description: '',
-        created_at: '2026-01-01T00:00:00Z',
-        updated_at: '2026-01-01T00:00:00Z',
-        status: 'todo',
-        priority: 'P2',
-        owner_role: 'DEV',
-        depends_on: [],
-        parent_id: null,
-        run_folder: null,
-        tags: [],
-        artifacts_expected: [],
-        last_summary: null,
-        ...item,
-      };
-      fs.writeFileSync(
-        path.join(backlogDir, `${defaults.id}.json`),
-        JSON.stringify(defaults, null, 2),
-        'utf8'
-      );
-    }
+  for (const item of backlogItems) {
+    const defaults = {
+      project_id: projectId, type: 'task', title: `Task ${item.id}`,
+      description: '', created_at: '2026-01-01T00:00:00Z',
+      updated_at: '2026-01-01T00:00:00Z', status: 'todo',
+      priority: 'P2', owner_role: 'DEV', depends_on: [],
+      parent_id: null, run_folder: null, tags: [],
+      artifacts_expected: [], last_summary: null,
+      ...item,
+    };
+    fs.writeFileSync(
+      path.join(backlogDir, `${defaults.id}.json`),
+      JSON.stringify(defaults, null, 2), 'utf8'
+    );
   }
+  return { wsRoot, backlogDir };
 }
 
 function cleanup() {
@@ -254,59 +241,54 @@ test('works without siblingItems parameter (skips graph checks)', () => {
 console.log('\n--- pickNextTask: integration ---');
 
 test('picker skips task with unsatisfied deps, picks eligible one', () => {
-  const projectsDir = makeTempProjectsDir();
-  makeProject(projectsDir, 'proj-dep', [
+  const { wsRoot } = makeTempWorkspace('proj-dep', [
     { id: 'T-A', status: 'todo', priority: 'P0', depends_on: ['T-B'] },
     { id: 'T-B', status: 'todo', priority: 'P2' },
   ]);
-  const result = pickNextTask({ projectsDir });
+  const result = pickNextTask({ workspaceRoot: wsRoot });
   assert(result.action === 'picked_task', 'should pick a task');
   assert(result.task_id === 'T-B', `should pick T-B (no deps), got ${result.task_id}`);
 });
 
 test('picker skips child of blocked epic, picks other', () => {
-  const projectsDir = makeTempProjectsDir();
-  makeProject(projectsDir, 'proj-epic', [
+  const { wsRoot } = makeTempWorkspace('proj-epic', [
     { id: 'EPIC-P', type: 'epic', status: 'blocked', priority: 'P0' },
     { id: 'CHILD-P', parent_id: 'EPIC-P', priority: 'P0' },
     { id: 'T-FREE', priority: 'P2' },
   ]);
-  const result = pickNextTask({ projectsDir });
+  const result = pickNextTask({ workspaceRoot: wsRoot });
   assert(result.action === 'picked_task', 'should pick a task');
   assert(result.task_id === 'T-FREE', `should pick T-FREE, got ${result.task_id}`);
 });
 
 test('picker returns no_eligible when all tasks have unsatisfied deps', () => {
-  const projectsDir = makeTempProjectsDir();
-  makeProject(projectsDir, 'proj-all-dep', [
+  const { wsRoot } = makeTempWorkspace('proj-all-dep', [
     { id: 'T-X', depends_on: ['T-Y'] },
     { id: 'T-Y', depends_on: ['T-X'] },
   ]);
-  const result = pickNextTask({ projectsDir });
+  const result = pickNextTask({ workspaceRoot: wsRoot });
   assert(result.action === 'no_eligible_tasks', `should have no eligible, got ${result.action}`);
 });
 
 test('picker picks task once dep is done', () => {
-  const projectsDir = makeTempProjectsDir();
-  makeProject(projectsDir, 'proj-dep-done', [
+  const { wsRoot } = makeTempWorkspace('proj-dep-done', [
     { id: 'T-DONE', status: 'done' },
     { id: 'T-READY', depends_on: ['T-DONE'] },
   ]);
-  const result = pickNextTask({ projectsDir });
+  const result = pickNextTask({ workspaceRoot: wsRoot });
   assert(result.action === 'picked_task', 'should pick a task');
   assert(result.task_id === 'T-READY', `should pick T-READY, got ${result.task_id}`);
 });
 
 test('picker respects both deps and parent constraints together', () => {
-  const projectsDir = makeTempProjectsDir();
-  makeProject(projectsDir, 'proj-combo', [
+  const { wsRoot } = makeTempWorkspace('proj-combo', [
     { id: 'EPIC-C', type: 'epic', status: 'blocked' },
     { id: 'T-1', parent_id: 'EPIC-C', priority: 'P0' },
     { id: 'T-2', depends_on: ['T-3'], priority: 'P0' },
     { id: 'T-3', status: 'todo', priority: 'P1' },
     { id: 'T-4', status: 'todo', priority: 'P2' },
   ]);
-  const result = pickNextTask({ projectsDir });
+  const result = pickNextTask({ workspaceRoot: wsRoot });
   assert(result.action === 'picked_task', 'should pick a task');
   // T-1 blocked by parent, T-2 blocked by dep T-3 (not done), T-3 and T-4 eligible
   assert(result.task_id === 'T-3', `should pick T-3 (P1, eligible), got ${result.task_id}`);

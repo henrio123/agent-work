@@ -66,7 +66,7 @@ function driveOnce(options = {}) {
   const runFolder = pickResult.run_folder;
 
   // Step 2: Safety snapshot
-  const runsDir = safePath('runs');
+  const runsDir = safePath('.claw/runs');
   const runsBefore = fs.existsSync(runsDir)
     ? fs.readdirSync(runsDir, { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => e.name).sort()
     : [];

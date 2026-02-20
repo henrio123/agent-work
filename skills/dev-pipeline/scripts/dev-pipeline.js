@@ -166,7 +166,7 @@ function cmdCreateRun(ticketId, title, project, agentId) {
 
   const ts = timestamp();
   const folderName = `${ts}_${ticketId}`;
-  const runFolder = safePath(path.join('runs', folderName));
+  const runFolder = safePath(path.join('.claw', 'runs', folderName));
 
   fs.mkdirSync(runFolder, { recursive: true });
 
@@ -363,7 +363,7 @@ function cmdRespond(runFolder, inputId, choice) {
 }
 
 function cmdList() {
-  const runsDir = safePath('runs');
+  const runsDir = safePath('.claw/runs');
   if (!fs.existsSync(runsDir)) {
     ok({ runs: [] });
     return;
@@ -407,7 +407,7 @@ function cmdCreateRunFromTicket(ticketId, agentId) {
   if (!ticketId) fail('Usage: create_run_from_ticket <ticket_id>');
 
   // safePath prevents traversal in ticket_id (e.g. ../foo)
-  const ticketPath = safePath(path.join('tickets', `${ticketId}.md`));
+  const ticketPath = safePath(path.join('.claw', 'tickets', `${ticketId}.md`));
   if (!fs.existsSync(ticketPath)) {
     fail(`Ticket file not found: tickets/${ticketId}.md`);
   }
@@ -421,7 +421,7 @@ function cmdCreateRunFromTicket(ticketId, agentId) {
 
   const ts = timestamp();
   const folderName = `${ts}_${fm.ticket_id}`;
-  const runFolder = safePath(path.join('runs', folderName));
+  const runFolder = safePath(path.join('.claw', 'runs', folderName));
 
   fs.mkdirSync(runFolder, { recursive: true });
 
@@ -487,7 +487,7 @@ const STALE_THRESHOLDS = {
 };
 
 function getStaleRuns() {
-  const runsDir = safePath('runs');
+  const runsDir = safePath('.claw/runs');
   if (!fs.existsSync(runsDir)) return [];
 
   const entries = fs.readdirSync(runsDir, { withFileTypes: true })
@@ -561,7 +561,7 @@ function cmdStaleDelete(args) {
   for (const run of stale) {
     const folder = safePath(run.folder);
     // Extra guard: must be inside runs/
-    const runsDir = safePath('runs');
+    const runsDir = safePath('.claw/runs');
     if (!folder.startsWith(runsDir + path.sep)) {
       continue;
     }
@@ -1389,7 +1389,7 @@ function cmdRunNextLoop(runFolder, maxSteps) {
   }
 
   // Snapshot runs/ directory before loop
-  const runsDir = safePath('runs');
+  const runsDir = safePath('.claw/runs');
   const runsBefore = fs.existsSync(runsDir)
     ? fs.readdirSync(runsDir, { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => e.name).sort()
     : [];
@@ -1766,7 +1766,7 @@ if (require.main === module) {
           agentId: _cliAgentId,
         };
         // Safety: snapshot runs/ before
-        const aRunsDir = safePath('runs');
+        const aRunsDir = safePath('.claw/runs');
         const aRunsBefore = fs.existsSync(aRunsDir)
           ? fs.readdirSync(aRunsDir, { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => e.name).sort()
           : [];

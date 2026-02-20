@@ -37,38 +37,38 @@ function assert(cond, msg) {
   if (!cond) throw new Error(msg || 'assertion failed');
 }
 
-function makeTempProjectsDir() {
-  const dir = path.join(os.tmpdir(), `_test_blocked_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`);
-  fs.mkdirSync(dir, { recursive: true });
-  tmpDirs.push(dir);
-  return dir;
-}
+function makeTempWorkspace(projectId, backlogItems = []) {
+  const wsRoot = path.join(os.tmpdir(), `_test_blocked_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`);
+  const clawRoot = path.join(wsRoot, '.claw');
+  const backlogDir = path.join(clawRoot, 'backlog');
+  fs.mkdirSync(backlogDir, { recursive: true });
+  tmpDirs.push(wsRoot);
 
-function makeProject(projectsDir, projectId, backlogItems = []) {
-  const projectDir = path.join(projectsDir, projectId);
-  fs.mkdirSync(projectDir, { recursive: true });
-  fs.writeFileSync(path.join(projectDir, 'project.json'), JSON.stringify({
-    project_id: projectId, title: `Project ${projectId}`, description: 'test',
-    repo_path: null, created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z',
-  }), 'utf8');
+  fs.writeFileSync(path.join(clawRoot, 'project.json'), JSON.stringify({
+    project_id: projectId,
+    title: `Test ${projectId}`,
+    description: 'test',
+    repo_path: null,
+    created_at: '2026-01-01T00:00:00Z',
+    updated_at: '2026-01-01T00:00:00Z',
+  }, null, 2), 'utf8');
 
-  if (backlogItems.length > 0) {
-    const backlogDir = path.join(projectDir, 'backlog');
-    fs.mkdirSync(backlogDir, { recursive: true });
-    for (const item of backlogItems) {
-      const defaults = {
-        project_id: projectId, type: 'task', title: `Task ${item.id}`,
-        description: '', created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z',
-        status: 'todo', priority: 'P2', owner_role: 'DEV', depends_on: [],
-        parent_id: null, run_folder: null, tags: [], artifacts_expected: [],
-        ...item,
-      };
-      fs.writeFileSync(
-        path.join(backlogDir, `${defaults.id}.json`),
-        JSON.stringify(defaults, null, 2), 'utf8'
-      );
-    }
+  for (const item of backlogItems) {
+    const defaults = {
+      project_id: projectId, type: 'task', title: `Task ${item.id}`,
+      description: '', created_at: '2026-01-01T00:00:00Z',
+      updated_at: '2026-01-01T00:00:00Z', status: 'todo',
+      priority: 'P2', owner_role: 'DEV', depends_on: [],
+      parent_id: null, run_folder: null, tags: [],
+      artifacts_expected: [], last_summary: null,
+      ...item,
+    };
+    fs.writeFileSync(
+      path.join(backlogDir, `${defaults.id}.json`),
+      JSON.stringify(defaults, null, 2), 'utf8'
+    );
   }
+  return { wsRoot, backlogDir };
 }
 
 function makeSiblings(items) {
@@ -95,12 +95,11 @@ process.on('exit', cleanup);
 console.log('\n--- validator: dependency satisfaction warnings ---');
 
 test('warns for todo task with unfinished dependency', () => {
-  const projectsDir = makeTempProjectsDir();
-  makeProject(projectsDir, 'proj-w1', [
+  const { wsRoot } = makeTempWorkspace('proj-w1', [
     { id: 'DEP-1', status: 'todo' },
     { id: 'T-1', depends_on: ['DEP-1'] },
   ]);
-  const result = validateBacklogGraph('proj-w1', { projectsDir });
+  const result = validateBacklogGraph('proj-w1', { workspaceRoot: wsRoot });
   assert(result.valid === true, 'should still be valid (warnings only)');
   const depWarnings = result.warnings.filter(w => w.includes('unfinished dependencies'));
   assert(depWarnings.length === 1, `expected 1 dep warning, got ${depWarnings.length}`);
@@ -109,48 +108,44 @@ test('warns for todo task with unfinished dependency', () => {
 });
 
 test('warns for in_progress task with unfinished dependency', () => {
-  const projectsDir = makeTempProjectsDir();
-  makeProject(projectsDir, 'proj-w2', [
+  const { wsRoot } = makeTempWorkspace('proj-w2', [
     { id: 'DEP-2', status: 'in_progress' },
     { id: 'T-2', status: 'in_progress', depends_on: ['DEP-2'] },
   ]);
-  const result = validateBacklogGraph('proj-w2', { projectsDir });
+  const result = validateBacklogGraph('proj-w2', { workspaceRoot: wsRoot });
   const depWarnings = result.warnings.filter(w => w.includes('unfinished dependencies'));
   assert(depWarnings.length === 1, `expected 1 dep warning, got ${depWarnings.length}`);
   assert(depWarnings[0].includes('DEP-2'), 'should mention blocking dep');
 });
 
 test('no warning when dependency is done', () => {
-  const projectsDir = makeTempProjectsDir();
-  makeProject(projectsDir, 'proj-w3', [
+  const { wsRoot } = makeTempWorkspace('proj-w3', [
     { id: 'DEP-3', status: 'done' },
     { id: 'T-3', depends_on: ['DEP-3'] },
   ]);
-  const result = validateBacklogGraph('proj-w3', { projectsDir });
+  const result = validateBacklogGraph('proj-w3', { workspaceRoot: wsRoot });
   const depWarnings = result.warnings.filter(w => w.includes('unfinished dependencies'));
   assert(depWarnings.length === 0, 'no dependency warning when dep is done');
 });
 
 test('no warning for done task with unfinished dep', () => {
-  const projectsDir = makeTempProjectsDir();
-  makeProject(projectsDir, 'proj-w4', [
+  const { wsRoot } = makeTempWorkspace('proj-w4', [
     { id: 'DEP-4', status: 'todo' },
     { id: 'T-4', status: 'done', depends_on: ['DEP-4'] },
   ]);
-  const result = validateBacklogGraph('proj-w4', { projectsDir });
+  const result = validateBacklogGraph('proj-w4', { workspaceRoot: wsRoot });
   const depWarnings = result.warnings.filter(w => w.includes('unfinished dependencies'));
   assert(depWarnings.length === 0, 'no warning for done task');
 });
 
 test('warns with multiple blocking deps listed', () => {
-  const projectsDir = makeTempProjectsDir();
-  makeProject(projectsDir, 'proj-w5', [
+  const { wsRoot } = makeTempWorkspace('proj-w5', [
     { id: 'D-A', status: 'todo' },
     { id: 'D-B', status: 'in_progress' },
     { id: 'D-C', status: 'done' },
     { id: 'T-5', depends_on: ['D-A', 'D-B', 'D-C'] },
   ]);
-  const result = validateBacklogGraph('proj-w5', { projectsDir });
+  const result = validateBacklogGraph('proj-w5', { workspaceRoot: wsRoot });
   const depWarnings = result.warnings.filter(w => w.includes('unfinished dependencies'));
   assert(depWarnings.length === 1, `expected 1 warning, got ${depWarnings.length}`);
   assert(depWarnings[0].includes('D-A'), 'should mention D-A');

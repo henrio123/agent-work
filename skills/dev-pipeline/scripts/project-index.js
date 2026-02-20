@@ -20,26 +20,18 @@ const path = require('node:path');
 const os = require('node:os');
 
 const WORKSPACE_ROOT = process.env.WORKSPACE_ROOT || path.resolve(os.homedir(), 'dev', 'agent-work');
-const PROJECTS_DIR = path.join(WORKSPACE_ROOT, 'projects');
 const STOP_FILENAME = '.stop';
 const AUDIT_FILENAME = 'autonomous-audit.jsonl';
 
 // ---------------------------------------------------------------------------
-// Core index builder
+// Core index builder — single-project per workspace under .claw/
 // ---------------------------------------------------------------------------
 function buildProjectIndex(options = {}) {
-  const projectsDir = options.projectsDir || PROJECTS_DIR;
   const workspaceRoot = options.workspaceRoot || WORKSPACE_ROOT;
+  const clawRoot = path.join(workspaceRoot, '.claw');
+  const backlogDir = options.backlogDir || path.join(clawRoot, 'backlog');
+  const projectJsonPath = options.projectJsonPath || path.join(clawRoot, 'project.json');
   const stallThresholdMs = options.stallThresholdMs || 30 * 60 * 1000;
-
-  if (!fs.existsSync(projectsDir)) {
-    return { ok: false, error: 'projects/ directory does not exist' };
-  }
-
-  const projectDirs = fs.readdirSync(projectsDir, { withFileTypes: true })
-    .filter((e) => e.isDirectory())
-    .map((e) => e.name)
-    .sort(); // ASC deterministic ordering
 
   const projects = [];
   const summary = {
@@ -53,61 +45,58 @@ function buildProjectIndex(options = {}) {
     stalled: 0,
   };
 
-  for (const projectId of projectDirs) {
-    const projectDir = path.join(projectsDir, projectId);
-    const projectJsonPath = path.join(projectDir, 'project.json');
+  // Read single project from .claw/project.json
+  if (!fs.existsSync(projectJsonPath)) {
+    return { ok: true, generated_at: new Date().toISOString(), projects: [], summary };
+  }
 
-    // Skip directories without project.json
-    if (!fs.existsSync(projectJsonPath)) continue;
+  let projectMeta;
+  try {
+    projectMeta = JSON.parse(fs.readFileSync(projectJsonPath, 'utf8'));
+  } catch {
+    return { ok: true, generated_at: new Date().toISOString(), projects: [], summary };
+  }
 
-    try {
-      JSON.parse(fs.readFileSync(projectJsonPath, 'utf8'));
-    } catch {
-      continue; // Invalid JSON — skip project
-    }
+  const projectId = projectMeta.project_id || 'unknown';
+  const backlogItems = [];
+  const totals = { total: 0, todo: 0, in_progress: 0, blocked: 0, done: 0 };
 
-    const backlogDir = path.join(projectDir, 'backlog');
-    const backlogItems = [];
-    const totals = { total: 0, todo: 0, in_progress: 0, blocked: 0, done: 0 };
+  if (fs.existsSync(backlogDir)) {
+    const files = fs.readdirSync(backlogDir)
+      .filter((f) => f.endsWith('.json'))
+      .sort(); // ASC
 
-    if (fs.existsSync(backlogDir)) {
-      const files = fs.readdirSync(backlogDir)
-        .filter((f) => f.endsWith('.json'))
-        .sort(); // ASC
+    for (const file of files) {
+      try {
+        const item = JSON.parse(fs.readFileSync(path.join(backlogDir, file), 'utf8'));
+        const entry = buildBacklogEntry(item, workspaceRoot, stallThresholdMs);
+        backlogItems.push(entry);
 
-      for (const file of files) {
-        try {
-          const item = JSON.parse(fs.readFileSync(path.join(backlogDir, file), 'utf8'));
-          const entry = buildBacklogEntry(item, workspaceRoot, stallThresholdMs);
-          backlogItems.push(entry);
+        totals.total++;
+        if (entry.status === 'todo') totals.todo++;
+        else if (entry.status === 'in_progress') totals.in_progress++;
+        else if (entry.status === 'blocked' || entry.blocked) totals.blocked++;
+        else if (entry.status === 'done') totals.done++;
 
-          totals.total++;
-          if (entry.status === 'todo') totals.todo++;
-          else if (entry.status === 'in_progress') totals.in_progress++;
-          else if (entry.status === 'blocked' || entry.blocked) totals.blocked++;
-          else if (entry.status === 'done') totals.done++;
-
-          // Global summary
-          summary.tasks_total++;
-          if (entry.status === 'todo') summary.todo++;
-          else if (entry.status === 'in_progress') summary.in_progress++;
-          else if (entry.status === 'blocked' || entry.blocked) summary.blocked++;
-          else if (entry.status === 'done') summary.done++;
-          if (entry.stop_signal) summary.stopped++;
-          if (entry.stalled) summary.stalled++;
-        } catch {
-          // Invalid JSON — skip item
-        }
+        summary.tasks_total++;
+        if (entry.status === 'todo') summary.todo++;
+        else if (entry.status === 'in_progress') summary.in_progress++;
+        else if (entry.status === 'blocked' || entry.blocked) summary.blocked++;
+        else if (entry.status === 'done') summary.done++;
+        if (entry.stop_signal) summary.stopped++;
+        if (entry.stalled) summary.stalled++;
+      } catch {
+        // Invalid JSON — skip item
       }
     }
-
-    projects.push({
-      project_id: projectId,
-      totals,
-      backlog: backlogItems,
-    });
-    summary.projects++;
   }
+
+  projects.push({
+    project_id: projectId,
+    totals,
+    backlog: backlogItems,
+  });
+  summary.projects = 1;
 
   return {
     ok: true,

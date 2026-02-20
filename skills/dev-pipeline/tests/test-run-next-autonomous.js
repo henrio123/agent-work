@@ -14,7 +14,8 @@ const os = require('node:os');
 
 const DP = path.resolve(__dirname, '..', 'scripts', 'dev-pipeline.js');
 const WORKSPACE_ROOT = process.env.WORKSPACE_ROOT || path.resolve(os.homedir(), 'dev', 'agent-work');
-const RUNS_DIR = path.join(WORKSPACE_ROOT, 'runs');
+const RUNS_DIR = path.join(WORKSPACE_ROOT, '.claw', 'runs');
+fs.mkdirSync(RUNS_DIR, { recursive: true });
 
 // Import autonomous runner and pipeline for direct function testing
 const { runAutonomous, scaffoldAdapter, validateDraft, AUDIT_FILENAME, STOP_FILENAME } = require(path.resolve(__dirname, '..', 'scripts', 'autonomous-runner.js'));
@@ -59,7 +60,7 @@ function makeTempRun(name, statusOverrides = {}) {
   fs.mkdirSync(absDir, { recursive: true });
   tmpDirs.push(absDir);
 
-  const relDir = `runs/${folderName}`;
+  const relDir = `.claw/runs/${folderName}`;
 
   fs.writeFileSync(path.join(absDir, '00-intake.json'), JSON.stringify({
     ticket_id: 'TEST-AUTO',
@@ -105,7 +106,7 @@ process.on('exit', cleanup);
 console.log('\n--- non-existent folder ---');
 
 test('non-existent folder returns final_action error, creates nothing', () => {
-  const ghostFolder = `runs/_test_auto_ghost_${Date.now()}`;
+  const ghostFolder = `.claw/runs/_test_auto_ghost_${Date.now()}`;
   const absGhost = path.join(WORKSPACE_ROOT, ghostFolder);
 
   const before = fs.readdirSync(RUNS_DIR, { withFileTypes: true })
@@ -276,7 +277,7 @@ test('blocked stage stops with final_action blocked', () => {
 });
 
 // -------------------------------------------------------------------------
-// Test 7: safety — no new directories under runs/
+// Test 7: safety — no new directories under .claw/runs/
 // -------------------------------------------------------------------------
 console.log('\n--- safety ---');
 
@@ -306,9 +307,9 @@ test('no new run folders created outside test dirs', () => {
     .filter((e) => e.isDirectory())
     .map((e) => e.name);
   const nonTest = allRuns.filter((n) => !n.startsWith('_test_'));
-  const originals = nonTest.filter((n) => n.includes('OC-07') || n.includes('OC-08'));
-  if (originals.length !== nonTest.length) {
-    throw new Error(`unexpected non-test runs: ${nonTest.filter(n => !n.includes('OC-07') && !n.includes('OC-08')).join(', ')}`);
+  // After all tests, non-test run count should not have grown
+  if (nonTest.length > 0) {
+    throw new Error(`unexpected non-test runs: ${nonTest.join(', ')}`);
   }
 });
 
@@ -691,7 +692,7 @@ test('run-next-stop.sh refuses absolute path', () => {
   if (exitCode === 0) throw new Error('should reject absolute path');
 });
 
-test('run-next-stop.sh refuses path without runs/ prefix', () => {
+test('run-next-stop.sh refuses path without .claw/runs/ prefix', () => {
   let exitCode = 0;
   try {
     execFileSync('bash', [path.join(WORKSPACE_ROOT, 'tools', 'run-next-stop.sh'), '/tmp/evil'], {
@@ -707,7 +708,7 @@ test('run-next-stop.sh refuses path without runs/ prefix', () => {
 test('run-next-stop.sh refuses path traversal', () => {
   let exitCode = 0;
   try {
-    execFileSync('bash', [path.join(WORKSPACE_ROOT, 'tools', 'run-next-stop.sh'), 'runs/../../../tmp/evil'], {
+    execFileSync('bash', [path.join(WORKSPACE_ROOT, 'tools', 'run-next-stop.sh'), '.claw/runs/../../../tmp/evil'], {
       encoding: 'utf8',
       timeout: 5000,
     });

@@ -11,7 +11,6 @@ const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
 
-const WORKSPACE_ROOT = process.env.WORKSPACE_ROOT || path.resolve(os.homedir(), 'dev', 'agent-work');
 const SCRIPT = path.resolve(__dirname, '..', 'scripts', 'validate-backlog-graph.js');
 
 const { validateBacklogGraph } = require(SCRIPT);
@@ -40,50 +39,48 @@ function assert(cond, msg) {
   if (!cond) throw new Error(msg || 'assertion failed');
 }
 
-function makeTempProjectsDir() {
-  const dir = path.join(os.tmpdir(), `_test_graph_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`);
-  fs.mkdirSync(dir, { recursive: true });
-  tmpDirs.push(dir);
-  return dir;
-}
+function makeTempWorkspace(backlogItems = []) {
+  const wsRoot = path.join(os.tmpdir(), `_test_graph_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`);
+  const backlogDir = path.join(wsRoot, '.claw', 'backlog');
+  fs.mkdirSync(backlogDir, { recursive: true });
+  tmpDirs.push(wsRoot);
 
-function makeProject(projectsDir, projectId, backlogItems = []) {
-  const projectDir = path.join(projectsDir, projectId);
-  fs.mkdirSync(projectDir, { recursive: true });
+  // Write project.json at .claw/project.json
+  fs.writeFileSync(path.join(wsRoot, '.claw', 'project.json'), JSON.stringify({
+    project_id: 'test',
+    title: 'Test project',
+    description: 'test',
+    repo_path: null,
+    created_at: '2026-01-01T00:00:00Z',
+    updated_at: '2026-01-01T00:00:00Z',
+  }, null, 2), 'utf8');
 
-  fs.writeFileSync(path.join(projectDir, 'project.json'), JSON.stringify({
-    project_id: projectId, title: `Project ${projectId}`, description: 'test',
-    repo_path: null, created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z',
-  }), 'utf8');
-
-  if (backlogItems.length > 0) {
-    const backlogDir = path.join(projectDir, 'backlog');
-    fs.mkdirSync(backlogDir, { recursive: true });
-    for (const item of backlogItems) {
-      const defaults = {
-        project_id: projectId,
-        type: 'task',
-        title: `Task ${item.id}`,
-        description: '',
-        created_at: '2026-01-01T00:00:00Z',
-        updated_at: '2026-01-01T00:00:00Z',
-        status: 'todo',
-        priority: 'P2',
-        owner_role: 'DEV',
-        depends_on: [],
-        parent_id: null,
-        run_folder: null,
-        tags: [],
-        artifacts_expected: [],
-        ...item,
-      };
-      fs.writeFileSync(
-        path.join(backlogDir, `${defaults.id}.json`),
-        JSON.stringify(defaults, null, 2),
-        'utf8'
-      );
-    }
+  for (const item of backlogItems) {
+    const defaults = {
+      project_id: 'test',
+      type: 'task',
+      title: `Task ${item.id}`,
+      description: '',
+      created_at: '2026-01-01T00:00:00Z',
+      updated_at: '2026-01-01T00:00:00Z',
+      status: 'todo',
+      priority: 'P2',
+      owner_role: 'DEV',
+      depends_on: [],
+      parent_id: null,
+      run_folder: null,
+      tags: [],
+      artifacts_expected: [],
+      ...item,
+    };
+    fs.writeFileSync(
+      path.join(backlogDir, `${defaults.id}.json`),
+      JSON.stringify(defaults, null, 2),
+      'utf8'
+    );
   }
+
+  return { wsRoot, backlogDir };
 }
 
 function cleanup() {
@@ -99,9 +96,8 @@ process.on('exit', cleanup);
 console.log('\n--- empty backlog ---');
 
 test('empty backlog is valid', () => {
-  const projectsDir = makeTempProjectsDir();
-  makeProject(projectsDir, 'proj-empty', []);
-  const result = validateBacklogGraph('proj-empty', { projectsDir });
+  const { backlogDir } = makeTempWorkspace([]);
+  const result = validateBacklogGraph('test', { backlogDir });
   assert(result.ok === true, 'should succeed');
   assert(result.valid === true, 'should be valid');
   assert(result.nodes === 0, `nodes should be 0, got ${result.nodes}`);
@@ -114,13 +110,12 @@ test('empty backlog is valid', () => {
 console.log('\n--- linear chain ---');
 
 test('linear chain A→B→C is valid', () => {
-  const projectsDir = makeTempProjectsDir();
-  makeProject(projectsDir, 'proj-linear', [
+  const { backlogDir } = makeTempWorkspace([
     { id: 'A' },
     { id: 'B', depends_on: ['A'] },
     { id: 'C', depends_on: ['B'] },
   ]);
-  const result = validateBacklogGraph('proj-linear', { projectsDir });
+  const result = validateBacklogGraph('test', { backlogDir });
   assert(result.valid === true, 'should be valid');
   assert(result.cycles.length === 0, 'no cycles');
   assert(result.edges.depends_on === 2, `depends_on edges should be 2, got ${result.edges.depends_on}`);
@@ -132,12 +127,11 @@ test('linear chain A→B→C is valid', () => {
 console.log('\n--- simple cycle ---');
 
 test('simple cycle A→B→A is detected', () => {
-  const projectsDir = makeTempProjectsDir();
-  makeProject(projectsDir, 'proj-cycle2', [
+  const { backlogDir } = makeTempWorkspace([
     { id: 'A', depends_on: ['B'] },
     { id: 'B', depends_on: ['A'] },
   ]);
-  const result = validateBacklogGraph('proj-cycle2', { projectsDir });
+  const result = validateBacklogGraph('test', { backlogDir });
   assert(result.valid === false, 'should be invalid');
   assert(result.cycles.length > 0, 'should have at least one cycle');
   // Cycle path should contain both A and B
@@ -152,13 +146,12 @@ test('simple cycle A→B→A is detected', () => {
 console.log('\n--- 3-node cycle ---');
 
 test('3-node cycle A→B→C→A is detected', () => {
-  const projectsDir = makeTempProjectsDir();
-  makeProject(projectsDir, 'proj-cycle3', [
+  const { backlogDir } = makeTempWorkspace([
     { id: 'A', depends_on: ['C'] },
     { id: 'B', depends_on: ['A'] },
     { id: 'C', depends_on: ['B'] },
   ]);
-  const result = validateBacklogGraph('proj-cycle3', { projectsDir });
+  const result = validateBacklogGraph('test', { backlogDir });
   assert(result.valid === false, 'should be invalid');
   assert(result.cycles.length > 0, 'should have cycles');
   // At least one cycle path should have 3+ unique nodes
@@ -173,14 +166,13 @@ test('3-node cycle A→B→C→A is detected', () => {
 console.log('\n--- diamond ---');
 
 test('diamond A→B,C→D is valid (not a cycle)', () => {
-  const projectsDir = makeTempProjectsDir();
-  makeProject(projectsDir, 'proj-diamond', [
+  const { backlogDir } = makeTempWorkspace([
     { id: 'A' },
     { id: 'B', depends_on: ['A'] },
     { id: 'C', depends_on: ['A'] },
     { id: 'D', depends_on: ['B', 'C'] },
   ]);
-  const result = validateBacklogGraph('proj-diamond', { projectsDir });
+  const result = validateBacklogGraph('test', { backlogDir });
   assert(result.valid === true, 'diamond should be valid');
   assert(result.cycles.length === 0, 'no cycles');
   assert(result.edges.depends_on === 4, `depends_on edges should be 4, got ${result.edges.depends_on}`);
@@ -192,13 +184,12 @@ test('diamond A→B,C→D is valid (not a cycle)', () => {
 console.log('\n--- parent_id validation ---');
 
 test('valid parent_id (child → epic) passes', () => {
-  const projectsDir = makeTempProjectsDir();
-  makeProject(projectsDir, 'proj-parent-ok', [
+  const { backlogDir } = makeTempWorkspace([
     { id: 'EPIC-1', type: 'epic' },
     { id: 'CHILD-1', parent_id: 'EPIC-1' },
     { id: 'CHILD-2', parent_id: 'EPIC-1' },
   ]);
-  const result = validateBacklogGraph('proj-parent-ok', { projectsDir });
+  const result = validateBacklogGraph('test', { backlogDir });
   assert(result.valid === true, 'should be valid');
   assert(result.parent_errors.length === 0, 'no parent errors');
   assert(result.edges.parent_child === 2, `parent_child edges should be 2, got ${result.edges.parent_child}`);
@@ -208,11 +199,10 @@ test('valid parent_id (child → epic) passes', () => {
 // 7. parent_id references non-existent item
 // -------------------------------------------------------------------------
 test('parent_id referencing non-existent item is an error', () => {
-  const projectsDir = makeTempProjectsDir();
-  makeProject(projectsDir, 'proj-parent-missing', [
+  const { backlogDir } = makeTempWorkspace([
     { id: 'CHILD-X', parent_id: 'NONEXIST' },
   ]);
-  const result = validateBacklogGraph('proj-parent-missing', { projectsDir });
+  const result = validateBacklogGraph('test', { backlogDir });
   assert(result.valid === false, 'should be invalid');
   assert(result.parent_errors.length > 0, 'should have parent errors');
   assert(result.parent_errors[0].includes('NONEXIST'), 'error should mention NONEXIST');
@@ -223,12 +213,11 @@ test('parent_id referencing non-existent item is an error', () => {
 // 8. parent_id references non-epic item
 // -------------------------------------------------------------------------
 test('parent_id referencing non-epic item is an error', () => {
-  const projectsDir = makeTempProjectsDir();
-  makeProject(projectsDir, 'proj-parent-nonepic', [
+  const { backlogDir } = makeTempWorkspace([
     { id: 'TASK-P', type: 'task' },
     { id: 'CHILD-P', parent_id: 'TASK-P' },
   ]);
-  const result = validateBacklogGraph('proj-parent-nonepic', { projectsDir });
+  const result = validateBacklogGraph('test', { backlogDir });
   assert(result.valid === false, 'should be invalid');
   assert(result.parent_errors.length > 0, 'should have parent errors');
   assert(result.parent_errors[0].includes("'task'"), 'error should mention the actual type');
@@ -239,11 +228,10 @@ test('parent_id referencing non-epic item is an error', () => {
 // 9. Self-referencing parent_id
 // -------------------------------------------------------------------------
 test('self-referencing parent_id is an error', () => {
-  const projectsDir = makeTempProjectsDir();
-  makeProject(projectsDir, 'proj-parent-self', [
+  const { backlogDir } = makeTempWorkspace([
     { id: 'SELF-REF', type: 'epic', parent_id: 'SELF-REF' },
   ]);
-  const result = validateBacklogGraph('proj-parent-self', { projectsDir });
+  const result = validateBacklogGraph('test', { backlogDir });
   assert(result.valid === false, 'should be invalid');
   assert(result.parent_errors.some(e => e.includes('self-referencing')), 'should mention self-referencing');
 });
@@ -252,12 +240,11 @@ test('self-referencing parent_id is an error', () => {
 // 10. Circular parent chain
 // -------------------------------------------------------------------------
 test('circular parent chain A→B→A is an error', () => {
-  const projectsDir = makeTempProjectsDir();
-  makeProject(projectsDir, 'proj-parent-circular', [
+  const { backlogDir } = makeTempWorkspace([
     { id: 'EP-A', type: 'epic', parent_id: 'EP-B' },
     { id: 'EP-B', type: 'epic', parent_id: 'EP-A' },
   ]);
-  const result = validateBacklogGraph('proj-parent-circular', { projectsDir });
+  const result = validateBacklogGraph('test', { backlogDir });
   assert(result.valid === false, 'should be invalid');
   assert(result.parent_errors.some(e => e.includes('circular parent chain')),
     `should mention circular parent chain: ${JSON.stringify(result.parent_errors)}`);
@@ -269,11 +256,10 @@ test('circular parent chain A→B→A is an error', () => {
 console.log('\n--- dangling depends_on ---');
 
 test('dangling depends_on produces warning, not error', () => {
-  const projectsDir = makeTempProjectsDir();
-  makeProject(projectsDir, 'proj-dangling', [
+  const { backlogDir } = makeTempWorkspace([
     { id: 'T-1', depends_on: ['GHOST'] },
   ]);
-  const result = validateBacklogGraph('proj-dangling', { projectsDir });
+  const result = validateBacklogGraph('test', { backlogDir });
   assert(result.valid === true, 'should still be valid (warning only)');
   assert(result.warnings.length > 0, 'should have warnings');
   assert(result.warnings[0].includes('GHOST'), 'warning should mention GHOST');
@@ -286,23 +272,21 @@ test('dangling depends_on produces warning, not error', () => {
 console.log('\n--- schema validation ---');
 
 test('output validates against schema (valid graph)', () => {
-  const projectsDir = makeTempProjectsDir();
-  makeProject(projectsDir, 'proj-schema', [
+  const { backlogDir } = makeTempWorkspace([
     { id: 'A' },
     { id: 'B', depends_on: ['A'] },
   ]);
-  const result = validateBacklogGraph('proj-schema', { projectsDir });
+  const result = validateBacklogGraph('test', { backlogDir });
   const v = validateAgainstSchema(result, outputSchema);
   assert(v.ok, `schema validation failed: ${(v.details || []).join('; ')}`);
 });
 
 test('output validates against schema (invalid graph with cycles)', () => {
-  const projectsDir = makeTempProjectsDir();
-  makeProject(projectsDir, 'proj-schema-cyc', [
+  const { backlogDir } = makeTempWorkspace([
     { id: 'X', depends_on: ['Y'] },
     { id: 'Y', depends_on: ['X'] },
   ]);
-  const result = validateBacklogGraph('proj-schema-cyc', { projectsDir });
+  const result = validateBacklogGraph('test', { backlogDir });
   const v = validateAgainstSchema(result, outputSchema);
   assert(v.ok, `schema validation failed: ${(v.details || []).join('; ')}`);
 });
@@ -313,14 +297,11 @@ test('output validates against schema (invalid graph with cycles)', () => {
 console.log('\n--- CLI ---');
 
 test('CLI outputs valid JSON for temp project', () => {
-  const wsRoot = makeTempProjectsDir();
-  const projectsDir = path.join(wsRoot, 'projects');
-  fs.mkdirSync(projectsDir, { recursive: true });
-  makeProject(projectsDir, 'cli-test-proj', [
+  const { wsRoot } = makeTempWorkspace([
     { id: 'A' },
     { id: 'B', depends_on: ['A'] },
   ]);
-  const stdout = execFileSync('node', [SCRIPT, 'cli-test-proj'], {
+  const stdout = execFileSync('node', [SCRIPT, 'test'], {
     encoding: 'utf8', timeout: 10000,
     env: { ...process.env, WORKSPACE_ROOT: wsRoot },
   });
@@ -346,14 +327,11 @@ test('CLI exits 1 for non-existent project', () => {
 });
 
 test('CLI output validates against schema', () => {
-  const wsRoot = makeTempProjectsDir();
-  const projectsDir = path.join(wsRoot, 'projects');
-  fs.mkdirSync(projectsDir, { recursive: true });
-  makeProject(projectsDir, 'cli-schema-proj', [
+  const { wsRoot } = makeTempWorkspace([
     { id: 'X', depends_on: ['Y'] },
     { id: 'Y', depends_on: ['X'] },
   ]);
-  const stdout = execFileSync('node', [SCRIPT, 'cli-schema-proj'], {
+  const stdout = execFileSync('node', [SCRIPT, 'test'], {
     encoding: 'utf8', timeout: 10000,
     env: { ...process.env, WORKSPACE_ROOT: wsRoot },
   });

@@ -2,7 +2,7 @@
 'use strict';
 
 /**
- * Tests for project-dashboard.js — read-only aggregated project dashboard.
+ * Tests for project-dashboard.js — read-only aggregated single-project dashboard.
  * Run: node skills/dev-pipeline/tests/test-project-dashboard.js
  */
 
@@ -35,57 +35,57 @@ function test(label, fn) {
   }
 }
 
-function makeTempDir() {
-  const dir = path.join(os.tmpdir(), `_test_dashboard_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`);
-  fs.mkdirSync(dir, { recursive: true });
-  tmpDirs.push(dir);
-  return dir;
-}
+function makeTempWorkspace(projectId, backlogItems = [], opts = {}) {
+  const wsRoot = path.join(os.tmpdir(), `_test_dashboard_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`);
+  fs.mkdirSync(wsRoot, { recursive: true });
+  const clawDir = path.join(wsRoot, '.claw');
+  fs.mkdirSync(path.join(clawDir, 'backlog'), { recursive: true });
+  fs.mkdirSync(path.join(clawDir, 'runs'), { recursive: true });
+  fs.mkdirSync(path.join(clawDir, 'task-packs'), { recursive: true });
 
-function makeProject(projectsDir, projectId, backlogItems = [], opts = {}) {
-  const projectDir = path.join(projectsDir, projectId);
-  fs.mkdirSync(projectDir, { recursive: true });
-
-  const project = {
+  fs.writeFileSync(path.join(clawDir, 'project.json'), JSON.stringify({
     project_id: projectId,
     title: opts.title || `Test project ${projectId}`,
     description: opts.description || `Description for ${projectId}`,
-    repo_path: null,
-    created_at: '2026-01-01T00:00:00.000Z',
-    updated_at: '2026-01-01T00:00:00.000Z',
-  };
-  fs.writeFileSync(path.join(projectDir, 'project.json'), JSON.stringify(project, null, 2), 'utf8');
+    repo_path: wsRoot,
+    created_at: '2026-01-01T00:00:00Z',
+    updated_at: '2026-01-01T00:00:00Z',
+  }), 'utf8');
 
-  if (backlogItems.length > 0) {
-    const backlogDir = path.join(projectDir, 'backlog');
-    fs.mkdirSync(backlogDir, { recursive: true });
-    for (const item of backlogItems) {
-      const defaults = {
-        project_id: projectId,
-        type: 'task',
-        title: `Task ${item.id}`,
-        description: '',
-        created_at: '2026-01-01T00:00:00.000Z',
-        updated_at: '2026-01-01T00:00:00.000Z',
-        status: 'todo',
-        priority: 'P2',
-        owner_role: 'DEV',
-        depends_on: [],
-        run_folder: null,
-        tags: [],
-        artifacts_expected: [],
-        last_summary: null,
-        ...item,
-      };
-      fs.writeFileSync(
-        path.join(backlogDir, `${defaults.id}.json`),
-        JSON.stringify(defaults, null, 2),
-        'utf8'
-      );
-    }
+  for (const item of backlogItems) {
+    const defaults = {
+      project_id: projectId,
+      type: 'task',
+      title: `Task ${item.id}`,
+      description: '',
+      created_at: '2026-01-01T00:00:00.000Z',
+      updated_at: '2026-01-01T00:00:00.000Z',
+      status: 'todo',
+      priority: 'P2',
+      owner_role: 'DEV',
+      depends_on: [],
+      run_folder: null,
+      tags: [],
+      artifacts_expected: [],
+      last_summary: null,
+      ...item,
+    };
+    fs.writeFileSync(
+      path.join(clawDir, 'backlog', `${defaults.id}.json`),
+      JSON.stringify(defaults, null, 2),
+      'utf8'
+    );
   }
 
-  return projectDir;
+  tmpDirs.push(wsRoot);
+  return wsRoot;
+}
+
+function makeTempDir() {
+  const dir = path.join(os.tmpdir(), `_test_dashboard_tmp_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`);
+  fs.mkdirSync(dir, { recursive: true });
+  tmpDirs.push(dir);
+  return dir;
 }
 
 function cleanup() {
@@ -100,9 +100,11 @@ process.on('exit', cleanup);
 // -------------------------------------------------------------------------
 console.log('\n--- basic output ---');
 
-test('returns ok:true with empty projects', () => {
-  const projectsDir = makeTempDir();
-  const result = buildDashboard({ projectsDir });
+test('returns ok:true with empty workspace (no project.json)', () => {
+  const wsRoot = path.join(os.tmpdir(), `_test_dashboard_empty_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`);
+  fs.mkdirSync(wsRoot, { recursive: true });
+  tmpDirs.push(wsRoot);
+  const result = buildDashboard({ workspaceRoot: wsRoot });
   if (!result.ok) throw new Error('expected ok:true');
   if (!Array.isArray(result.projects)) throw new Error('expected projects array');
   if (!result.summary) throw new Error('expected summary');
@@ -110,15 +112,20 @@ test('returns ok:true with empty projects', () => {
   if (result.summary.projects !== 0) throw new Error('expected 0 projects');
 });
 
-test('returns error if projects/ does not exist', () => {
-  const result = buildDashboard({ projectsDir: '/tmp/_nonexistent_dashboard_xyz' });
-  if (result.ok) throw new Error('expected ok:false');
-  if (!result.error.includes('does not exist')) throw new Error('wrong error: ' + result.error);
+test('returns ok:true with empty projects when no project.json exists', () => {
+  const wsRoot = path.join(os.tmpdir(), `_test_dashboard_noproj_${Date.now()}`);
+  fs.mkdirSync(wsRoot, { recursive: true });
+  tmpDirs.push(wsRoot);
+  const result = buildDashboard({ workspaceRoot: wsRoot });
+  if (!result.ok) throw new Error('expected ok:true');
+  if (result.projects.length !== 0) throw new Error('expected 0 projects');
 });
 
 test('empty output validates against schema', () => {
-  const projectsDir = makeTempDir();
-  const result = buildDashboard({ projectsDir });
+  const wsRoot = path.join(os.tmpdir(), `_test_dashboard_schema_empty_${Date.now()}`);
+  fs.mkdirSync(wsRoot, { recursive: true });
+  tmpDirs.push(wsRoot);
+  const result = buildDashboard({ workspaceRoot: wsRoot });
   const v = validateAgainstSchema(result, dashboardSchema);
   if (!v.ok) throw new Error(`schema validation failed: ${v.details.join('; ')}`);
 });
@@ -129,12 +136,11 @@ test('empty output validates against schema', () => {
 console.log('\n--- project metadata ---');
 
 test('includes title and description from project.json', () => {
-  const projectsDir = makeTempDir();
-  makeProject(projectsDir, 'proj-meta', [], {
+  const wsRoot = makeTempWorkspace('proj-meta', [], {
     title: 'Meta Project',
     description: 'A description',
   });
-  const result = buildDashboard({ projectsDir });
+  const result = buildDashboard({ workspaceRoot: wsRoot });
   const proj = result.projects[0];
   if (proj.title !== 'Meta Project') throw new Error(`wrong title: ${proj.title}`);
   if (proj.description !== 'A description') throw new Error(`wrong desc: ${proj.description}`);
@@ -146,11 +152,10 @@ test('includes title and description from project.json', () => {
 console.log('\n--- backlog enrichment ---');
 
 test('items have all required dashboard fields', () => {
-  const projectsDir = makeTempDir();
-  makeProject(projectsDir, 'proj-fields', [
+  const wsRoot = makeTempWorkspace('proj-fields', [
     { id: 'T-1', status: 'todo', priority: 'P0', owner_role: 'PM', depends_on: ['T-0'], tags: ['urgent'] },
   ]);
-  const result = buildDashboard({ projectsDir });
+  const result = buildDashboard({ workspaceRoot: wsRoot });
   const item = result.projects[0].backlog[0];
   const requiredFields = [
     'id', 'type', 'status', 'priority', 'owner_role', 'depends_on', 'tags',
@@ -163,22 +168,20 @@ test('items have all required dashboard fields', () => {
 });
 
 test('todo task without run_folder shows needs_task_pack', () => {
-  const projectsDir = makeTempDir();
-  makeProject(projectsDir, 'proj-ntp', [
+  const wsRoot = makeTempWorkspace('proj-ntp', [
     { id: 'T-NTP', status: 'todo' },
   ]);
-  const result = buildDashboard({ projectsDir });
+  const result = buildDashboard({ workspaceRoot: wsRoot });
   const item = result.projects[0].backlog[0];
   if (!item.needs_task_pack) throw new Error('expected needs_task_pack true');
   if (item.priority_bucket !== 'needs_task_pack') throw new Error(`expected needs_task_pack bucket, got ${item.priority_bucket}`);
 });
 
 test('done task has null priority_bucket', () => {
-  const projectsDir = makeTempDir();
-  makeProject(projectsDir, 'proj-done', [
+  const wsRoot = makeTempWorkspace('proj-done', [
     { id: 'T-DONE', status: 'done' },
   ]);
-  const result = buildDashboard({ projectsDir });
+  const result = buildDashboard({ workspaceRoot: wsRoot });
   const item = result.projects[0].backlog[0];
   if (item.priority_bucket !== null) throw new Error(`expected null bucket, got ${item.priority_bucket}`);
   if (item.needs_task_pack) throw new Error('done task should not need task pack');
@@ -190,74 +193,102 @@ test('done task has null priority_bucket', () => {
 console.log('\n--- run enrichment ---');
 
 test('detects run_stage from linked run', () => {
-  const projectsDir = makeTempDir();
+  const wsRoot = makeTempWorkspace('proj-stage');
   const tmpRunDir = makeTempDir();
   fs.writeFileSync(path.join(tmpRunDir, 'status.json'), JSON.stringify({
     current_stage: 'pm-ready', blocked: false,
   }), 'utf8');
 
-  makeProject(projectsDir, 'proj-stage', [
-    { id: 'T-STAGE', status: 'in_progress', run_folder: tmpRunDir },
-  ]);
+  fs.writeFileSync(
+    path.join(wsRoot, '.claw', 'backlog', 'T-STAGE.json'),
+    JSON.stringify({
+      id: 'T-STAGE', project_id: 'proj-stage', type: 'task', title: 'Stage task',
+      description: '', status: 'in_progress', priority: 'P2', owner_role: 'DEV',
+      depends_on: [], run_folder: tmpRunDir, tags: [], artifacts_expected: [],
+      last_summary: null, created_at: '2026-01-01T00:00:00.000Z', updated_at: '2026-01-01T00:00:00.000Z',
+    }, null, 2),
+    'utf8'
+  );
 
-  const result = buildDashboard({ projectsDir, workspaceRoot: '/' });
+  const result = buildDashboard({ workspaceRoot: wsRoot });
   const item = result.projects[0].backlog[0];
   if (item.run_stage !== 'pm-ready') throw new Error(`expected pm-ready, got ${item.run_stage}`);
 });
 
 test('detects run_blocked from linked run', () => {
-  const projectsDir = makeTempDir();
+  const wsRoot = makeTempWorkspace('proj-blk');
   const tmpRunDir = makeTempDir();
   fs.writeFileSync(path.join(tmpRunDir, 'status.json'), JSON.stringify({
     current_stage: 'blocked', blocked: true,
   }), 'utf8');
 
-  makeProject(projectsDir, 'proj-blk', [
-    { id: 'T-BLK', status: 'in_progress', run_folder: tmpRunDir },
-  ]);
+  fs.writeFileSync(
+    path.join(wsRoot, '.claw', 'backlog', 'T-BLK.json'),
+    JSON.stringify({
+      id: 'T-BLK', project_id: 'proj-blk', type: 'task', title: 'Blocked task',
+      description: '', status: 'in_progress', priority: 'P2', owner_role: 'DEV',
+      depends_on: [], run_folder: tmpRunDir, tags: [], artifacts_expected: [],
+      last_summary: null, created_at: '2026-01-01T00:00:00.000Z', updated_at: '2026-01-01T00:00:00.000Z',
+    }, null, 2),
+    'utf8'
+  );
 
-  const result = buildDashboard({ projectsDir, workspaceRoot: '/' });
+  const result = buildDashboard({ workspaceRoot: wsRoot });
   const item = result.projects[0].backlog[0];
   if (!item.run_blocked) throw new Error('expected run_blocked true');
 });
 
 test('detects run_stop from linked run', () => {
-  const projectsDir = makeTempDir();
+  const wsRoot = makeTempWorkspace('proj-stop');
   const tmpRunDir = makeTempDir();
   fs.writeFileSync(path.join(tmpRunDir, 'status.json'), JSON.stringify({
     current_stage: 'pm-ready', blocked: false,
   }), 'utf8');
   fs.writeFileSync(path.join(tmpRunDir, '.stop'), '', 'utf8');
 
-  makeProject(projectsDir, 'proj-stop', [
-    { id: 'T-STOP', status: 'in_progress', run_folder: tmpRunDir },
-  ]);
+  fs.writeFileSync(
+    path.join(wsRoot, '.claw', 'backlog', 'T-STOP.json'),
+    JSON.stringify({
+      id: 'T-STOP', project_id: 'proj-stop', type: 'task', title: 'Stop task',
+      description: '', status: 'in_progress', priority: 'P2', owner_role: 'DEV',
+      depends_on: [], run_folder: tmpRunDir, tags: [], artifacts_expected: [],
+      last_summary: null, created_at: '2026-01-01T00:00:00.000Z', updated_at: '2026-01-01T00:00:00.000Z',
+    }, null, 2),
+    'utf8'
+  );
 
-  const result = buildDashboard({ projectsDir, workspaceRoot: '/' });
+  const result = buildDashboard({ workspaceRoot: wsRoot });
   const item = result.projects[0].backlog[0];
   if (!item.run_stop) throw new Error('expected run_stop true');
 });
 
 test('detects needs_artifacts from linked run', () => {
-  const projectsDir = makeTempDir();
+  const wsRoot = makeTempWorkspace('proj-na');
   const tmpRunDir = makeTempDir();
   fs.writeFileSync(path.join(tmpRunDir, 'status.json'), JSON.stringify({
     current_stage: 'pm-ready', blocked: false,
     last_autonomous_summary: { final_action: 'needs_artifacts' },
   }), 'utf8');
 
-  makeProject(projectsDir, 'proj-na', [
-    { id: 'T-NA', status: 'in_progress', run_folder: tmpRunDir },
-  ]);
+  fs.writeFileSync(
+    path.join(wsRoot, '.claw', 'backlog', 'T-NA.json'),
+    JSON.stringify({
+      id: 'T-NA', project_id: 'proj-na', type: 'task', title: 'Artifacts task',
+      description: '', status: 'in_progress', priority: 'P2', owner_role: 'DEV',
+      depends_on: [], run_folder: tmpRunDir, tags: [], artifacts_expected: [],
+      last_summary: null, created_at: '2026-01-01T00:00:00.000Z', updated_at: '2026-01-01T00:00:00.000Z',
+    }, null, 2),
+    'utf8'
+  );
 
-  const result = buildDashboard({ projectsDir, workspaceRoot: '/' });
+  const result = buildDashboard({ workspaceRoot: wsRoot });
   const item = result.projects[0].backlog[0];
   if (!item.needs_artifacts) throw new Error('expected needs_artifacts true');
   if (item.priority_bucket !== 'needs_artifacts') throw new Error(`expected needs_artifacts bucket, got ${item.priority_bucket}`);
 });
 
 test('detects stalled run', () => {
-  const projectsDir = makeTempDir();
+  const wsRoot = makeTempWorkspace('proj-stall');
   const tmpRunDir = makeTempDir();
   fs.writeFileSync(path.join(tmpRunDir, 'status.json'), JSON.stringify({
     current_stage: 'pm-ready', blocked: false,
@@ -268,11 +299,18 @@ test('detects stalled run', () => {
   const oldTime = new Date(Date.now() - 2 * 60 * 60 * 1000);
   fs.utimesSync(auditPath, oldTime, oldTime);
 
-  makeProject(projectsDir, 'proj-stall', [
-    { id: 'T-STALL', status: 'in_progress', run_folder: tmpRunDir },
-  ]);
+  fs.writeFileSync(
+    path.join(wsRoot, '.claw', 'backlog', 'T-STALL.json'),
+    JSON.stringify({
+      id: 'T-STALL', project_id: 'proj-stall', type: 'task', title: 'Stalled task',
+      description: '', status: 'in_progress', priority: 'P2', owner_role: 'DEV',
+      depends_on: [], run_folder: tmpRunDir, tags: [], artifacts_expected: [],
+      last_summary: null, created_at: '2026-01-01T00:00:00.000Z', updated_at: '2026-01-01T00:00:00.000Z',
+    }, null, 2),
+    'utf8'
+  );
 
-  const result = buildDashboard({ projectsDir, workspaceRoot: '/' });
+  const result = buildDashboard({ workspaceRoot: wsRoot });
   const item = result.projects[0].backlog[0];
   if (!item.stalled) throw new Error('expected stalled true');
 });
@@ -283,21 +321,15 @@ test('detects stalled run', () => {
 console.log('\n--- task pack detection ---');
 
 test('task with task pack shows ready_for_run_creation', () => {
-  // workspaceRoot must contain 'projects' as a subdirectory
-  const wsRoot = makeTempDir();
-  const projectsDir = path.join(wsRoot, 'projects');
-  fs.mkdirSync(projectsDir, { recursive: true });
-  makeProject(projectsDir, 'proj-tp', [
+  const wsRoot = makeTempWorkspace('proj-tp', [
     { id: 'T-TP', status: 'todo' },
   ]);
-  // Create task pack
-  const taskPacksDir = path.join(projectsDir, 'proj-tp', 'task-packs');
-  fs.mkdirSync(taskPacksDir, { recursive: true });
-  fs.writeFileSync(path.join(taskPacksDir, 'T-TP.json'), JSON.stringify({
+  // Create task pack at .claw/task-packs/
+  fs.writeFileSync(path.join(wsRoot, '.claw', 'task-packs', 'T-TP.json'), JSON.stringify({
     task_id: 'T-TP', project_id: 'proj-tp', title: 'Test',
   }), 'utf8');
 
-  const result = buildDashboard({ projectsDir, workspaceRoot: wsRoot });
+  const result = buildDashboard({ workspaceRoot: wsRoot });
   const item = result.projects[0].backlog[0];
   if (item.needs_task_pack) throw new Error('should not need task pack');
   if (item.priority_bucket !== 'ready_for_run_creation') throw new Error(`expected ready_for_run_creation, got ${item.priority_bucket}`);
@@ -309,19 +341,16 @@ test('task with task pack shows ready_for_run_creation', () => {
 console.log('\n--- summary counts ---');
 
 test('summary counts are correct', () => {
-  const projectsDir = makeTempDir();
-  makeProject(projectsDir, 'proj-a', [
+  const wsRoot = makeTempWorkspace('proj-counts', [
     { id: 'T-1', status: 'todo' },
     { id: 'T-2', status: 'in_progress' },
-  ]);
-  makeProject(projectsDir, 'proj-b', [
     { id: 'T-3', status: 'blocked' },
     { id: 'T-4', status: 'done' },
     { id: 'T-5', status: 'todo' },
   ]);
 
-  const result = buildDashboard({ projectsDir });
-  if (result.summary.projects !== 2) throw new Error('wrong projects count');
+  const result = buildDashboard({ workspaceRoot: wsRoot });
+  if (result.summary.projects !== 1) throw new Error('wrong projects count');
   if (result.summary.tasks_total !== 5) throw new Error('wrong tasks_total');
   if (result.summary.todo !== 2) throw new Error('wrong todo count');
   if (result.summary.in_progress !== 1) throw new Error('wrong in_progress');
@@ -336,12 +365,11 @@ test('summary counts are correct', () => {
 console.log('\n--- schema validation ---');
 
 test('populated output validates against schema', () => {
-  const projectsDir = makeTempDir();
-  makeProject(projectsDir, 'proj-sv', [
+  const wsRoot = makeTempWorkspace('proj-sv', [
     { id: 'T-SV1', status: 'todo', priority: 'P0', depends_on: [], tags: ['test'] },
     { id: 'T-SV2', status: 'done' },
   ]);
-  const result = buildDashboard({ projectsDir });
+  const result = buildDashboard({ workspaceRoot: wsRoot });
   const v = validateAgainstSchema(result, dashboardSchema);
   if (!v.ok) throw new Error(`schema validation failed: ${v.details.join('; ')}`);
 });
@@ -351,23 +379,13 @@ test('populated output validates against schema', () => {
 // -------------------------------------------------------------------------
 console.log('\n--- deterministic ---');
 
-test('projects sorted by project_id ASC', () => {
-  const projectsDir = makeTempDir();
-  makeProject(projectsDir, 'zzz-last');
-  makeProject(projectsDir, 'aaa-first');
-  const result = buildDashboard({ projectsDir });
-  if (result.projects[0].project_id !== 'aaa-first') throw new Error('wrong order');
-  if (result.projects[1].project_id !== 'zzz-last') throw new Error('wrong order');
-});
-
 test('backlog items sorted by filename ASC', () => {
-  const projectsDir = makeTempDir();
-  makeProject(projectsDir, 'proj-sort', [
+  const wsRoot = makeTempWorkspace('proj-sort', [
     { id: 'T-003' },
     { id: 'T-001' },
     { id: 'T-002' },
   ]);
-  const result = buildDashboard({ projectsDir });
+  const result = buildDashboard({ workspaceRoot: wsRoot });
   const ids = result.projects[0].backlog.map((b) => b.id);
   if (ids[0] !== 'T-001') throw new Error('wrong first');
   if (ids[1] !== 'T-002') throw new Error('wrong second');
@@ -380,39 +398,39 @@ test('backlog items sorted by filename ASC', () => {
 console.log('\n--- CLI ---');
 
 test('CLI outputs valid JSON', () => {
-  const projDir = path.join(WORKSPACE_ROOT, 'projects');
-  const existed = fs.existsSync(projDir);
-  if (!existed) fs.mkdirSync(projDir, { recursive: true });
+  const clawDir = path.join(WORKSPACE_ROOT, '.claw');
+  const existed = fs.existsSync(clawDir);
+  if (!existed) fs.mkdirSync(clawDir, { recursive: true });
   try {
     const stdout = execFileSync('node', [DASHBOARD_SCRIPT], { encoding: 'utf8', timeout: 10000 });
     const parsed = JSON.parse(stdout);
     if (typeof parsed.ok !== 'boolean') throw new Error('missing ok');
   } finally {
     if (!existed) {
-      try { fs.rmSync(projDir, { recursive: true, force: true }); } catch {}
+      try { fs.rmSync(clawDir, { recursive: true, force: true }); } catch {}
     }
   }
 });
 
 test('shell helper outputs valid JSON', () => {
-  const projDir = path.join(WORKSPACE_ROOT, 'projects');
-  const existed = fs.existsSync(projDir);
-  if (!existed) fs.mkdirSync(projDir, { recursive: true });
+  const clawDir = path.join(WORKSPACE_ROOT, '.claw');
+  const existed = fs.existsSync(clawDir);
+  if (!existed) fs.mkdirSync(clawDir, { recursive: true });
   try {
     const stdout = execFileSync('bash', [DASHBOARD_SHELL], { encoding: 'utf8', timeout: 10000 });
     const parsed = JSON.parse(stdout);
     if (typeof parsed.ok !== 'boolean') throw new Error('missing ok');
   } finally {
     if (!existed) {
-      try { fs.rmSync(projDir, { recursive: true, force: true }); } catch {}
+      try { fs.rmSync(clawDir, { recursive: true, force: true }); } catch {}
     }
   }
 });
 
 test('CLI output validates against schema', () => {
-  const projDir = path.join(WORKSPACE_ROOT, 'projects');
-  const existed = fs.existsSync(projDir);
-  if (!existed) fs.mkdirSync(projDir, { recursive: true });
+  const clawDir = path.join(WORKSPACE_ROOT, '.claw');
+  const existed = fs.existsSync(clawDir);
+  if (!existed) fs.mkdirSync(clawDir, { recursive: true });
   try {
     const stdout = execFileSync('node', [DASHBOARD_SCRIPT], { encoding: 'utf8', timeout: 10000 });
     const parsed = JSON.parse(stdout);
@@ -422,7 +440,7 @@ test('CLI output validates against schema', () => {
     }
   } finally {
     if (!existed) {
-      try { fs.rmSync(projDir, { recursive: true, force: true }); } catch {}
+      try { fs.rmSync(clawDir, { recursive: true, force: true }); } catch {}
     }
   }
 });

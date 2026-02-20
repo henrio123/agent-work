@@ -52,6 +52,38 @@ function makeTempTicketsDir() {
   return dir;
 }
 
+/**
+ * Create a temp workspace root with .claw/tickets/ inside it.
+ * Returns { wsRoot, ticketsDir }.
+ */
+function makeTempWorkspace() {
+  const wsRoot = path.join(os.tmpdir(), `_test_tws_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`);
+  const ticketsDir = path.join(wsRoot, '.claw', 'tickets');
+  fs.mkdirSync(ticketsDir, { recursive: true });
+  tmpDirs.push(wsRoot);
+  return { wsRoot, ticketsDir };
+}
+
+const VALID_TICKET_CONTENT = `---
+ticket_id: TEST-01
+title: Test ticket TEST-01
+project: test-project
+---
+
+## Goal
+
+This is a test ticket for TEST-01 with enough content to pass the minimum body length validation check.
+
+## Steps
+
+1. Step one
+2. Step two
+
+## Acceptance
+
+- [ ] Test passes
+`;
+
 function writeTestTicket(ticketsDir, ticketId, overrides = {}) {
   const content = overrides.content || `---
 ticket_id: ${ticketId}
@@ -90,8 +122,8 @@ console.log('\n--- resolveTicketPath ---');
 
 test('resolves valid ticket ID', () => {
   const ticketsDir = makeTempTicketsDir();
-  const p = resolveTicketPath('OC-22', { ticketsDir });
-  if (!p.endsWith('OC-22.md')) throw new Error('wrong path: ' + p);
+  const p = resolveTicketPath('TEST-01', { ticketsDir });
+  if (!p.endsWith('TEST-01.md')) throw new Error('wrong path: ' + p);
 });
 
 test('rejects invalid ticket ID with special chars', () => {
@@ -120,9 +152,9 @@ test('rejects ticket ID with spaces', () => {
 console.log('\n--- parseFrontmatter ---');
 
 test('parses valid frontmatter', () => {
-  const fm = parseFrontmatter('---\nticket_id: OC-22\ntitle: Test\n---\nbody');
+  const fm = parseFrontmatter('---\nticket_id: TEST-01\ntitle: Test\n---\nbody');
   if (!fm) throw new Error('expected frontmatter');
-  if (fm.ticket_id !== 'OC-22') throw new Error('wrong ticket_id');
+  if (fm.ticket_id !== 'TEST-01') throw new Error('wrong ticket_id');
   if (fm.title !== 'Test') throw new Error('wrong title');
 });
 
@@ -337,48 +369,85 @@ test('excludes README.md from list', () => {
 });
 
 // -------------------------------------------------------------------------
-// Test 9: Real ticket validation (OC-22)
+// Test 9: Programmatic ensure/read with temp tickets
 // -------------------------------------------------------------------------
-console.log('\n--- real ticket ---');
+console.log('\n--- ensure/read with temp tickets ---');
 
-test('OC-22.md passes ensure', () => {
-  const result = ensureTicket('OC-22');
-  if (!result.ok) throw new Error('OC-22 ensure failed: ' + JSON.stringify(result));
+test('ensure passes for well-formed temp ticket', () => {
+  const ticketsDir = makeTempTicketsDir();
+  writeTestTicket(ticketsDir, 'TEST-01');
+  const result = ensureTicket('TEST-01', { ticketsDir });
+  if (!result.ok) throw new Error('ensure failed: ' + JSON.stringify(result));
 });
 
-test('OC-08.md passes ensure', () => {
-  const result = ensureTicket('OC-08');
-  if (!result.ok) throw new Error('OC-08 ensure failed: ' + JSON.stringify(result));
+test('ensure passes for ticket with extra frontmatter fields', () => {
+  const ticketsDir = makeTempTicketsDir();
+  const content = `---
+ticket_id: TEST-02
+title: Extended ticket
+project: test-project
+priority: P1
+tags: feature, ui
+---
+
+## Goal
+
+This ticket has extra frontmatter fields and enough body content to pass validation.
+
+## Steps
+
+1. Implement feature
+2. Write tests
+`;
+  fs.writeFileSync(path.join(ticketsDir, 'TEST-02.md'), content, 'utf8');
+  const result = ensureTicket('TEST-02', { ticketsDir });
+  if (!result.ok) throw new Error('ensure failed: ' + JSON.stringify(result));
 });
 
-test('readTicket OC-22 returns full content', () => {
-  const result = readTicket('OC-22');
+test('readTicket returns full content with frontmatter', () => {
+  const ticketsDir = makeTempTicketsDir();
+  writeTestTicket(ticketsDir, 'TEST-03');
+  const result = readTicket('TEST-03', { ticketsDir });
   if (!result.ok) throw new Error('expected ok');
-  if (!result.content.includes('Anti Truncation Guard')) throw new Error('content missing expected text');
-  if (result.frontmatter.ticket_id !== 'OC-22') throw new Error('wrong ticket_id');
+  if (!result.content.includes('## Goal')) throw new Error('content missing Goal heading');
+  if (result.frontmatter.ticket_id !== 'TEST-03') throw new Error('wrong ticket_id');
 });
 
 // -------------------------------------------------------------------------
-// Test 10: CLI
+// Test 10: CLI (using temp workspace via WORKSPACE_ROOT env var)
 // -------------------------------------------------------------------------
 console.log('\n--- CLI ---');
 
 test('CLI show prints raw content', () => {
-  const stdout = execFileSync('node', [STORE_SCRIPT, 'show', 'OC-22'], { encoding: 'utf8', timeout: 10000 });
-  if (!stdout.includes('ticket_id: OC-22')) throw new Error('missing ticket_id in output');
+  const { wsRoot, ticketsDir } = makeTempWorkspace();
+  writeTestTicket(ticketsDir, 'CLI-SHOW');
+  const stdout = execFileSync('node', [STORE_SCRIPT, 'show', 'CLI-SHOW'], {
+    encoding: 'utf8', timeout: 10000,
+    env: { ...process.env, WORKSPACE_ROOT: wsRoot },
+  });
+  if (!stdout.includes('ticket_id: CLI-SHOW')) throw new Error('missing ticket_id in output');
   if (!stdout.includes('## Goal')) throw new Error('missing Goal heading');
 });
 
 test('CLI ensure exits 0 for valid ticket', () => {
-  const stdout = execFileSync('node', [STORE_SCRIPT, 'ensure', 'OC-22'], { encoding: 'utf8', timeout: 10000 });
+  const { wsRoot, ticketsDir } = makeTempWorkspace();
+  writeTestTicket(ticketsDir, 'CLI-ENSURE');
+  const stdout = execFileSync('node', [STORE_SCRIPT, 'ensure', 'CLI-ENSURE'], {
+    encoding: 'utf8', timeout: 10000,
+    env: { ...process.env, WORKSPACE_ROOT: wsRoot },
+  });
   const parsed = JSON.parse(stdout);
   if (!parsed.ok) throw new Error('expected ok');
 });
 
 test('CLI ensure exits 1 for missing ticket', () => {
+  const { wsRoot } = makeTempWorkspace();
   let exitedNonZero = false;
   try {
-    execFileSync('node', [STORE_SCRIPT, 'ensure', 'NONEXISTENT-99'], { encoding: 'utf8', timeout: 10000, stdio: 'pipe' });
+    execFileSync('node', [STORE_SCRIPT, 'ensure', 'NONEXISTENT-99'], {
+      encoding: 'utf8', timeout: 10000, stdio: 'pipe',
+      env: { ...process.env, WORKSPACE_ROOT: wsRoot },
+    });
   } catch (e) {
     exitedNonZero = true;
     const parsed = JSON.parse(e.stderr);
@@ -389,15 +458,24 @@ test('CLI ensure exits 1 for missing ticket', () => {
 });
 
 test('CLI guard exits 0 for valid ticket', () => {
-  const stdout = execFileSync('node', [STORE_SCRIPT, 'guard', 'OC-22'], { encoding: 'utf8', timeout: 10000 });
+  const { wsRoot, ticketsDir } = makeTempWorkspace();
+  writeTestTicket(ticketsDir, 'CLI-GUARD');
+  const stdout = execFileSync('node', [STORE_SCRIPT, 'guard', 'CLI-GUARD'], {
+    encoding: 'utf8', timeout: 10000,
+    env: { ...process.env, WORKSPACE_ROOT: wsRoot },
+  });
   const parsed = JSON.parse(stdout);
   if (!parsed.ok) throw new Error('expected ok');
 });
 
 test('CLI guard exits 1 for missing ticket', () => {
+  const { wsRoot } = makeTempWorkspace();
   let exitedNonZero = false;
   try {
-    execFileSync('node', [STORE_SCRIPT, 'guard', 'NONEXISTENT-99'], { encoding: 'utf8', timeout: 10000, stdio: 'pipe' });
+    execFileSync('node', [STORE_SCRIPT, 'guard', 'NONEXISTENT-99'], {
+      encoding: 'utf8', timeout: 10000, stdio: 'pipe',
+      env: { ...process.env, WORKSPACE_ROOT: wsRoot },
+    });
   } catch (e) {
     exitedNonZero = true;
     const parsed = JSON.parse(e.stderr);
@@ -408,33 +486,53 @@ test('CLI guard exits 1 for missing ticket', () => {
 });
 
 test('CLI list outputs JSON', () => {
-  const stdout = execFileSync('node', [STORE_SCRIPT, 'list'], { encoding: 'utf8', timeout: 10000 });
+  const { wsRoot, ticketsDir } = makeTempWorkspace();
+  writeTestTicket(ticketsDir, 'CLI-LIST-A');
+  writeTestTicket(ticketsDir, 'CLI-LIST-B');
+  const stdout = execFileSync('node', [STORE_SCRIPT, 'list'], {
+    encoding: 'utf8', timeout: 10000,
+    env: { ...process.env, WORKSPACE_ROOT: wsRoot },
+  });
   const parsed = JSON.parse(stdout);
   if (!parsed.ok) throw new Error('expected ok');
   if (!Array.isArray(parsed.tickets)) throw new Error('expected tickets array');
-  if (parsed.total < 2) throw new Error('expected at least 2 tickets');
+  if (parsed.total !== 2) throw new Error(`expected 2 tickets, got ${parsed.total}`);
 });
 
 // -------------------------------------------------------------------------
-// Test 11: Shell helpers
+// Test 11: Shell helpers (using temp workspace via WORKSPACE_ROOT env var)
 // -------------------------------------------------------------------------
 console.log('\n--- shell helpers ---');
 
 test('ticket-show.sh prints raw content', () => {
-  const stdout = execFileSync('bash', [SHOW_SHELL, 'OC-22'], { encoding: 'utf8', timeout: 10000 });
-  if (!stdout.includes('ticket_id: OC-22')) throw new Error('missing ticket_id');
+  const { wsRoot, ticketsDir } = makeTempWorkspace();
+  writeTestTicket(ticketsDir, 'SH-SHOW');
+  const stdout = execFileSync('bash', [SHOW_SHELL, 'SH-SHOW'], {
+    encoding: 'utf8', timeout: 10000,
+    env: { ...process.env, WORKSPACE_ROOT: wsRoot },
+  });
+  if (!stdout.includes('ticket_id: SH-SHOW')) throw new Error('missing ticket_id');
 });
 
 test('ticket-ensure.sh exits 0 for valid', () => {
-  const stdout = execFileSync('bash', [ENSURE_SHELL, 'OC-22'], { encoding: 'utf8', timeout: 10000 });
+  const { wsRoot, ticketsDir } = makeTempWorkspace();
+  writeTestTicket(ticketsDir, 'SH-ENSURE');
+  const stdout = execFileSync('bash', [ENSURE_SHELL, 'SH-ENSURE'], {
+    encoding: 'utf8', timeout: 10000,
+    env: { ...process.env, WORKSPACE_ROOT: wsRoot },
+  });
   const parsed = JSON.parse(stdout);
   if (!parsed.ok) throw new Error('expected ok');
 });
 
 test('ticket-ensure.sh exits 1 for missing', () => {
+  const { wsRoot } = makeTempWorkspace();
   let exitedNonZero = false;
   try {
-    execFileSync('bash', [ENSURE_SHELL, 'NONEXISTENT-99'], { encoding: 'utf8', timeout: 10000, stdio: 'pipe' });
+    execFileSync('bash', [ENSURE_SHELL, 'NONEXISTENT-99'], {
+      encoding: 'utf8', timeout: 10000, stdio: 'pipe',
+      env: { ...process.env, WORKSPACE_ROOT: wsRoot },
+    });
   } catch {
     exitedNonZero = true;
   }
@@ -442,15 +540,24 @@ test('ticket-ensure.sh exits 1 for missing', () => {
 });
 
 test('ticket-guard.sh exits 0 for valid', () => {
-  const stdout = execFileSync('bash', [GUARD_SHELL, 'OC-22'], { encoding: 'utf8', timeout: 10000 });
+  const { wsRoot, ticketsDir } = makeTempWorkspace();
+  writeTestTicket(ticketsDir, 'SH-GUARD');
+  const stdout = execFileSync('bash', [GUARD_SHELL, 'SH-GUARD'], {
+    encoding: 'utf8', timeout: 10000,
+    env: { ...process.env, WORKSPACE_ROOT: wsRoot },
+  });
   const parsed = JSON.parse(stdout);
   if (!parsed.ok) throw new Error('expected ok');
 });
 
 test('ticket-guard.sh exits 1 for missing', () => {
+  const { wsRoot } = makeTempWorkspace();
   let exitedNonZero = false;
   try {
-    execFileSync('bash', [GUARD_SHELL, 'NONEXISTENT-99'], { encoding: 'utf8', timeout: 10000, stdio: 'pipe' });
+    execFileSync('bash', [GUARD_SHELL, 'NONEXISTENT-99'], {
+      encoding: 'utf8', timeout: 10000, stdio: 'pipe',
+      env: { ...process.env, WORKSPACE_ROOT: wsRoot },
+    });
   } catch {
     exitedNonZero = true;
   }
@@ -458,7 +565,12 @@ test('ticket-guard.sh exits 1 for missing', () => {
 });
 
 test('ticket-list.sh outputs JSON', () => {
-  const stdout = execFileSync('bash', [LIST_SHELL], { encoding: 'utf8', timeout: 10000 });
+  const { wsRoot, ticketsDir } = makeTempWorkspace();
+  writeTestTicket(ticketsDir, 'SH-LIST');
+  const stdout = execFileSync('bash', [LIST_SHELL], {
+    encoding: 'utf8', timeout: 10000,
+    env: { ...process.env, WORKSPACE_ROOT: wsRoot },
+  });
   const parsed = JSON.parse(stdout);
   if (!parsed.ok) throw new Error('expected ok');
 });

@@ -13,7 +13,8 @@ const os = require('node:os');
 
 const WATCH = path.resolve(__dirname, '..', 'scripts', 'watch-run.js');
 const WORKSPACE_ROOT = process.env.WORKSPACE_ROOT || path.resolve(os.homedir(), 'dev', 'agent-work');
-const RUNS_DIR = path.join(WORKSPACE_ROOT, 'runs');
+const RUNS_DIR = path.join(WORKSPACE_ROOT, '.claw', 'runs');
+fs.mkdirSync(RUNS_DIR, { recursive: true });
 
 const { watchRun } = require(path.resolve(__dirname, '..', 'scripts', 'watch-run.js'));
 
@@ -39,7 +40,7 @@ function makeTempRun(name, statusOverrides = {}) {
   fs.mkdirSync(absDir, { recursive: true });
   tmpDirs.push(absDir);
 
-  const relDir = `runs/${folderName}`;
+  const relDir = `.claw/runs/${folderName}`;
 
   const status = {
     ticket_id: 'TEST-WATCH',
@@ -93,20 +94,20 @@ test('rejects absolute path', () => {
   if (!r.stderr.includes('absolute paths not allowed')) throw new Error('wrong error: ' + r.stderr);
 });
 
-test('rejects path without runs/ prefix', () => {
+test('rejects path without .claw/runs/ prefix', () => {
   const r = runWatch('notaruns/folder', '--max_events', '1');
   if (r.exitCode === 0) throw new Error('should reject non-runs path');
-  if (!r.stderr.includes('path must start with runs/')) throw new Error('wrong error: ' + r.stderr);
+  if (!r.stderr.includes('path must start with .claw/runs/')) throw new Error('wrong error: ' + r.stderr);
 });
 
 test('rejects path traversal', () => {
-  const r = runWatch('runs/../../../tmp/evil', '--max_events', '1');
+  const r = runWatch('.claw/runs/../../../tmp/evil', '--max_events', '1');
   if (r.exitCode === 0) throw new Error('should reject traversal');
   if (!r.stderr.includes('path traversal not allowed')) throw new Error('wrong error: ' + r.stderr);
 });
 
 test('rejects non-existent run folder', () => {
-  const r = runWatch('runs/_ghost_nonexistent', '--max_events', '1');
+  const r = runWatch('.claw/runs/_ghost_nonexistent', '--max_events', '1');
   // The node script should report error event and exit 1
   if (r.exitCode === 0) {
     // Check if it emitted an error event
@@ -355,7 +356,7 @@ test('run-next-watch.sh rejects absolute path', () => {
 test('run-next-watch.sh rejects traversal', () => {
   let exitCode = 0;
   try {
-    execFileSync('bash', [path.join(WORKSPACE_ROOT, 'tools', 'run-next-watch.sh'), 'runs/../../../tmp', '--max_events', '1'], {
+    execFileSync('bash', [path.join(WORKSPACE_ROOT, 'tools', 'run-next-watch.sh'), '.claw/runs/../../../tmp', '--max_events', '1'], {
       encoding: 'utf8',
       timeout: 5000,
     });
