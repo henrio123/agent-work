@@ -44,7 +44,7 @@ intake → task-pack-generated → pm-ready → arch-ready → dev-ready → qa-
 
 ## Ticket Persistence
 
-Every ticket must be stored as a file in `tickets/<ticket_id>.md` before it can be referenced. This prevents ticket content from being lost to terminal scrollback or conversation compaction.
+Every ticket must be stored as a file in `.claw/tickets/<ticket_id>.md` before it can be referenced. This prevents ticket content from being lost to terminal scrollback or conversation compaction.
 
 ### Ticket Format
 
@@ -581,22 +581,29 @@ A project-oriented layer on top of the run engine. Provides persistent project i
 ### Architecture
 
 ```
-Layer 0: Execution Core (runs/, status.json, autonomous runner)
-Layer 1: Project Registry (projects/<id>/project.json, agents.json)
-Layer 2: Backlog & Task Graph (projects/<id>/backlog/*.json)
+Layer 0: Execution Core (.claw/runs/, status.json, autonomous runner)
+Layer 1: Project Registry (.claw/project.json, .claw/agents.json)
+Layer 2: Backlog & Task Graph (.claw/backlog/*.json)
 Layer 3: Project Operator Tools (project-index, project-next-pick, project-next-drive)
 ```
+
+All state lives in the target repo under `.claw/`. The engine repo contains no project data.
 
 ### Data Model
 
 ```
-projects/
-  <project_id>/
+<target-repo>/
+  .claw/
     project.json        # project metadata
     agents.json         # agent role definitions
     backlog/
       TASK-0001.json    # backlog items
       TASK-0002.json
+    runs/               # pipeline execution instances
+    tickets/            # ticket markdown files
+    task-packs/         # generated task packs
+    artifacts/          # collected artifacts
+    agents/             # agent identity state
 ```
 
 ### Backlog Item Fields
@@ -644,7 +651,7 @@ Deterministic picker for the next eligible backlog item across all projects.
 3. Priority rank: `P0` > `P1` > `P2` > `P3`
 4. Project ID ASC, then task ID ASC
 
-Tasks with an existing task pack in `projects/<project_id>/task-packs/<task_id>.json` are classified as `ready_for_run_creation` instead of `needs_task_pack`.
+Tasks with an existing task pack in `.claw/task-packs/<task_id>.json` are classified as `ready_for_run_creation` instead of `needs_task_pack`.
 
 **Owner role required:** Backlog items without a valid `owner_role` (missing, empty, or whitespace-only) are skipped by the picker. A JSON warning is emitted to stderr for each skipped item: `{"warning":"skipped_no_owner_role","task_id":"...","project_id":"..."}`.
 
@@ -663,7 +670,7 @@ One-shot driver that picks a backlog task, ensures a run exists, and drives it o
 ./tools/project-next-drive.sh [--max_steps N] [--max_agent_calls N] [--dry_run] [--audit_log] [--verbose]
 ```
 
-If the picked task has no `run_folder`, creates one (intake + status.json) and links it back to the backlog item. If a task pack exists in `projects/<project_id>/task-packs/<task_id>.json`, it is copied into the new run as `10-pm-brief.json` (only if the file doesn't already exist). Then calls the existing autonomous runner once.
+If the picked task has no `run_folder`, creates one (intake + status.json) and links it back to the backlog item. If a task pack exists in `.claw/task-packs/<task_id>.json`, it is copied into the new run as `10-pm-brief.json` (only if the file doesn't already exist). Then calls the existing autonomous runner once.
 
 **Preflight graph validation:** Before creating or driving a run, validates the backlog graph for the picked project. If the graph is invalid (cycles, parent errors, epic completion errors), the drive is skipped and a JSON warning is emitted to stderr: `{"warning":"skipped_invalid_graph","project_id":"...","cycles":[...],"parent_errors":[...],"epic_completion_errors":[...]}`. The result includes `graph_invalid: true`.
 
@@ -709,7 +716,7 @@ Canonical tool for transitioning backlog item status. Enforces the epic completi
 Read-only DAG validator for backlog dependency and parent graphs. Detects cycles via Kahn's algorithm, validates parent_id references, enforces the epic completion rule, and warns about dependency satisfaction issues.
 
 ```bash
-./tools/validate-backlog-graph.sh <project_id> [--projects_dir <path>]
+./tools/validate-backlog-graph.sh <project_id> [--workspace <path>]
 ```
 
 **Checks performed:**
@@ -803,7 +810,7 @@ Deterministic task pack generator. Produces a structured JSON file for a backlog
 ./tools/task-pack-list.sh [project_id]
 ```
 
-**Task pack location:** `projects/<project_id>/task-packs/<task_id>.json`
+**Task pack location:** `.claw/task-packs/<task_id>.json`
 
 **Task pack fields:**
 
@@ -832,12 +839,12 @@ Deterministic task pack generator. Produces a structured JSON file for a backlog
 
 ## Agent State
 
-Persistent agent identity contract. Each agent gets `agents/<agent_id>/state.json` at `WORKSPACE_ROOT/agents/`.
+Persistent agent identity contract. Each agent gets `.claw/agents/<agent_id>/state.json`.
 
 ### Data Model
 
 ```
-agents/
+.claw/agents/
   <agent_id>/
     state.json    # persistent agent state
 ```

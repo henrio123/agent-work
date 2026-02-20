@@ -27,9 +27,9 @@ A deterministic, role-based orchestration system that turns unstructured AI work
 
 | Concept | Description |
 |---------|-------------|
-| **Project** | A named container (`projects/<id>/`) with metadata, agent roles, and a backlog of tasks. |
-| **Backlog Item** | A unit of work (`backlog/<id>.json`) with status, priority, owner role, dependencies, and an optional parent epic. |
-| **Run** | A single pipeline execution (`runs/<timestamp>_<ticket>/`) with a state machine from `intake` to `done`. |
+| **Project** | A workspace initialized with `.claw/` containing metadata, agent roles, and a backlog of tasks. |
+| **Backlog Item** | A unit of work (`.claw/backlog/<id>.json`) with status, priority, owner role, dependencies, and an optional parent epic. |
+| **Run** | A single pipeline execution (`.claw/runs/<timestamp>_<ticket>/`) with a state machine from `intake` to `done`. |
 | **Stage** | A step in the pipeline owned by one role. Each stage requires specific artifacts validated against JSON schemas. |
 | **Picker** | A deterministic scheduler that selects the next eligible task using stable sort rules (priority bucket > status > priority > ID). |
 | **Driver** | A one-shot executor that creates a run for the picked task, invokes the autonomous runner, and writes results. |
@@ -75,7 +75,7 @@ A stage advances only when all required artifacts exist and pass schema validati
 The system provides deterministic multi-agent pipeline execution with full schema enforcement, role boundaries, and a structured work graph.
 
 **Phase 1 (Agent Identity & Control) — Complete.**
-- Persistent agent state (`agents/<id>/state.json`) with role, workload counters, and last-active tracking.
+- Persistent agent state (`.claw/agents/<id>/state.json`) with role, workload counters, and last-active tracking.
 - Runtime role-to-stage enforcement. A role must match the stage before it can produce artifacts.
 - `responsible_agent` tracked per run and per stage transition.
 - Agent workload visible in the project dashboard.
@@ -93,7 +93,7 @@ The system provides deterministic multi-agent pipeline execution with full schem
 
 **Hardening & Ops — Complete.**
 - `additionalProperties: false` enforced on all 20+ schemas (output, input, reference).
-- GitHub Actions CI gate running 596 tests on every push and PR.
+- GitHub Actions CI gate running 630 tests on every push and PR.
 - Preflight graph validation before creating or driving runs.
 - Cron-friendly drive loop wrapper with safe stop.
 
@@ -106,7 +106,7 @@ The system provides deterministic multi-agent pipeline execution with full schem
 | Artifact classification | Tag each artifact with a semantic type (decision, design, implementation, test-result, research-finding) | TODO |
 | Global artifact index | Searchable index of all artifacts across projects and runs | TODO |
 | Research workflow | Dedicated workflow for research tasks with structured findings schema | TODO |
-| Agent memory | Append-only memory layer at `agents/<id>/memory/`, schema-validated | TODO |
+| Agent memory | Append-only memory layer at `.claw/agents/<id>/memory/`, schema-validated | TODO |
 | Cross-run knowledge | Task pack generator references artifacts from prior runs when building context | TODO |
 
 ### Level 4 (Future) — What It Becomes
@@ -141,7 +141,9 @@ The system provides deterministic multi-agent pipeline execution with full schem
 - Stop/resume mechanism for autonomous runs
 - Stall detection (30-minute threshold on audit log)
 - HTTP dashboard on localhost:18790
-- GitHub Actions CI (596 tests, 31 suites)
+- External workspace model (pure engine, `.claw/` in target repos)
+- Workspace bootstrap and patch application tools
+- GitHub Actions CI (630 tests, 34 suites)
 - Zero external npm dependencies
 
 ### Planned
@@ -164,29 +166,32 @@ The system provides deterministic multi-agent pipeline execution with full schem
 │   └── ux-spec-autonomous-runner.md  # CLI contract for autonomous runner
 ├── skills/dev-pipeline/
 │   ├── SKILL.md                 # Comprehensive operational reference (39KB)
-│   ├── scripts/                 # 17 Node.js implementation files
+│   ├── scripts/                 # 19 Node.js implementation files
 │   │   ├── dev-pipeline.js      # Core pipeline engine (state machine, schema validation, stage gates)
 │   │   ├── autonomous-runner.js # Multi-agent autonomous execution loop
 │   │   ├── project-next-pick.js # Deterministic task picker
 │   │   ├── project-next-drive.js # One-shot project driver with preflight validation
 │   │   ├── validate-backlog-graph.js  # DAG validator (cycles, parents, epic completion)
 │   │   ├── backlog-update-status.js   # Status transitions with epic completion guard
+│   │   ├── workspace-paths.js         # Central .claw/ path resolver
+│   │   ├── init-workspace.js          # Bootstrap .claw/ in a target repo
+│   │   ├── apply-dev-patch.js         # Apply 40-dev-patch.diff to workspace
 │   │   └── ...                  # Index, dashboard, task-pack, ticket-store, agent-state
-│   ├── schemas/                 # 13 JSON Schema files (input + output schemas)
+│   ├── schemas/                 # 14 JSON Schema files (input + output schemas)
 │   ├── references/              # 7 artifact schemas (pm-brief, arch-design, dev-notes, etc.)
-│   └── tests/                   # 31 test suites, 596 tests
-├── tools/                       # 31 shell wrappers (the public CLI surface)
+│   └── tests/                   # 34 test suites, 630 tests
+├── tools/                       # shell wrappers (the public CLI surface)
 │   ├── dp.sh                    # Main CLI entry point
 │   ├── test-all.sh              # Master test gate
 │   ├── project-next-drive.sh    # One-shot project driver
 │   ├── project-drive-loop.sh    # Cron-friendly loop wrapper
 │   ├── backlog-update-status.sh # Status transition with guards
+│   ├── init-workspace.sh          # Bootstrap .claw/ in a target repo
+│   ├── apply-dev-patch.sh         # Apply dev patch to workspace
+│   ├── _workspace.sh              # Shared --workspace flag parser
 │   └── ...                      # run-next-*, project-*, dashboard-*, ticket-*
-├── projects/                    # Project data (backlog, task packs, metadata)
-├── runs/                        # Pipeline execution instances
-├── tickets/                     # Ticket markdown files (source of truth)
+├── openclaw/                    # OpenClaw integration docs and example config
 ├── templates/                   # Role-specific task pack templates
-├── agents/                      # Agent identity state (reserved for active use)
 ├── .github/workflows/test.yml   # CI: runs test-all.sh on push and PR
 ├── SOUL.md                      # Agent personality and principles
 ├── SECURITY.md                  # Security boundaries and access controls
@@ -209,32 +214,48 @@ The system provides deterministic multi-agent pipeline execution with full schem
 bash tools/test-all.sh
 ```
 
-Expected output: `TOTAL: 596 passed, 0 failed (31 suites)`
+Expected output: `TOTAL: 630 passed, 0 failed (34 suites)`
+
+### Initialize a Target Repo
+
+```bash
+./tools/init-workspace.sh --workspace /path/to/my-project \
+  --project_id my-project --title "My Project"
+```
+
+Creates `.claw/` directory structure with project.json, agents.json, and all required subdirectories.
 
 ### Run the Project Dashboard
 
 ```bash
-./tools/project-dashboard.sh | jq
+./tools/project-dashboard.sh --workspace /path/to/my-project | jq
 ```
 
 ### Pick the Next Eligible Task
 
 ```bash
-./tools/project-next-pick.sh | jq
+./tools/project-next-pick.sh --workspace /path/to/my-project | jq
 ```
 
 ### Drive One Task (One-Shot)
 
 ```bash
-./tools/project-next-drive.sh --dry_run | jq
+./tools/project-next-drive.sh --workspace /path/to/my-project --dry_run | jq
 ```
 
 Remove `--dry_run` to execute for real.
 
+### Apply a Dev Patch
+
+```bash
+./tools/apply-dev-patch.sh --workspace /path/to/my-project \
+  --run_folder .claw/runs/20260220_T-01 --dry_run
+```
+
 ### Drive in a Loop (Cron-Friendly)
 
 ```bash
-./tools/project-drive-loop.sh --sleep 5 --max 10
+./tools/project-drive-loop.sh --workspace /path/to/my-project --sleep 5 --max 10
 ```
 
 Stops on `.stop` file, max iterations, or no eligible work. Prints JSON summary on exit.
@@ -242,23 +263,16 @@ Stops on `.stop` file, max iterations, or no eligible work. Prints JSON summary 
 ### Validate a Project's Backlog Graph
 
 ```bash
-./tools/validate-backlog-graph.sh my-project | jq
+./tools/validate-backlog-graph.sh --workspace /path/to/my-project my-project | jq
 ```
 
 ### Update Backlog Item Status (With Guards)
 
 ```bash
-./tools/backlog-update-status.sh my-project TASK-01 done
+./tools/backlog-update-status.sh --workspace /path/to/my-project my-project TASK-01 done
 ```
 
 Rejects epic-to-done transitions when children are incomplete.
-
-### Start the Web Dashboard
-
-```bash
-./tools/dashboard-start.sh     # http://localhost:18790
-./tools/dashboard-stop.sh      # stop
-```
 
 ---
 
@@ -266,7 +280,7 @@ Rejects epic-to-done transitions when children are incomplete.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `WORKSPACE_ROOT` | `~/dev/agent-work` | Root directory for all operations. All paths resolved relative to this. |
+| `WORKSPACE_ROOT` | `~/dev/agent-work` | Root of the target project repo. All `.claw/` paths resolved relative to this. Can also be set via `--workspace` flag. |
 | `DP_AUDIT_LOG` | `0` | Set to `1` to enable append-only audit logging. |
 | `LOOP_SLEEP_SECONDS` | `5` | Seconds between drive loop iterations. |
 | `LOOP_MAX_ITERATIONS` | `100` | Max iterations for drive loop (0 = unlimited). |
@@ -298,7 +312,7 @@ Timestamps and git HEAD are the only sources of non-determinism.
 
 ### Testing Strategy
 
-- **31 test suites** with **596 individual tests** covering:
+- **34 test suites** with **630 individual tests** covering:
   - State machine transitions and gate enforcement
   - Schema validation round-trips for all artifact types
   - Picker determinism and graph-aware constraint enforcement
@@ -332,12 +346,12 @@ Timestamps and git HEAD are the only sources of non-determinism.
 | `docs/ARCHITECTURE.md` | System design, state machine, determinism model, and evolution roadmap. Single source of truth for phase scope and stop conditions. |
 | `docs/GOVERNANCE.md` | Golden rules: every change tied to a ticket, every JSON has a schema, every schema has tests, no external dependencies. |
 | `skills/dev-pipeline/SKILL.md` | Operational reference for all tools, commands, schemas, and behaviors. |
-| `tickets/<ticket_id>.md` | Individual ticket definitions with goals, steps, and acceptance criteria. |
+| `.claw/tickets/<ticket_id>.md` | Individual ticket definitions with goals, steps, and acceptance criteria. |
 
 ### How Changes Are Proposed
 
-1. Create a ticket file in `tickets/` with frontmatter and required sections.
-2. Create a backlog item in the target project's `backlog/` directory.
+1. Create a ticket file in `.claw/tickets/` with frontmatter and required sections.
+2. Create a backlog item in `.claw/backlog/`.
 3. Reference the active phase. Changes outside the current phase are rejected.
 4. Implement. Run `bash tools/test-all.sh`. Zero failures required.
 5. Update `SKILL.md` if new tools or behaviors were added.
@@ -370,11 +384,12 @@ Timestamps and git HEAD are the only sources of non-determinism.
 # 1. Run the full test suite
 bash tools/test-all.sh
 
-# 2. Validate a project's backlog graph
-./tools/validate-backlog-graph.sh my-project | jq '.valid'
+# 2. Initialize a workspace and validate its graph
+./tools/init-workspace.sh --workspace /tmp/test --project_id test --title "Test"
+./tools/validate-backlog-graph.sh --workspace /tmp/test test | jq '.valid'
 
 # 3. Confirm dashboard produces valid output
-./tools/project-dashboard.sh | jq '.ok'
+./tools/project-dashboard.sh --workspace /tmp/test | jq '.ok'
 
 # 4. Confirm git status is clean
 git status
@@ -408,7 +423,9 @@ git status
 - [x] Autonomous multi-agent runner with stop/resume and audit logging
 - [x] Project dashboard with dependency chains and agent workload
 - [x] Ticket persistence with anti-truncation guards
-- [x] GitHub Actions CI (596 tests, 31 suites, 0 failures)
+- [x] External workspace model (pure engine, `.claw/` state in target repos)
+- [x] Workspace bootstrap (`init-workspace`) and patch application (`apply-dev-patch`)
+- [x] GitHub Actions CI (630 tests, 34 suites, 0 failures)
 - [x] `additionalProperties: false` on all schemas (governance rule enforced)
 - [x] Cron-friendly drive loop with safe stop
 - [x] Zero external dependencies
