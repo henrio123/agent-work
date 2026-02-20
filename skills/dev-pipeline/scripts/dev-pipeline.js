@@ -8,6 +8,9 @@ const crypto = require('node:crypto');
 
 const TOOL_VERSION = '0.1.0';
 
+// Engine root: where templates, schemas, and references live (relative to this script)
+const ENGINE_ROOT = path.resolve(__dirname, '..', '..', '..');
+
 // ---------------------------------------------------------------------------
 // Security: all paths must resolve inside WORKSPACE_ROOT
 // ---------------------------------------------------------------------------
@@ -223,7 +226,7 @@ function cmdGenerateTaskPack(runFolder) {
 
   runFolder = safePath(runFolder);
   const intake = readJSON(safePath(path.join(runFolder, '00-intake.json')));
-  const templatePath = safePath(path.join('templates', 'claude-task-pack.txt'));
+  const templatePath = path.join(ENGINE_ROOT, 'templates', 'claude-task-pack.txt');
   let template = fs.readFileSync(templatePath, 'utf8');
 
   const project = intake.project || intake.project_name;
@@ -675,7 +678,7 @@ function validateSchema(value, schema, pathStr) {
 function loadArtifactSchema(artifactFilename) {
   const schemaName = ARTIFACT_SCHEMA_MAP[artifactFilename];
   if (!schemaName) return null;
-  const schemaPath = safePath(path.join('skills', 'dev-pipeline', 'references', schemaName));
+  const schemaPath = path.join(ENGINE_ROOT, 'skills', 'dev-pipeline', 'references', schemaName);
   if (!fs.existsSync(schemaPath)) return null;
   return readJSON(schemaPath);
 }
@@ -766,7 +769,7 @@ function cmdNextStage(runFolder) {
 }
 
 function renderTemplate(templateName, vars) {
-  const templatePath = safePath(path.join('templates', templateName));
+  const templatePath = path.join(ENGINE_ROOT, 'templates', templateName);
   if (!fs.existsSync(templatePath)) {
     throw new Error(`Template not found: templates/${templateName}`);
   }
