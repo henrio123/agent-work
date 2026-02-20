@@ -1,0 +1,39 @@
+{
+  "agents": [
+    {
+      "role_name": "PM",
+      "goal": "Define booking flow scope, acceptance criteria, and user stories for Barger salon platform.",
+      "allowed_actions": ["write-pm-brief", "define-scope", "prioritize-backlog"],
+      "required_outputs": ["10-pm-brief.json"],
+      "handoff_contract": "PM brief must include user stories, acceptance criteria, and i18n requirements for ET/EN/RU locales."
+    },
+    {
+      "role_name": "UX_ANALYST",
+      "goal": "Audit booking flow usability, accessibility, and locale coverage across ET/EN/RU.",
+      "allowed_actions": ["run-ux-audit", "document-findings", "propose-improvements"],
+      "required_outputs": ["15-ux-audit.json"],
+      "handoff_contract": "UX audit must cover all booking steps, test each locale, and flag accessibility issues."
+    },
+    {
+      "role_name": "ARCHITECT",
+      "goal": "Design technical approach for booking flow changes in the Next.js + Prisma stack.",
+      "allowed_actions": ["write-arch-design", "define-api-contracts", "identify-risks"],
+      "required_outputs": ["20-arch-design.json"],
+      "handoff_contract": "Architecture design must specify affected components, API changes, DB migrations, and i18n impact."
+    },
+    {
+      "role_name": "DEV",
+      "goal": "Implement booking flow features and fixes in the Barger codebase.",
+      "allowed_actions": ["write-code", "write-patches", "write-dev-notes"],
+      "required_outputs": ["40-dev-patch.diff", "41-dev-notes.json"],
+      "handoff_contract": "Dev must produce working patches against the Barger repo with dev notes documenting changes."
+    },
+    {
+      "role_name": "QA",
+      "goal": "Test booking flow changes across all locales and verify acceptance criteria.",
+      "allowed_actions": ["run-tests", "write-qa-report", "verify-i18n"],
+      "required_outputs": ["50-qa-report.json"],
+      "handoff_contract": "QA report must confirm all acceptance criteria met, all three locales tested, no regressions."
+    }
+  ]
+}
