@@ -1,0 +1,19 @@
+{
+  "name": "security_audit",
+  "version": "1.0.0",
+  "description": "Injects a security audit stage between analyze and plan. Produces a structured review of authentication, authorization, input validation, and dependency vulnerabilities.",
+  "stages": [
+    {
+      "name": "security-audit",
+      "after": "analyze",
+      "role": "Security Analyst",
+      "requiredArtifacts": ["16-security-audit.json"],
+      "taskFile": "37-security-audit-task.txt",
+      "template": "claude-security-pack.txt"
+    }
+  ],
+  "artifactSchemas": {
+    "16-security-audit.json": "security-audit.schema.json"
+  },
+  "stageMigrations": {}
+}

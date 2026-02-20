@@ -1,0 +1,19 @@
+{
+  "name": "performance_audit",
+  "version": "1.0.0",
+  "description": "Injects a performance audit stage between analyze and plan. Produces a structured review of latency, throughput, bundle size, and resource efficiency.",
+  "stages": [
+    {
+      "name": "performance-audit",
+      "after": "analyze",
+      "role": "Performance Analyst",
+      "requiredArtifacts": ["17-performance-audit.json"],
+      "taskFile": "38-performance-audit-task.txt",
+      "template": "claude-performance-pack.txt"
+    }
+  ],
+  "artifactSchemas": {
+    "17-performance-audit.json": "performance-audit.schema.json"
+  },
+  "stageMigrations": {}
+}

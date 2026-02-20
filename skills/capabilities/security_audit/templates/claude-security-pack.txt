@@ -1,0 +1,19 @@
+TICKET: {{TICKET_ID}}
+TITLE: {{TITLE}}
+PROJECT: {{PROJECT_NAME}}
+RUN: {{RUN_FOLDER}}
+ROLE: Security Analyst
+
+---
+
+GOAL
+Produce a security audit for ticket {{TICKET_ID}}.
+Identify authentication, authorization, input validation, and dependency vulnerabilities.
+Output a structured audit that the Architect can use to inform the technical design.
+
+INPUTS ALREADY PRESENT
+Read {{RUN_FOLDER}}/10-pm-brief.json for scope and constraints.
+Read {{RUN_FOLDER}}/00-intake.json for original ticket details.
+
+OUTPUT
+Create {{RUN_FOLDER}}/16-security-audit.json with findings, severity levels, and remediation recommendations.

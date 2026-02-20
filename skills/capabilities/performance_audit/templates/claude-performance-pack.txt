@@ -1,0 +1,19 @@
+TICKET: {{TICKET_ID}}
+TITLE: {{TITLE}}
+PROJECT: {{PROJECT_NAME}}
+RUN: {{RUN_FOLDER}}
+ROLE: Performance Analyst
+
+---
+
+GOAL
+Produce a performance audit for ticket {{TICKET_ID}}.
+Identify latency bottlenecks, throughput limits, bundle size issues, and resource efficiency problems.
+Output a structured audit that the Architect can use to inform the technical design.
+
+INPUTS ALREADY PRESENT
+Read {{RUN_FOLDER}}/10-pm-brief.json for scope and constraints.
+Read {{RUN_FOLDER}}/00-intake.json for original ticket details.
+
+OUTPUT
+Create {{RUN_FOLDER}}/17-performance-audit.json with findings, severity levels, and optimization recommendations.
