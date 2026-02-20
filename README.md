@@ -40,8 +40,8 @@ A deterministic, role-based orchestration system that turns unstructured AI work
 Ticket  -->  Backlog Item  -->  Task Pack  -->  Run Creation  -->  Pipeline Stages  -->  Done
                                                                      |
                                                     intake -> task-pack-generated
-                                                    pm-ready -> arch-ready
-                                                    dev-ready -> qa-ready
+                                                    analyze -> plan
+                                                    implement -> validate
                                                     review -> done
 ```
 
@@ -49,10 +49,10 @@ Ticket  -->  Backlog Item  -->  Task Pack  -->  Run Creation  -->  Pipeline Stag
 
 | Stage | Role | Required Artifact | Schema |
 |-------|------|-------------------|--------|
-| pm-ready | PM | `10-pm-brief.json` | `pm-brief.schema.json` |
-| arch-ready | Architect | `20-arch-design.json` | `arch-design.schema.json` |
-| dev-ready | Dev | `40-dev-patch.diff`, `41-dev-notes.json` | `dev-notes.schema.json` |
-| qa-ready | QA | `50-qa-report.json` | `qa-report.schema.json` |
+| analyze | Analyst | `10-pm-brief.json` | `pm-brief.schema.json` |
+| plan | Architect | `20-arch-design.json` | `arch-design.schema.json` |
+| implement | Dev | `40-dev-patch.diff`, `41-dev-notes.json` | `dev-notes.schema.json` |
+| validate | QA | `50-qa-report.json` | `qa-report.schema.json` |
 | review | Review | `60-review-report.json` | `review-report.schema.json` |
 
 A stage advances only when all required artifacts exist and pass schema validation. Roles are enforced at runtime: a Dev agent cannot produce a PM brief.

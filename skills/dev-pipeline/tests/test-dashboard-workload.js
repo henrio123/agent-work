@@ -131,7 +131,7 @@ test('no runs -> workload_summary exists with empty objects', () => {
 
 test('responsible_agent counts runs_responsible', () => {
   const runDir = makeRunFolder({
-    current_stage: 'pm-ready', blocked: false,
+    current_stage: 'analyze', blocked: false,
     responsible_agent: 'agent-pm-1',
     stage_history: [],
   });
@@ -148,12 +148,12 @@ test('responsible_agent counts runs_responsible', () => {
 
 test('stage_history counts stages_driven', () => {
   const runDir = makeRunFolder({
-    current_stage: 'arch-ready', blocked: false,
+    current_stage: 'plan', blocked: false,
     responsible_agent: 'agent-a',
     stage_history: [
       { stage: 'intake', agent_id: 'agent-a' },
-      { stage: 'pm-ready', agent_id: 'agent-a' },
-      { stage: 'arch-ready', agent_id: 'agent-b' },
+      { stage: 'analyze', agent_id: 'agent-a' },
+      { stage: 'plan', agent_id: 'agent-b' },
     ],
   });
   const agentsDir = makeAgentsDir([
@@ -175,7 +175,7 @@ test('stage_history counts stages_driven', () => {
 
 test('active_runs counts only when current_stage != done', () => {
   const runActive = makeRunFolder({
-    current_stage: 'pm-ready', blocked: false,
+    current_stage: 'analyze', blocked: false,
     responsible_agent: 'agent-x',
     stage_history: [],
   });
@@ -198,11 +198,11 @@ test('active_runs counts only when current_stage != done', () => {
 
 test('null agent_id excluded from all counts', () => {
   const runDir = makeRunFolder({
-    current_stage: 'pm-ready', blocked: false,
+    current_stage: 'analyze', blocked: false,
     responsible_agent: null,
     stage_history: [
       { stage: 'intake', agent_id: null },
-      { stage: 'pm-ready', agent_id: null },
+      { stage: 'analyze', agent_id: null },
     ],
   });
   const { wsRoot } = makeTempWorkspace('proj-null', [
@@ -215,7 +215,7 @@ test('null agent_id excluded from all counts', () => {
 
 test('role resolved from agent-state', () => {
   const runDir = makeRunFolder({
-    current_stage: 'pm-ready', blocked: false,
+    current_stage: 'analyze', blocked: false,
     responsible_agent: 'agent-role-test',
     stage_history: [{ stage: 'intake', agent_id: 'agent-role-test' }],
   });
@@ -230,7 +230,7 @@ test('role resolved from agent-state', () => {
 
 test('unknown role when agent state missing', () => {
   const runDir = makeRunFolder({
-    current_stage: 'pm-ready', blocked: false,
+    current_stage: 'analyze', blocked: false,
     responsible_agent: 'ghost-agent',
     stage_history: [],
   });
@@ -249,17 +249,17 @@ console.log('\n--- workload_summary ---');
 
 test('workload_summary aggregates runs_per_role across multiple runs', () => {
   const run1 = makeRunFolder({
-    current_stage: 'pm-ready', blocked: false,
+    current_stage: 'analyze', blocked: false,
     responsible_agent: 'pm-1',
     stage_history: [],
   });
   const run2 = makeRunFolder({
-    current_stage: 'dev-ready', blocked: false,
+    current_stage: 'implement', blocked: false,
     responsible_agent: 'dev-1',
     stage_history: [],
   });
   const run3 = makeRunFolder({
-    current_stage: 'pm-ready', blocked: false,
+    current_stage: 'analyze', blocked: false,
     responsible_agent: 'pm-2',
     stage_history: [],
   });
@@ -281,12 +281,12 @@ test('workload_summary aggregates runs_per_role across multiple runs', () => {
 
 test('workload_summary aggregates stages_per_role', () => {
   const run1 = makeRunFolder({
-    current_stage: 'arch-ready', blocked: false,
+    current_stage: 'plan', blocked: false,
     responsible_agent: null,
     stage_history: [
       { stage: 'intake', agent_id: 'pm-1' },
-      { stage: 'pm-ready', agent_id: 'pm-1' },
-      { stage: 'arch-ready', agent_id: 'arch-1' },
+      { stage: 'analyze', agent_id: 'pm-1' },
+      { stage: 'plan', agent_id: 'arch-1' },
     ],
   });
   const agentsDir = makeAgentsDir([
@@ -308,11 +308,11 @@ console.log('\n--- determinism ---');
 
 test('workload_by_agent sorted by agent_id', () => {
   const runDir = makeRunFolder({
-    current_stage: 'pm-ready', blocked: false,
+    current_stage: 'analyze', blocked: false,
     responsible_agent: 'zzz-agent',
     stage_history: [
       { stage: 'intake', agent_id: 'aaa-agent' },
-      { stage: 'pm-ready', agent_id: 'mmm-agent' },
+      { stage: 'analyze', agent_id: 'mmm-agent' },
     ],
   });
   const agentsDir = makeAgentsDir([]);
@@ -332,7 +332,7 @@ console.log('\n--- schema validation ---');
 
 test('full output validates against updated schema', () => {
   const run1 = makeRunFolder({
-    current_stage: 'pm-ready', blocked: false,
+    current_stage: 'analyze', blocked: false,
     responsible_agent: 'agent-sv',
     stage_history: [{ stage: 'intake', agent_id: 'agent-sv' }],
   });

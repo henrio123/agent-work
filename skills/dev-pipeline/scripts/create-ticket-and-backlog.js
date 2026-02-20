@@ -9,7 +9,7 @@
  *
  * Usage (CLI):
  *   node create-ticket-and-backlog.js \
- *     --ticket_id T-01 --title "Fix login" --project_id barger \
+ *     --ticket_id T-01 --title "Fix login" --project_id my-project \
  *     --description "Login times out" --type dev --priority P1 \
  *     --owner_role DEV --goal "Fix the timeout" --steps "Step 1,Step 2"
  *

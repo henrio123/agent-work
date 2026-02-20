@@ -77,7 +77,7 @@ The dashboard at `http://localhost:18790` reads `status.json` from each run fold
 
 | Field | When it changes |
 |-------|-----------------|
-| `current_stage` | After each `advance` (e.g. `pm-ready` → `arch-ready`) |
+| `current_stage` | After each `advance` (e.g. `analyze` → `plan`) |
 | `updated_at` | After every status write (artifact record, advance, block) |
 | `stage_history` | New entry appended per stage transition; `finished_at` set on old stage |
 | `stage_history[].artifact_paths` | Updated when `record_artifact` succeeds |
@@ -120,9 +120,9 @@ When `--audit_log` is passed (or the environment variable `DP_AUDIT_LOG=1` is se
 
 ```jsonl
 {"ts":"2026-02-18T15:00:01.000Z","step":1,"action":"needs_task_pack","stage":"intake","event":"step","detail":"generating task pack"}
-{"ts":"2026-02-18T15:00:01.500Z","step":2,"action":"advanced_and_generated","stage":"pm-ready","event":"step","detail":"advanced to pm-ready"}
-{"ts":"2026-02-18T15:00:02.000Z","step":3,"action":"needs_artifacts","stage":"pm-ready","event":"agent_invoke","detail":"PM: 10-pm-brief.json"}
-{"ts":"2026-02-18T15:00:03.000Z","step":3,"action":"needs_artifacts","stage":"pm-ready","event":"artifact_write","detail":"10-pm-brief.json"}
+{"ts":"2026-02-18T15:00:01.500Z","step":2,"action":"advanced_and_generated","stage":"analyze","event":"step","detail":"advanced to analyze"}
+{"ts":"2026-02-18T15:00:02.000Z","step":3,"action":"needs_artifacts","stage":"analyze","event":"agent_invoke","detail":"Analyst: 10-pm-brief.json"}
+{"ts":"2026-02-18T15:00:03.000Z","step":3,"action":"needs_artifacts","stage":"analyze","event":"artifact_write","detail":"10-pm-brief.json"}
 {"ts":"2026-02-18T15:00:05.000Z","step":5,"action":"none","stage":"done","event":"stop","detail":"final_action=none"}
 ```
 
@@ -144,7 +144,7 @@ The autonomous runner is fully idempotent. Rerunning the same command on the sam
 **Rerun after partial progress:**
 
 ```bash
-# First run: writes PM brief, stops at arch-ready needs_artifacts
+# First run: writes analysis brief, stops at plan needs_artifacts
 ./tools/run-next-autonomous.sh runs/20260218_150000_TICKET-1
 
 # Second run: skips PM brief (exists), writes arch design, continues
@@ -178,13 +178,13 @@ $ ./tools/run-next-autonomous.sh runs/20260218_150000_TICKET-1
     "step 1: action=needs_task_pack, stage=intake",
     "generating task pack",
     "task pack generated",
-    "step 2: action=advanced_and_generated, stage=pm-ready",
+    "step 2: action=advanced_and_generated, stage=analyze",
     "progress: advanced_and_generated",
-    "step 3: action=needs_artifacts, stage=pm-ready",
-    "invoking PM agent for: 10-pm-brief.json",
+    "step 3: action=needs_artifacts, stage=analyze",
+    "invoking Analyst agent for: 10-pm-brief.json",
     "wrote artifact: 10-pm-brief.json",
     "recorded artifact: 10-pm-brief.json",
-    "step 4: action=needs_artifacts, stage=arch-ready",
+    "step 4: action=needs_artifacts, stage=plan",
     "invoking Architect agent for: 20-arch-design.json"
   ]
 }
@@ -192,11 +192,11 @@ $ ./tools/run-next-autonomous.sh runs/20260218_150000_TICKET-1
 ```
 
 **Exit code:** 0
-**What happened:** Runner detected `intake`, generated task pack, advanced to `pm-ready`, invoked PM agent, wrote brief, advanced to `arch-ready`, invoked Architect agent, wrote design, continued until `max_agent_calls` or next stop.
+**What happened:** Runner detected `intake`, generated task pack, advanced to `analyze`, invoked Analyst agent, wrote brief, advanced to `plan`, invoked Architect agent, wrote design, continued until `max_agent_calls` or next stop.
 
 #### Session 2: needs_artifacts path
 
-Run is at `dev-ready`. Task file exists. Dev artifacts are missing.
+Run is at `implement`. Task file exists. Dev artifacts are missing.
 
 ```bash
 $ ./tools/run-next-autonomous.sh runs/20260218_150000_TICKET-1
@@ -216,13 +216,13 @@ $ ./tools/run-next-autonomous.sh runs/20260218_150000_TICKET-1
   ],
   "artifacts_skipped": [],
   "trace": [
-    "step 1: action=needs_artifacts, stage=dev-ready",
+    "step 1: action=needs_artifacts, stage=implement",
     "invoking Dev agent for: 40-dev-patch.diff, 41-dev-notes.json",
     "wrote artifact: 40-dev-patch.diff",
     "recorded artifact: 40-dev-patch.diff",
     "wrote artifact: 41-dev-notes.json",
     "recorded artifact: 41-dev-notes.json",
-    "step 2: action=advanced_and_generated, stage=qa-ready",
+    "step 2: action=advanced_and_generated, stage=validate",
     "progress: advanced_and_generated"
   ]
 }
@@ -230,7 +230,7 @@ $ ./tools/run-next-autonomous.sh runs/20260218_150000_TICKET-1
 ```
 
 **Exit code:** 0
-**What happened:** Runner found `dev-ready` with missing artifacts, invoked Dev agent, wrote both diff and notes, recorded them, gates passed, advanced to `qa-ready`.
+**What happened:** Runner found `implement` with missing artifacts, invoked Dev agent, wrote both diff and notes, recorded them, gates passed, advanced to `validate`.
 
 #### Session 3: blocked path
 

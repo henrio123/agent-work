@@ -51,7 +51,7 @@ function makeTempRun(name, statusOverrides = {}, extras = {}) {
     project: 'test',
     created_at: '2026-01-01T00:00:00.000Z',
     updated_at: '2026-01-01T00:00:00.000Z',
-    current_stage: 'pm-ready',
+    current_stage: 'analyze',
     blocked: false,
     blocked_reason: null,
     required_user_input: [],
@@ -77,7 +77,7 @@ process.on('exit', cleanup);
 console.log('\n--- classifyRun ---');
 
 test('classifyRun returns null for stopped run', () => {
-  const result = classifyRun({ has_status: true, stop_signal: true, blocked: false, current_stage: 'pm-ready' });
+  const result = classifyRun({ has_status: true, stop_signal: true, blocked: false, current_stage: 'analyze' });
   if (result !== null) throw new Error(`expected null, got ${result}`);
 });
 
@@ -103,14 +103,14 @@ test('classifyRun returns needs_task_pack for intake', () => {
 
 test('classifyRun returns needs_artifacts when last action is needs_artifacts', () => {
   const result = classifyRun({
-    has_status: true, stop_signal: false, blocked: false, current_stage: 'pm-ready',
+    has_status: true, stop_signal: false, blocked: false, current_stage: 'analyze',
     last_autonomous_summary: { final_action: 'needs_artifacts' },
   });
   if (result !== 'needs_artifacts') throw new Error(`expected needs_artifacts, got ${result}`);
 });
 
 test('classifyRun returns other for active stage without summary', () => {
-  const result = classifyRun({ has_status: true, stop_signal: false, blocked: false, current_stage: 'pm-ready' });
+  const result = classifyRun({ has_status: true, stop_signal: false, blocked: false, current_stage: 'analyze' });
   if (result !== 'other') throw new Error(`expected other, got ${result}`);
 });
 
@@ -121,7 +121,7 @@ console.log('\n--- pick eligibility ---');
 
 test('stopped run is not picked', () => {
   // Stop all real runs temporarily, create one stopped test run
-  const { folderName, absDir } = makeTempRun('stopped', { current_stage: 'pm-ready' });
+  const { folderName, absDir } = makeTempRun('stopped', { current_stage: 'analyze' });
   fs.writeFileSync(path.join(absDir, '.stop'), '', 'utf8');
   const result = pickNextRun();
   if (result.ok && result.action === 'picked_run' && result.run_folder === `.claw/runs/${folderName}`) {
@@ -151,10 +151,10 @@ test('done run is not picked', () => {
 console.log('\n--- priority ordering ---');
 
 test('needs_task_pack outranks needs_artifacts', () => {
-  // Create two: one intake, one pm-ready with needs_artifacts
+  // Create two: one intake, one analyze with needs_artifacts
   const { folderName: f1 } = makeTempRun('prio-intake', { current_stage: 'intake' });
   const { folderName: f2 } = makeTempRun('prio-needs', {
-    current_stage: 'pm-ready',
+    current_stage: 'analyze',
     last_autonomous_summary: { final_action: 'needs_artifacts' },
   });
 

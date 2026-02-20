@@ -21,17 +21,17 @@ For full architecture details, filesystem contracts, and governance rules see `d
 ## Stage Machine
 
 ```
-intake → task-pack-generated → pm-ready → arch-ready → dev-ready → qa-ready → review → done
+intake → task-pack-generated → analyze → plan → implement → validate → review → done
                                                                               ↕
                                                                            blocked
 ```
 
 | Stage | Role | Produces | Schema |
 |-------|------|----------|--------|
-| pm-ready | PM | 10-pm-brief.json | pm-brief.schema.json |
-| arch-ready | Architect | 20-arch-design.json | arch-design.schema.json |
-| dev-ready | Dev | 40-dev-patch.diff, 41-dev-notes.json | dev-notes.schema.json |
-| qa-ready | QA | 50-qa-report.json | qa-report.schema.json |
+| analyze | Analyst | 10-pm-brief.json | pm-brief.schema.json |
+| plan | Architect | 20-arch-design.json | arch-design.schema.json |
+| implement | Dev | 40-dev-patch.diff, 41-dev-notes.json | dev-notes.schema.json |
+| validate | QA | 50-qa-report.json | qa-report.schema.json |
 | review | Review | 60-review-report.json | review-report.schema.json |
 
 ## Role Boundaries
@@ -132,7 +132,7 @@ Determine the next stage, role, and required artifacts.
 ./tools/dp.sh next_stage <run_folder>
 ```
 
-**Output:** `{ "ok": true, "next_stage": "pm-ready", "role": "PM", "required_artifacts": [...], "gates_pass": bool }`
+**Output:** `{ "ok": true, "next_stage": "analyze", "role": "Analyst", "required_artifacts": [...], "gates_pass": bool }`
 
 #### generate_role_pack
 
@@ -226,12 +226,12 @@ Additional fields vary by action (e.g. `required_inputs` for blocked, `missing_a
 {
   "ok": true,
   "action": "needs_artifacts",
-  "current_stage": "dev-ready",
+  "current_stage": "implement",
   "role": "Dev",
   "missing_artifacts": ["40-dev-patch.diff", "41-dev-notes.json"],
   "invalid_artifacts": [],
   "required_artifacts": ["40-dev-patch.diff", "41-dev-notes.json"],
-  "trace": ["stage: dev-ready, role: Dev", "task file exists: 33-dev-claude-task.txt", "gates fail: 2 missing, 0 invalid"]
+  "trace": ["stage: implement, role: Dev", "task file exists: 33-implement-task.txt", "gates fail: 2 missing, 0 invalid"]
 }
 ```
 
@@ -272,12 +272,12 @@ Default `--max_steps` is 10. The loop stops when:
   "steps_run": 2,
   "max_steps": 10,
   "steps": [
-    { "action": "advanced_and_generated", "advanced_to": "pm-ready", "role": "PM", "..." : "..." },
-    { "action": "needs_artifacts", "current_stage": "pm-ready", "missing_artifacts": ["10-pm-brief.json"], "..." : "..." }
+    { "action": "advanced_and_generated", "advanced_to": "analyze", "role": "Analyst", "..." : "..." },
+    { "action": "needs_artifacts", "current_stage": "analyze", "missing_artifacts": ["10-pm-brief.json"], "..." : "..." }
   ],
   "trace": [
-    "step 1: action=advanced_and_generated, stage=pm-ready",
-    "step 2: action=needs_artifacts, stage=pm-ready",
+    "step 1: action=advanced_and_generated, stage=analyze",
+    "step 2: action=needs_artifacts, stage=analyze",
     "stopping: needs_artifacts"
   ]
 }
@@ -335,13 +335,13 @@ Defaults: `--max_steps 50`, `--max_agent_calls 20`. Use `--dry_run` to preview w
     "step 1: action=needs_task_pack, stage=intake",
     "generating task pack",
     "task pack generated",
-    "step 2: action=advanced_and_generated, stage=pm-ready",
+    "step 2: action=advanced_and_generated, stage=analyze",
     "progress: advanced_and_generated",
-    "step 3: action=needs_artifacts, stage=pm-ready",
-    "invoking PM agent for: 10-pm-brief.json",
+    "step 3: action=needs_artifacts, stage=analyze",
+    "invoking Analyst agent for: 10-pm-brief.json",
     "wrote artifact: 10-pm-brief.json",
     "recorded artifact: 10-pm-brief.json",
-    "step 4: action=needs_artifacts, stage=arch-ready",
+    "step 4: action=needs_artifacts, stage=plan",
     "dry_run: would invoke Architect agent for 20-arch-design.json"
   ]
 }
@@ -363,8 +363,8 @@ Defaults: `--max_steps 50`, `--max_agent_calls 20`. Use `--dry_run` to preview w
 ```
 stderr: autonomous: runs/20260218_150000_TICKET-1
 stderr:   [1] needs_task_pack | intake | agents:0 | artifacts:0
-stderr:   [2] advanced_and_generated | pm-ready | agents:0 | artifacts:0
-stderr:   [3] needs_artifacts | pm-ready | agents:0 | artifacts:0
+stderr:   [2] advanced_and_generated | analyze | agents:0 | artifacts:0
+stderr:   [3] needs_artifacts | analyze | agents:0 | artifacts:0
 stdout: { "ok": true, "action": "autonomous_complete", ... }
 ```
 
@@ -467,7 +467,7 @@ Read-only global index of all runs. Scans `runs/`, reads each `status.json`, det
     {
       "run_folder": "runs/20260218_140202_OC-07",
       "has_status": true,
-      "current_stage": "dev-ready",
+      "current_stage": "implement",
       "blocked": false,
       "blocked_reason": null,
       "stop_signal": false,
@@ -538,7 +538,7 @@ Create minimal schema-valid JSON files for the current stage's required artifact
 ./tools/dp.sh scaffold_artifacts <run_folder>
 ```
 
-**Output:** `{ "ok": true, "stage": "dev-ready", "role": "Dev", "scaffolded": ["41-dev-notes.json"], "skipped_diff": ["40-dev-patch.diff"] }`
+**Output:** `{ "ok": true, "stage": "implement", "role": "Dev", "scaffolded": ["41-dev-notes.json"], "skipped_diff": ["40-dev-patch.diff"] }`
 
 **Warning:** Scaffolded files are a starting point with minimal placeholder values. You must edit them with real content before running `record_artifact` in production work.
 
@@ -913,13 +913,13 @@ All output schemas are in `{baseDir}/schemas/`:
 ./tools/dp.sh generate_task_pack <run_folder>
 
 # 2. Orchestrate through roles
-./tools/orchestrate-next.sh <run_folder>   # → pm-ready, generates PM task
+./tools/orchestrate-next.sh <run_folder>   # → analyze, generates Analyst task
 
-# 3. PM creates 10-pm-brief.json, then:
+# 3. Analyst creates 10-pm-brief.json, then:
 ./tools/dp.sh record_artifact <run_folder> <run_folder>/10-pm-brief.json
 
 # 4. Orchestrate next
-./tools/orchestrate-next.sh <run_folder>   # → arch-ready, generates Architect task
+./tools/orchestrate-next.sh <run_folder>   # → plan, generates Architect task
 
 # 5. Architect creates 20-arch-design.json, then:
 ./tools/dp.sh record_artifact <run_folder> <run_folder>/20-arch-design.json

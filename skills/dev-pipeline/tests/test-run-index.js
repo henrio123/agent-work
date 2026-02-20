@@ -51,7 +51,7 @@ function makeTempRun(name, statusOverrides = {}, extras = {}) {
     project: 'test',
     created_at: '2026-01-01T00:00:00.000Z',
     updated_at: '2026-01-01T00:00:00.000Z',
-    current_stage: 'pm-ready',
+    current_stage: 'analyze',
     blocked: false,
     blocked_reason: null,
     required_user_input: [],
@@ -100,7 +100,7 @@ console.log('\n--- run with status ---');
 
 test('includes run with status.json and reads fields', () => {
   const { folderName } = makeTempRun('with-status', {
-    current_stage: 'arch-ready',
+    current_stage: 'plan',
     blocked: true,
     blocked_reason: 'need input',
   });
@@ -108,7 +108,7 @@ test('includes run with status.json and reads fields', () => {
   const entry = result.runs.find((r) => r.run_folder === `.claw/runs/${folderName}`);
   if (!entry) throw new Error('test run not found in index');
   if (!entry.has_status) throw new Error('expected has_status true');
-  if (entry.current_stage !== 'arch-ready') throw new Error(`wrong stage: ${entry.current_stage}`);
+  if (entry.current_stage !== 'plan') throw new Error(`wrong stage: ${entry.current_stage}`);
   if (!entry.blocked) throw new Error('expected blocked true');
   if (entry.blocked_reason !== 'need input') throw new Error('wrong blocked_reason');
 });
@@ -179,10 +179,10 @@ test('summary counts are correct', () => {
   // Create runs with known states
   const { folderName: f1 } = makeTempRun('count-blocked', { blocked: true, current_stage: 'blocked' });
   const { folderName: f2, absDir: d2 } = makeTempRun('count-done', { current_stage: 'done' });
-  const { folderName: f3, absDir: d3 } = makeTempRun('count-stopped', { current_stage: 'pm-ready' });
+  const { folderName: f3, absDir: d3 } = makeTempRun('count-stopped', { current_stage: 'analyze' });
   fs.writeFileSync(path.join(d3, '.stop'), '', 'utf8');
   const { folderName: f4 } = makeTempRun('count-needs', {
-    current_stage: 'dev-ready',
+    current_stage: 'implement',
     last_autonomous_summary: { final_action: 'needs_artifacts', steps_run: 1, agent_calls: 1, artifacts_written: [] },
   });
 

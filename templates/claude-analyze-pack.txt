@@ -2,13 +2,13 @@ TICKET: {{TICKET_ID}}
 TITLE: {{TITLE}}
 PROJECT: {{PROJECT_NAME}}
 RUN: {{RUN_FOLDER}}
-ROLE: PM (Product Manager)
+ROLE: Analyst
 
 ---
 
 GOAL
 Define the problem, scope, and acceptance criteria for ticket {{TICKET_ID}}.
-Produce a PM brief that the Architect can use to design a solution.
+Produce an analysis brief that the next stage can use to plan a solution.
 
 NON GOALS
 Do not propose technical solutions or code changes.

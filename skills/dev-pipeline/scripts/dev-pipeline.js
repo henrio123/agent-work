@@ -143,6 +143,17 @@ function normalizeStatus(s) {
   if (s.blocked_reason === undefined) s.blocked_reason = null;
   // Ensure responsible_agent
   if (s.responsible_agent === undefined) s.responsible_agent = null;
+  // Migrate old stage names to domain-neutral names
+  if (s.current_stage && STAGE_MIGRATION[s.current_stage]) {
+    s.current_stage = migrateStage(s.current_stage);
+  }
+  if (Array.isArray(s.stage_history)) {
+    for (const entry of s.stage_history) {
+      if (entry.stage && STAGE_MIGRATION[entry.stage]) {
+        entry.stage = migrateStage(entry.stage);
+      }
+    }
+  }
   return s;
 }
 
@@ -579,53 +590,58 @@ function cmdStaleDelete(args) {
 // Orchestration: stage machine, roles, schema validation
 // ---------------------------------------------------------------------------
 const STAGE_CONFIG = {
-  'pm-ready': {
-    role: 'PM',
+  'analyze': {
+    role: 'Analyst',
     requiredArtifacts: ['10-pm-brief.json'],
-    taskFile: '31-pm-claude-task.txt',
-    template: 'claude-pm-pack.txt',
-    next: 'ux-ready',
+    taskFile: '31-analyze-task.txt',
+    template: 'claude-analyze-pack.txt',
+    next: 'plan',
   },
-  'ux-ready': {
-    role: 'UX',
-    requiredArtifacts: ['15-ux-audit.json'],
-    taskFile: '32-ux-claude-task.txt',
-    template: 'claude-ux-pack.txt',
-    next: 'arch-ready',
-  },
-  'arch-ready': {
+  'plan': {
     role: 'Architect',
     requiredArtifacts: ['20-arch-design.json'],
-    taskFile: '33-arch-claude-task.txt',
-    template: 'claude-arch-pack.txt',
-    next: 'dev-ready',
+    taskFile: '32-plan-task.txt',
+    template: 'claude-plan-pack.txt',
+    next: 'implement',
   },
-  'dev-ready': {
+  'implement': {
     role: 'Dev',
     requiredArtifacts: ['40-dev-patch.diff', '41-dev-notes.json'],
-    taskFile: '34-dev-claude-task.txt',
-    template: 'claude-dev-pack.txt',
-    next: 'qa-ready',
+    taskFile: '33-implement-task.txt',
+    template: 'claude-implement-pack.txt',
+    next: 'validate',
   },
-  'qa-ready': {
+  'validate': {
     role: 'QA',
     requiredArtifacts: ['50-qa-report.json'],
-    taskFile: '35-qa-claude-task.txt',
-    template: 'claude-qa-pack.txt',
+    taskFile: '34-validate-task.txt',
+    template: 'claude-validate-pack.txt',
     next: 'review',
   },
   'review': {
     role: 'Review',
     requiredArtifacts: ['60-review-report.json'],
-    taskFile: '36-review-claude-task.txt',
+    taskFile: '35-review-task.txt',
     template: 'claude-review-pack.txt',
     next: 'done',
   },
 };
 
+// Backward-compatible stage migration: map old stage names to new ones
+const STAGE_MIGRATION = {
+  'pm-ready': 'analyze',
+  'ux-ready': 'analyze',   // collapsed — UX is now a capability, not a core stage
+  'arch-ready': 'plan',
+  'dev-ready': 'implement',
+  'qa-ready': 'validate',
+};
+
+function migrateStage(stage) {
+  return STAGE_MIGRATION[stage] || stage;
+}
+
 const ARTIFACT_SCHEMA_MAP = {
   '10-pm-brief.json': 'pm-brief.schema.json',
-  '15-ux-audit.json': 'ux-audit.schema.json',
   '20-arch-design.json': 'arch-design.schema.json',
   '41-dev-notes.json': 'dev-notes.schema.json',
   '50-qa-report.json': 'qa-report.schema.json',
@@ -729,7 +745,7 @@ function getNextStageInfo(runFolder, status) {
   if (stage === 'intake') return { next_stage: 'task-pack-generated', role: null, action: 'generate_task_pack' };
 
   if (stage === 'task-pack-generated') {
-    return { next_stage: 'pm-ready', role: 'PM', required_artifacts: ['10-pm-brief.json'] };
+    return { next_stage: 'analyze', role: 'Analyst', required_artifacts: ['10-pm-brief.json'] };
   }
 
   const config = STAGE_CONFIG[stage];
@@ -801,7 +817,7 @@ function cmdGenerateRolePack(runFolder) {
   const config = STAGE_CONFIG[status.current_stage];
   if (!config) {
     if (status.current_stage === 'task-pack-generated') {
-      fail('Stage is task-pack-generated. Use orchestrate_one or advance --confirm to move to pm-ready first.');
+      fail('Stage is task-pack-generated. Use orchestrate_one or advance --confirm to move to analyze first.');
     }
     if (status.current_stage === 'done') {
       fail('Run is complete, no more role packs to generate.');
@@ -1103,7 +1119,7 @@ function cmdOrchestrateOne(runFolder, agentId) {
     writeStatus(runFolder, status);
   }
 
-  // For task-pack-generated, advance to pm-ready
+  // For task-pack-generated, advance to analyze
   if (status.current_stage === 'task-pack-generated') {
     const currentTime = now();
     const currentEntry = status.stage_history.find(
@@ -1111,25 +1127,25 @@ function cmdOrchestrateOne(runFolder, agentId) {
     );
     if (currentEntry) currentEntry.finished_at = currentTime;
 
-    status.current_stage = 'pm-ready';
+    status.current_stage = 'analyze';
     if (agentId) status.responsible_agent = agentId;
-    const pmConfig = STAGE_CONFIG['pm-ready'];
+    const analyzeConfig = STAGE_CONFIG['analyze'];
     status.stage_history.push({
-      stage: 'pm-ready', started_at: currentTime, finished_at: null,
-      artifact_paths: [], role: 'PM',
+      stage: 'analyze', started_at: currentTime, finished_at: null,
+      artifact_paths: [], role: 'Analyst',
       agent_id: agentId || null,
     });
 
     const intake = readJSON(path.join(runFolder, '00-intake.json'));
-    const content = renderTemplate(pmConfig.template, {
+    const content = renderTemplate(analyzeConfig.template, {
       ticket_id: intake.ticket_id, title: intake.title,
       project: intake.project || intake.project_name, run_folder: runFolder,
     });
-    fs.writeFileSync(path.join(runFolder, pmConfig.taskFile), content, 'utf8');
+    fs.writeFileSync(path.join(runFolder, analyzeConfig.taskFile), content, 'utf8');
 
     status.next_actions = [
-      { label: 'PM: complete work', command: `Follow ${pmConfig.taskFile}` },
-      ...pmConfig.requiredArtifacts.map((a) => ({
+      { label: 'Analyst: complete work', command: `Follow ${analyzeConfig.taskFile}` },
+      ...analyzeConfig.requiredArtifacts.map((a) => ({
         label: `Record: ${a}`,
         command: `./tools/dp.sh record_artifact ${runFolder} ${path.join(runFolder, a)}`,
       })),
@@ -1138,8 +1154,8 @@ function cmdOrchestrateOne(runFolder, agentId) {
 
     process.stdout.write(JSON.stringify({
       ok: true, action: 'advanced_and_generated',
-      advanced_to: 'pm-ready', role: 'PM', task_file: pmConfig.taskFile,
-      required_artifacts: pmConfig.requiredArtifacts,
+      advanced_to: 'analyze', role: 'Analyst', task_file: analyzeConfig.taskFile,
+      required_artifacts: analyzeConfig.requiredArtifacts,
     }, null, 2) + '\n');
     process.exit(0);
   }
@@ -1254,10 +1270,10 @@ function _runNextSafeCore(runFolder) {
     };
   }
 
-  // 4. task-pack-generated — advance to pm-ready
+  // 4. task-pack-generated — advance to analyze
   if (status.current_stage === 'task-pack-generated') {
-    trace.push('stage is task-pack-generated, advancing to pm-ready');
-    return _doAdvance(runFolder, status, 'pm-ready', trace);
+    trace.push('stage is task-pack-generated, advancing to analyze');
+    return _doAdvance(runFolder, status, 'analyze', trace);
   }
 
   // 5. Role stage — check config
@@ -1639,8 +1655,8 @@ function checkRoleForStage(agentId, stage, options) {
 // ---------------------------------------------------------------------------
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
-    TOOL_VERSION, STAGE_CONFIG, ARTIFACT_SCHEMA_MAP, WORKSPACE_ROOT,
-    generateMinimalValue, validateSchema, resolveRef,
+    TOOL_VERSION, STAGE_CONFIG, STAGE_MIGRATION, ARTIFACT_SCHEMA_MAP, WORKSPACE_ROOT,
+    generateMinimalValue, validateSchema, resolveRef, migrateStage,
     getNextStageInfo, normalizeStatus, getGitHead,
     safePath, readJSON, writeJSON, readStatus, loadArtifactSchema, validateArtifact,
     _runNextSafeCore, checkRoleForStage,

@@ -220,9 +220,9 @@ When starting a new ticket, always use dev-pipeline:
 
 ### Role progression
 
-Each run progresses through: `intake → task-pack-generated → pm-ready → arch-ready → dev-ready → qa-ready → review → done`
+Each run progresses through: `intake → task-pack-generated → analyze → plan → implement → validate → review → done`
 
-- **PM** produces `10-pm-brief.json` — scope, acceptance criteria, non-goals
+- **Analyst** produces `10-pm-brief.json` — scope, acceptance criteria, non-goals
 - **Architect** produces `20-arch-design.json` — components, file changes, constraints
 - **Dev** produces `40-dev-patch.diff` + `41-dev-notes.json` — implementation
 - **QA** produces `50-qa-report.json` — test results

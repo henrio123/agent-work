@@ -72,14 +72,14 @@ function makeTempRun(name, statusOverrides = {}) {
     project: 'test',
     created_at: '2026-01-01T00:00:00.000Z',
     updated_at: '2026-01-01T00:00:00.000Z',
-    current_stage: 'pm-ready',
+    current_stage: 'analyze',
     blocked: false,
     blocked_reason: null,
     required_user_input: [],
     stage_history: [
       { stage: 'intake', started_at: '2026-01-01T00:00:00.000Z', finished_at: '2026-01-01T00:00:01.000Z', artifact_paths: ['00-intake.json'] },
       { stage: 'task-pack-generated', started_at: '2026-01-01T00:00:01.000Z', finished_at: '2026-01-01T00:00:02.000Z', artifact_paths: ['30-dev-claude-task.txt'] },
-      { stage: 'pm-ready', started_at: '2026-01-01T00:00:02.000Z', finished_at: null, artifact_paths: [], role: 'PM' },
+      { stage: 'analyze', started_at: '2026-01-01T00:00:02.000Z', finished_at: null, artifact_paths: [], role: 'Analyst' },
     ],
     next_actions: [],
     ...statusOverrides,
@@ -166,15 +166,15 @@ test('blocked stage stops immediately with required_inputs', () => {
 // -------------------------------------------------------------------------
 console.log('\n--- needs_artifacts ---');
 
-test('dev-ready with task file but no artifacts stops with needs_artifacts', () => {
+test('implement with task file but no artifacts stops with needs_artifacts', () => {
   const { relDir, absDir } = makeTempRun('loop-needs-art', {
-    current_stage: 'dev-ready',
+    current_stage: 'implement',
     stage_history: [
       { stage: 'intake', started_at: '2026-01-01T00:00:00.000Z', finished_at: '2026-01-01T00:00:01.000Z', artifact_paths: ['00-intake.json'] },
-      { stage: 'dev-ready', started_at: '2026-01-01T00:00:02.000Z', finished_at: null, artifact_paths: [], role: 'Dev' },
+      { stage: 'implement', started_at: '2026-01-01T00:00:02.000Z', finished_at: null, artifact_paths: [], role: 'Dev' },
     ],
   });
-  fs.writeFileSync(path.join(absDir, '34-dev-claude-task.txt'), 'dev task', 'utf8');
+  fs.writeFileSync(path.join(absDir, '33-implement-task.txt'), 'dev task', 'utf8');
   const r = runCmd('run_next_loop', relDir);
   if (r.json.final_action !== 'needs_artifacts') throw new Error(`expected needs_artifacts, got ${r.json.final_action}`);
   if (r.json.steps_run !== 1) throw new Error(`expected 1 step`);
@@ -197,7 +197,7 @@ test('task-pack-generated run takes 2 steps: advance then needs_artifacts', () =
   const r = runCmd('run_next_loop', relDir);
   if (r.json.steps_run !== 2) throw new Error(`expected 2 steps, got ${r.json.steps_run}`);
   if (r.json.steps[0].action !== 'advanced_and_generated') throw new Error(`step 1 expected advanced_and_generated, got ${r.json.steps[0].action}`);
-  if (r.json.steps[0].advanced_to !== 'pm-ready') throw new Error(`step 1 expected advanced_to=pm-ready`);
+  if (r.json.steps[0].advanced_to !== 'analyze') throw new Error(`step 1 expected advanced_to=analyze`);
   if (r.json.final_action !== 'needs_artifacts') throw new Error(`expected final needs_artifacts, got ${r.json.final_action}`);
 });
 
@@ -294,12 +294,12 @@ test('loop is idempotent on done', () => {
 
 test('loop is idempotent on needs_artifacts', () => {
   const { relDir, absDir } = makeTempRun('loop-idemp-art', {
-    current_stage: 'dev-ready',
+    current_stage: 'implement',
     stage_history: [
-      { stage: 'dev-ready', started_at: '2026-01-01T00:00:00.000Z', finished_at: null, artifact_paths: [], role: 'Dev' },
+      { stage: 'implement', started_at: '2026-01-01T00:00:00.000Z', finished_at: null, artifact_paths: [], role: 'Dev' },
     ],
   });
-  fs.writeFileSync(path.join(absDir, '34-dev-claude-task.txt'), 'dev task', 'utf8');
+  fs.writeFileSync(path.join(absDir, '33-implement-task.txt'), 'dev task', 'utf8');
   const r1 = runCmd('run_next_loop', relDir);
   const r2 = runCmd('run_next_loop', relDir);
   if (r1.json.final_action !== 'needs_artifacts') throw new Error('r1 not needs_artifacts');

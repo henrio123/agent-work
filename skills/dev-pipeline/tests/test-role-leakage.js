@@ -114,9 +114,9 @@ function cleanup() {
 // ---------------------------------------------------------------------------
 console.log('\n--- Case 1: DEV agent cannot produce QA artifacts ---');
 
-test('record_artifact rejects Dev agent at qa-ready', () => {
+test('record_artifact rejects Dev agent at validate', () => {
   createWorkspaceAgent('_leak_dev1', 'Dev');
-  const runFolder = createWorkspaceRun('qa-ready');
+  const runFolder = createWorkspaceRun('validate');
   createMinimalArtifact(runFolder, 'qa-report.schema.json', '50-qa-report.json', { ticket_id: 'TEST-LEAK' });
 
   let exitedNonZero = false;
@@ -136,9 +136,9 @@ test('record_artifact rejects Dev agent at qa-ready', () => {
   assert(exitedNonZero, 'should have failed');
 });
 
-test('orchestrate_one rejects Dev agent at qa-ready', () => {
+test('orchestrate_one rejects Dev agent at validate', () => {
   createWorkspaceAgent('_leak_dev1b', 'Dev');
-  const runFolder = createWorkspaceRun('qa-ready');
+  const runFolder = createWorkspaceRun('validate');
 
   let exitedNonZero = false;
   try {
@@ -157,9 +157,9 @@ test('orchestrate_one rejects Dev agent at qa-ready', () => {
 // ---------------------------------------------------------------------------
 console.log('\n--- Case 2: QA agent cannot produce DEV artifacts ---');
 
-test('record_artifact rejects QA agent at dev-ready', () => {
+test('record_artifact rejects QA agent at implement', () => {
   createWorkspaceAgent('_leak_qa2', 'QA');
-  const runFolder = createWorkspaceRun('dev-ready');
+  const runFolder = createWorkspaceRun('implement');
   createMinimalArtifact(runFolder, 'dev-notes.schema.json', '41-dev-notes.json', { ticket_id: 'TEST-LEAK' });
 
   let exitedNonZero = false;
@@ -179,9 +179,9 @@ test('record_artifact rejects QA agent at dev-ready', () => {
   assert(exitedNonZero, 'should have failed');
 });
 
-test('advance rejects QA agent at dev-ready', () => {
+test('advance rejects QA agent at implement', () => {
   createWorkspaceAgent('_leak_qa2b', 'QA');
-  const runFolder = createWorkspaceRun('dev-ready');
+  const runFolder = createWorkspaceRun('implement');
   // Create valid dev artifacts so gates would pass if role check didn't block
   createMinimalArtifact(runFolder, 'dev-notes.schema.json', '41-dev-notes.json', { ticket_id: 'TEST-LEAK' });
   fs.writeFileSync(path.join(runFolder, '40-dev-patch.diff'), '--- a/f\n+++ b/f\n@@ -1 +1 @@\n-old\n+new\n', 'utf8');
@@ -199,19 +199,19 @@ test('advance rejects QA agent at dev-ready', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Case 3: PM agent cannot produce ARCHITECT artifacts
+// Case 3: Analyst agent cannot produce ARCHITECT artifacts
 // ---------------------------------------------------------------------------
-console.log('\n--- Case 3: PM agent cannot produce ARCHITECT artifacts ---');
+console.log('\n--- Case 3: Analyst agent cannot produce ARCHITECT artifacts ---');
 
-test('record_artifact rejects PM agent at arch-ready', () => {
-  createWorkspaceAgent('_leak_pm3', 'PM');
-  const runFolder = createWorkspaceRun('arch-ready');
+test('record_artifact rejects Analyst agent at plan', () => {
+  createWorkspaceAgent('_leak_analyst3', 'Analyst');
+  const runFolder = createWorkspaceRun('plan');
   createMinimalArtifact(runFolder, 'arch-design.schema.json', '20-arch-design.json', { ticket_id: 'TEST-LEAK' });
 
   let exitedNonZero = false;
   try {
     execFileSync('node', [DP_SCRIPT, 'record_artifact', runFolder,
-      path.join(runFolder, '20-arch-design.json'), '--agent_id', '_leak_pm3'], {
+      path.join(runFolder, '20-arch-design.json'), '--agent_id', '_leak_analyst3'], {
       encoding: 'utf8', stdio: 'pipe',
     });
   } catch (e) {
@@ -219,21 +219,21 @@ test('record_artifact rejects PM agent at arch-ready', () => {
     assert(e.status === 1, 'should exit 1');
     const stderr = e.stderr || '';
     assert(stderr.includes('Role mismatch'), `stderr should mention mismatch: ${stderr}`);
-    assert(stderr.includes('PM'), 'should mention agent role PM');
+    assert(stderr.includes('Analyst'), 'should mention agent role Analyst');
     assert(stderr.includes('Architect'), 'should mention required role Architect');
   }
   assert(exitedNonZero, 'should have failed');
 });
 
-test('advance rejects PM agent at arch-ready', () => {
-  createWorkspaceAgent('_leak_pm3b', 'PM');
-  const runFolder = createWorkspaceRun('arch-ready');
+test('advance rejects Analyst agent at plan', () => {
+  createWorkspaceAgent('_leak_analyst3b', 'Analyst');
+  const runFolder = createWorkspaceRun('plan');
   createMinimalArtifact(runFolder, 'arch-design.schema.json', '20-arch-design.json', { ticket_id: 'TEST-LEAK' });
 
   let exitedNonZero = false;
   try {
     execFileSync('node', [DP_SCRIPT, 'advance', runFolder, '--confirm',
-      '--agent_id', '_leak_pm3b'], { encoding: 'utf8', stdio: 'pipe' });
+      '--agent_id', '_leak_analyst3b'], { encoding: 'utf8', stdio: 'pipe' });
   } catch (e) {
     exitedNonZero = true;
     assert(e.status === 1, 'should exit 1');
@@ -301,10 +301,10 @@ test('advance rejects wrong-role agent at every role-gated stage', () => {
   createWorkspaceAgent('_leak_cross_dev', 'Dev');
 
   const stageTests = [
-    { stage: 'pm-ready', wrongAgent: '_leak_cross_dev', wrongRole: 'Dev', rightRole: 'PM' },
-    { stage: 'arch-ready', wrongAgent: '_leak_cross_dev', wrongRole: 'Dev', rightRole: 'Architect' },
-    // dev-ready: Dev is correct, so use QA as wrong
-    { stage: 'qa-ready', wrongAgent: '_leak_cross_dev', wrongRole: 'Dev', rightRole: 'QA' },
+    { stage: 'analyze', wrongAgent: '_leak_cross_dev', wrongRole: 'Dev', rightRole: 'Analyst' },
+    { stage: 'plan', wrongAgent: '_leak_cross_dev', wrongRole: 'Dev', rightRole: 'Architect' },
+    // implement: Dev is correct, so use QA as wrong
+    { stage: 'validate', wrongAgent: '_leak_cross_dev', wrongRole: 'Dev', rightRole: 'QA' },
     { stage: 'review', wrongAgent: '_leak_cross_dev', wrongRole: 'Dev', rightRole: 'Review' },
   ];
 
@@ -330,7 +330,7 @@ test('advance rejects wrong-role agent at every role-gated stage', () => {
 test('orchestrate_one rejects wrong-role agent at every role-gated stage', () => {
   createWorkspaceAgent('_leak_cross_qa', 'QA');
 
-  const stages = ['pm-ready', 'arch-ready', 'dev-ready', 'review'];
+  const stages = ['analyze', 'plan', 'implement', 'review'];
   for (const stage of stages) {
     const runFolder = createWorkspaceRun(stage);
 
@@ -351,10 +351,10 @@ test('record_artifact rejects wrong-role agent at every role-gated stage', () =>
   createWorkspaceAgent('_leak_cross_rev', 'Review');
 
   const stageArtifacts = [
-    { stage: 'pm-ready', schema: 'pm-brief.schema.json', artifact: '10-pm-brief.json' },
-    { stage: 'arch-ready', schema: 'arch-design.schema.json', artifact: '20-arch-design.json' },
-    { stage: 'dev-ready', schema: 'dev-notes.schema.json', artifact: '41-dev-notes.json' },
-    { stage: 'qa-ready', schema: 'qa-report.schema.json', artifact: '50-qa-report.json' },
+    { stage: 'analyze', schema: 'pm-brief.schema.json', artifact: '10-pm-brief.json' },
+    { stage: 'plan', schema: 'arch-design.schema.json', artifact: '20-arch-design.json' },
+    { stage: 'implement', schema: 'dev-notes.schema.json', artifact: '41-dev-notes.json' },
+    { stage: 'validate', schema: 'qa-report.schema.json', artifact: '50-qa-report.json' },
   ];
 
   for (const { stage, schema, artifact } of stageArtifacts) {
@@ -397,79 +397,78 @@ test('create_run --agent_id sets responsible_agent', () => {
 });
 
 test('record_artifact --agent_id sets responsible_agent on validation failure (blocked path)', () => {
-  createWorkspaceAgent('_leak_ra_pm2', 'PM');
-  const runFolder = createWorkspaceRun('pm-ready');
+  createWorkspaceAgent('_leak_ra_analyst2', 'Analyst');
+  const runFolder = createWorkspaceRun('analyze');
   // Write an invalid artifact (empty object) so record_artifact blocks the run
   fs.writeFileSync(path.join(runFolder, '10-pm-brief.json'), '{}', 'utf8');
 
   const out = execFileSync('node', [DP_SCRIPT, 'record_artifact', runFolder,
-    path.join(runFolder, '10-pm-brief.json'), '--agent_id', '_leak_ra_pm2'], { encoding: 'utf8' });
+    path.join(runFolder, '10-pm-brief.json'), '--agent_id', '_leak_ra_analyst2'], { encoding: 'utf8' });
   const parsed = JSON.parse(out);
   assert(parsed.ok === true, 'should return ok (with valid:false)');
   assert(parsed.valid === false, 'artifact should be invalid');
   assert(parsed.blocked === true, 'run should be blocked');
 
   const status = JSON.parse(fs.readFileSync(path.join(runFolder, 'status.json'), 'utf8'));
-  assert(status.responsible_agent === '_leak_ra_pm2', `responsible_agent should be _leak_ra_pm2, got: ${status.responsible_agent}`);
+  assert(status.responsible_agent === '_leak_ra_analyst2', `responsible_agent should be _leak_ra_analyst2, got: ${status.responsible_agent}`);
   // The blocked stage_history entry should have the agent_id
   const blockedEntry = status.stage_history.find(e => e.stage === 'blocked');
   assert(blockedEntry, 'should have blocked stage_history entry');
-  assert(blockedEntry.agent_id === '_leak_ra_pm2', `blocked entry agent_id should be _leak_ra_pm2, got: ${blockedEntry.agent_id}`);
+  assert(blockedEntry.agent_id === '_leak_ra_analyst2', `blocked entry agent_id should be _leak_ra_analyst2, got: ${blockedEntry.agent_id}`);
 });
 
 test('advance --agent_id sets responsible_agent and stage_history agent_id', () => {
-  createWorkspaceAgent('_leak_ra_pm3', 'PM');
-  const runFolder = createWorkspaceRun('pm-ready');
+  createWorkspaceAgent('_leak_ra_analyst3', 'Analyst');
+  const runFolder = createWorkspaceRun('analyze');
   createMinimalArtifact(runFolder, 'pm-brief.schema.json', '10-pm-brief.json', { ticket_id: 'TEST-LEAK' });
 
   const out = execFileSync('node', [DP_SCRIPT, 'advance', runFolder, '--confirm',
-    '--agent_id', '_leak_ra_pm3'], { encoding: 'utf8' });
+    '--agent_id', '_leak_ra_analyst3'], { encoding: 'utf8' });
   const parsed = JSON.parse(out);
   assert(parsed.ok === true, 'should succeed');
-  assert(parsed.advanced_to === 'ux-ready', `should advance to ux-ready, got ${parsed.advanced_to}`);
+  assert(parsed.advanced_to === 'plan', `should advance to plan, got ${parsed.advanced_to}`);
 
   const status = JSON.parse(fs.readFileSync(path.join(runFolder, 'status.json'), 'utf8'));
-  assert(status.responsible_agent === '_leak_ra_pm3', `responsible_agent should be _leak_ra_pm3, got: ${status.responsible_agent}`);
+  assert(status.responsible_agent === '_leak_ra_analyst3', `responsible_agent should be _leak_ra_analyst3, got: ${status.responsible_agent}`);
 
-  // Find the ux-ready stage_history entry
-  const uxEntry = status.stage_history.find(e => e.stage === 'ux-ready');
-  assert(uxEntry, 'should have ux-ready stage_history entry');
-  assert(uxEntry.agent_id === '_leak_ra_pm3', `ux-ready agent_id should be _leak_ra_pm3, got: ${uxEntry.agent_id}`);
+  // Find the plan stage_history entry
+  const planEntry = status.stage_history.find(e => e.stage === 'plan');
+  assert(planEntry, 'should have plan stage_history entry');
+  assert(planEntry.agent_id === '_leak_ra_analyst3', `plan agent_id should be _leak_ra_analyst3, got: ${planEntry.agent_id}`);
 });
 
 test('responsible_agent persists across multi-stage advance chain', () => {
-  createWorkspaceAgent('_leak_ra_chain_pm', 'PM');
-  createWorkspaceAgent('_leak_ra_chain_ux', 'UX');
+  createWorkspaceAgent('_leak_ra_chain_analyst', 'Analyst');
   createWorkspaceAgent('_leak_ra_chain_arch', 'Architect');
 
-  // Create run at pm-ready with PM agent
-  const runFolder = createWorkspaceRun('pm-ready');
+  // Create run at analyze with Analyst agent
+  const runFolder = createWorkspaceRun('analyze');
   createMinimalArtifact(runFolder, 'pm-brief.schema.json', '10-pm-brief.json', { ticket_id: 'TEST-LEAK' });
 
-  // PM advances pm-ready → ux-ready
+  // Analyst advances analyze → plan
   execFileSync('node', [DP_SCRIPT, 'advance', runFolder, '--confirm',
-    '--agent_id', '_leak_ra_chain_pm'], { encoding: 'utf8' });
+    '--agent_id', '_leak_ra_chain_analyst'], { encoding: 'utf8' });
 
   let status = JSON.parse(fs.readFileSync(path.join(runFolder, 'status.json'), 'utf8'));
-  assert(status.responsible_agent === '_leak_ra_chain_pm', 'responsible_agent should be PM after first advance');
-  assert(status.current_stage === 'ux-ready', 'should be at ux-ready');
+  assert(status.responsible_agent === '_leak_ra_chain_analyst', 'responsible_agent should be Analyst after first advance');
+  assert(status.current_stage === 'plan', 'should be at plan');
 
-  // UX records artifact and advances ux-ready → arch-ready
-  createMinimalArtifact(runFolder, 'ux-audit.schema.json', '15-ux-audit.json', { ticket_id: 'TEST-LEAK' });
+  // Architect records artifact and advances plan → implement
+  createMinimalArtifact(runFolder, 'arch-design.schema.json', '20-arch-design.json', { ticket_id: 'TEST-LEAK' });
   execFileSync('node', [DP_SCRIPT, 'record_artifact', runFolder,
-    path.join(runFolder, '15-ux-audit.json'), '--agent_id', '_leak_ra_chain_ux'], { encoding: 'utf8' });
+    path.join(runFolder, '20-arch-design.json'), '--agent_id', '_leak_ra_chain_arch'], { encoding: 'utf8' });
   execFileSync('node', [DP_SCRIPT, 'advance', runFolder, '--confirm',
-    '--agent_id', '_leak_ra_chain_ux'], { encoding: 'utf8' });
+    '--agent_id', '_leak_ra_chain_arch'], { encoding: 'utf8' });
 
   status = JSON.parse(fs.readFileSync(path.join(runFolder, 'status.json'), 'utf8'));
-  assert(status.responsible_agent === '_leak_ra_chain_ux', `responsible_agent should be UX, got: ${status.responsible_agent}`);
-  assert(status.current_stage === 'arch-ready', 'should be at arch-ready');
+  assert(status.responsible_agent === '_leak_ra_chain_arch', `responsible_agent should be Architect, got: ${status.responsible_agent}`);
+  assert(status.current_stage === 'implement', 'should be at implement');
 
   // Verify stage_history entries have correct agent_ids
-  const uxEntry = status.stage_history.find(e => e.stage === 'ux-ready');
-  const archEntry = status.stage_history.find(e => e.stage === 'arch-ready');
-  assert(uxEntry && uxEntry.agent_id === '_leak_ra_chain_pm', 'ux-ready entry should have PM agent_id');
-  assert(archEntry && archEntry.agent_id === '_leak_ra_chain_ux', 'arch-ready entry should have UX agent_id');
+  const planEntry = status.stage_history.find(e => e.stage === 'plan');
+  const implEntry = status.stage_history.find(e => e.stage === 'implement');
+  assert(planEntry && planEntry.agent_id === '_leak_ra_chain_analyst', 'plan entry should have Analyst agent_id');
+  assert(implEntry && implEntry.agent_id === '_leak_ra_chain_arch', 'implement entry should have Architect agent_id');
 });
 
 // ---------------------------------------------------------------------------

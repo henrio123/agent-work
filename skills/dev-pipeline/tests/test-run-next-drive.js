@@ -64,14 +64,14 @@ function makeTempRun(name, statusOverrides = {}, extras = {}) {
     project: 'test',
     created_at: '2026-01-01T00:00:00.000Z',
     updated_at: '2026-01-01T00:00:00.000Z',
-    current_stage: 'pm-ready',
+    current_stage: 'analyze',
     blocked: false,
     blocked_reason: null,
     required_user_input: [],
     stage_history: [
       { stage: 'intake', started_at: '2026-01-01T00:00:00.000Z', finished_at: '2026-01-01T00:00:01.000Z', artifact_paths: ['00-intake.json'] },
       { stage: 'task-pack-generated', started_at: '2026-01-01T00:00:01.000Z', finished_at: '2026-01-01T00:00:02.000Z', artifact_paths: ['30-dev-claude-task.txt'] },
-      { stage: 'pm-ready', started_at: '2026-01-01T00:00:02.000Z', finished_at: null, artifact_paths: [], role: 'PM' },
+      { stage: 'analyze', started_at: '2026-01-01T00:00:02.000Z', finished_at: null, artifact_paths: [], role: 'Analyst' },
     ],
     next_actions: [],
     ...statusOverrides,
@@ -227,7 +227,7 @@ test('driver never picks a stopped run', () => {
   fs.writeFileSync(path.join(stopDir, 'status.json'), JSON.stringify({
     ticket_id: 'T', title: 'T', project: 'T',
     created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z',
-    current_stage: 'pm-ready', blocked: false,
+    current_stage: 'analyze', blocked: false,
     required_user_input: [], stage_history: [], next_actions: [],
   }), 'utf8');
   fs.writeFileSync(path.join(stopDir, '.stop'), '', 'utf8');

@@ -196,7 +196,7 @@ test('detects run_stage from linked run', () => {
   const wsRoot = makeTempWorkspace('proj-stage');
   const tmpRunDir = makeTempDir();
   fs.writeFileSync(path.join(tmpRunDir, 'status.json'), JSON.stringify({
-    current_stage: 'pm-ready', blocked: false,
+    current_stage: 'analyze', blocked: false,
   }), 'utf8');
 
   fs.writeFileSync(
@@ -212,7 +212,7 @@ test('detects run_stage from linked run', () => {
 
   const result = buildDashboard({ workspaceRoot: wsRoot });
   const item = result.projects[0].backlog[0];
-  if (item.run_stage !== 'pm-ready') throw new Error(`expected pm-ready, got ${item.run_stage}`);
+  if (item.run_stage !== 'analyze') throw new Error(`expected analyze, got ${item.run_stage}`);
 });
 
 test('detects run_blocked from linked run', () => {
@@ -242,7 +242,7 @@ test('detects run_stop from linked run', () => {
   const wsRoot = makeTempWorkspace('proj-stop');
   const tmpRunDir = makeTempDir();
   fs.writeFileSync(path.join(tmpRunDir, 'status.json'), JSON.stringify({
-    current_stage: 'pm-ready', blocked: false,
+    current_stage: 'analyze', blocked: false,
   }), 'utf8');
   fs.writeFileSync(path.join(tmpRunDir, '.stop'), '', 'utf8');
 
@@ -266,7 +266,7 @@ test('detects needs_artifacts from linked run', () => {
   const wsRoot = makeTempWorkspace('proj-na');
   const tmpRunDir = makeTempDir();
   fs.writeFileSync(path.join(tmpRunDir, 'status.json'), JSON.stringify({
-    current_stage: 'pm-ready', blocked: false,
+    current_stage: 'analyze', blocked: false,
     last_autonomous_summary: { final_action: 'needs_artifacts' },
   }), 'utf8');
 
@@ -291,7 +291,7 @@ test('detects stalled run', () => {
   const wsRoot = makeTempWorkspace('proj-stall');
   const tmpRunDir = makeTempDir();
   fs.writeFileSync(path.join(tmpRunDir, 'status.json'), JSON.stringify({
-    current_stage: 'pm-ready', blocked: false,
+    current_stage: 'analyze', blocked: false,
     last_autonomous_summary: { final_action: 'needs_artifacts' },
   }), 'utf8');
   const auditPath = path.join(tmpRunDir, 'autonomous-audit.jsonl');

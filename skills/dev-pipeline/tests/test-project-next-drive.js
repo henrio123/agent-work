@@ -228,14 +228,14 @@ test('drives existing run without creating new one', () => {
   fs.mkdirSync(absRun, { recursive: true });
   createdRunDirs.push(absRun);
 
-  // Set up a pm-ready status so autonomous runner can drive it
+  // Set up a analyze status so autonomous runner can drive it
   fs.writeFileSync(path.join(absRun, 'status.json'), JSON.stringify({
     ticket_id: 'T-EXIST',
     title: 'Existing task',
     project: 'proj-exist',
     created_at: '2026-01-01T00:00:00.000Z',
     updated_at: '2026-01-01T00:00:00.000Z',
-    current_stage: 'pm-ready',
+    current_stage: 'analyze',
     blocked: false,
     blocked_reason: null,
     required_user_input: [],

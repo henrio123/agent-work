@@ -48,13 +48,13 @@ function makeTempRun(name, statusOverrides = {}) {
     project: 'test',
     created_at: '2026-01-01T00:00:00.000Z',
     updated_at: '2026-01-01T00:00:00.000Z',
-    current_stage: 'pm-ready',
+    current_stage: 'analyze',
     blocked: false,
     blocked_reason: null,
     required_user_input: [],
     stage_history: [
       { stage: 'intake', started_at: '2026-01-01T00:00:00.000Z', finished_at: '2026-01-01T00:00:01.000Z', artifact_paths: ['00-intake.json'] },
-      { stage: 'pm-ready', started_at: '2026-01-01T00:00:01.000Z', finished_at: null, artifact_paths: [], role: 'PM' },
+      { stage: 'analyze', started_at: '2026-01-01T00:00:01.000Z', finished_at: null, artifact_paths: [], role: 'PM' },
     ],
     next_actions: [],
     ...statusOverrides,
@@ -154,7 +154,7 @@ test('emits status_changed when status.json modified', () => {
       if (events.length === 1) {
         // Modify status.json after snapshot
         const status = JSON.parse(fs.readFileSync(path.join(absDir, 'status.json'), 'utf8'));
-        status.current_stage = 'arch-ready';
+        status.current_stage = 'plan';
         status.updated_at = new Date().toISOString();
         fs.writeFileSync(path.join(absDir, 'status.json'), JSON.stringify(status, null, 2), 'utf8');
       }
@@ -164,7 +164,7 @@ test('emits status_changed when status.json modified', () => {
   if (events.length < 2) throw new Error(`expected 2 events, got ${events.length}`);
   if (events[0].event !== 'status_snapshot') throw new Error('first should be snapshot');
   if (events[1].event !== 'status_changed') throw new Error(`second should be status_changed, got ${events[1].event}`);
-  if (events[1].status.current_stage !== 'arch-ready') throw new Error('status_changed should reflect new stage');
+  if (events[1].status.current_stage !== 'plan') throw new Error('status_changed should reflect new stage');
 });
 
 // -------------------------------------------------------------------------

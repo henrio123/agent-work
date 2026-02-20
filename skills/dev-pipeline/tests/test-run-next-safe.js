@@ -77,14 +77,14 @@ function makeTempRun(name, statusOverrides = {}) {
     project: 'test',
     created_at: '2026-01-01T00:00:00.000Z',
     updated_at: '2026-01-01T00:00:00.000Z',
-    current_stage: 'pm-ready',
+    current_stage: 'analyze',
     blocked: false,
     blocked_reason: null,
     required_user_input: [],
     stage_history: [
       { stage: 'intake', started_at: '2026-01-01T00:00:00.000Z', finished_at: '2026-01-01T00:00:01.000Z', artifact_paths: ['00-intake.json'] },
       { stage: 'task-pack-generated', started_at: '2026-01-01T00:00:01.000Z', finished_at: '2026-01-01T00:00:02.000Z', artifact_paths: ['30-dev-claude-task.txt'] },
-      { stage: 'pm-ready', started_at: '2026-01-01T00:00:02.000Z', finished_at: null, artifact_paths: [], role: 'PM' },
+      { stage: 'analyze', started_at: '2026-01-01T00:00:02.000Z', finished_at: null, artifact_paths: [], role: 'Analyst' },
     ],
     next_actions: [],
     ...statusOverrides,
@@ -151,15 +151,15 @@ test('intake stage returns needs_task_pack', () => {
 // -------------------------------------------------------------------------
 console.log('\n--- missing task file ---');
 
-test('pm-ready without task file triggers generated_role_pack', () => {
+test('analyze without task file triggers generated_role_pack', () => {
   const { relDir, absDir } = makeTempRun('no-taskfile');
   // Ensure no task file exists
-  const taskFile = path.join(absDir, '31-pm-claude-task.txt');
+  const taskFile = path.join(absDir, '31-analyze-task.txt');
   if (fs.existsSync(taskFile)) fs.unlinkSync(taskFile);
   const r = runCmd('run_next_safe', relDir);
   if (r.json.action !== 'generated_role_pack') throw new Error(`expected generated_role_pack, got ${r.json.action}`);
-  if (r.json.role !== 'PM') throw new Error(`expected role=PM, got ${r.json.role}`);
-  if (r.json.task_file !== '31-pm-claude-task.txt') throw new Error('wrong task_file');
+  if (r.json.role !== 'Analyst') throw new Error(`expected role=Analyst, got ${r.json.role}`);
+  if (r.json.task_file !== '31-analyze-task.txt') throw new Error('wrong task_file');
   // Verify file was actually created
   if (!fs.existsSync(taskFile)) throw new Error('task file not created');
 });
@@ -169,10 +169,10 @@ test('pm-ready without task file triggers generated_role_pack', () => {
 // -------------------------------------------------------------------------
 console.log('\n--- missing artifacts ---');
 
-test('pm-ready with task file but no artifact returns needs_artifacts', () => {
+test('analyze with task file but no artifact returns needs_artifacts', () => {
   const { relDir, absDir } = makeTempRun('needs-art');
   // Create the task file so it doesn't trigger generated_role_pack
-  fs.writeFileSync(path.join(absDir, '31-pm-claude-task.txt'), 'task content', 'utf8');
+  fs.writeFileSync(path.join(absDir, '31-analyze-task.txt'), 'task content', 'utf8');
   const r = runCmd('run_next_safe', relDir);
   if (r.json.action !== 'needs_artifacts') throw new Error(`expected needs_artifacts, got ${r.json.action}`);
   if (!r.json.missing_artifacts.includes('10-pm-brief.json')) throw new Error('missing artifact not listed');
@@ -183,20 +183,20 @@ test('pm-ready with task file but no artifact returns needs_artifacts', () => {
 // -------------------------------------------------------------------------
 console.log('\n--- gates pass ---');
 
-test('pm-ready with valid artifact delegates to orchestrate_one', () => {
+test('analyze with valid artifact delegates to orchestrate_one', () => {
   const { relDir, absDir } = makeTempRun('gates-pass');
   // Create task file
-  fs.writeFileSync(path.join(absDir, '31-pm-claude-task.txt'), 'task content', 'utf8');
-  // Create valid PM brief
+  fs.writeFileSync(path.join(absDir, '31-analyze-task.txt'), 'task content', 'utf8');
+  // Create valid analysis brief
   fs.writeFileSync(path.join(absDir, '10-pm-brief.json'), JSON.stringify({
     ticket_id: 'TEST-SAFE', title: 't', project: 'p',
     problem_statement: 'x', scope: 'y', acceptance_criteria: [],
   }, null, 2), 'utf8');
   const r = runCmd('run_next_safe', relDir);
-  // orchestrate_one should advance to ux-ready
+  // orchestrate_one should advance to plan
   if (!r.json) throw new Error(`No JSON: stdout=${r.stdout} stderr=${r.stderr}`);
   if (r.json.action !== 'advanced_and_generated') throw new Error(`expected advanced_and_generated, got ${r.json.action}`);
-  if (r.json.advanced_to !== 'ux-ready') throw new Error(`expected ux-ready, got ${r.json.advanced_to}`);
+  if (r.json.advanced_to !== 'plan') throw new Error(`expected plan, got ${r.json.advanced_to}`);
 });
 
 // -------------------------------------------------------------------------
@@ -206,7 +206,7 @@ console.log('\n--- idempotency ---');
 
 test('run_next_safe is idempotent on needs_artifacts', () => {
   const { relDir, absDir } = makeTempRun('idempotent');
-  fs.writeFileSync(path.join(absDir, '31-pm-claude-task.txt'), 'task', 'utf8');
+  fs.writeFileSync(path.join(absDir, '31-analyze-task.txt'), 'task', 'utf8');
   const r1 = runCmd('run_next_safe', relDir);
   const r2 = runCmd('run_next_safe', relDir);
   if (r1.json.action !== r2.json.action) throw new Error('actions differ');
@@ -270,7 +270,7 @@ test('all responses have ok, action, and trace fields', () => {
   });
   const { relDir: intakeDir } = makeTempRun('schema-intake', { current_stage: 'intake' });
   const { relDir: needsArtDir, absDir: needsArtAbs } = makeTempRun('schema-needs-art');
-  fs.writeFileSync(path.join(needsArtAbs, '31-pm-claude-task.txt'), 'task', 'utf8');
+  fs.writeFileSync(path.join(needsArtAbs, '31-analyze-task.txt'), 'task', 'utf8');
 
   const cases = [
     { label: 'done', dir: doneDir, expectedAction: 'none' },
@@ -309,7 +309,7 @@ test('blocked response includes required_inputs array', () => {
 
 test('needs_artifacts response includes missing_artifacts and role', () => {
   const { relDir, absDir } = makeTempRun('schema-needs-art2');
-  fs.writeFileSync(path.join(absDir, '31-pm-claude-task.txt'), 'task', 'utf8');
+  fs.writeFileSync(path.join(absDir, '31-analyze-task.txt'), 'task', 'utf8');
   const r = runCmd('run_next_safe', relDir);
   if (r.json.action !== 'needs_artifacts') throw new Error(`expected needs_artifacts, got ${r.json.action}`);
   if (!Array.isArray(r.json.missing_artifacts)) throw new Error('missing missing_artifacts');

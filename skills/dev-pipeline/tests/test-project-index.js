@@ -191,7 +191,7 @@ test('detects stop signal from linked run', () => {
   fs.mkdirSync(tmpRunDir, { recursive: true });
   tmpDirs.push(tmpRunDir);
   fs.writeFileSync(path.join(tmpRunDir, 'status.json'), JSON.stringify({
-    current_stage: 'pm-ready', blocked: false,
+    current_stage: 'analyze', blocked: false,
   }), 'utf8');
   fs.writeFileSync(path.join(tmpRunDir, '.stop'), '', 'utf8');
 
@@ -243,7 +243,7 @@ test('stalled detection from linked run', () => {
   fs.mkdirSync(tmpRunDir, { recursive: true });
   tmpDirs.push(tmpRunDir);
   fs.writeFileSync(path.join(tmpRunDir, 'status.json'), JSON.stringify({
-    current_stage: 'pm-ready', blocked: false,
+    current_stage: 'analyze', blocked: false,
     last_autonomous_summary: { final_action: 'needs_artifacts' },
   }), 'utf8');
   const auditPath = path.join(tmpRunDir, 'autonomous-audit.jsonl');

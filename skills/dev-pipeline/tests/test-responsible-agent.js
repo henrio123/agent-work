@@ -180,30 +180,29 @@ console.log('\n--- advance ---');
 // ---------------------------------------------------------------------------
 
 test('advance with --agent_id updates responsible_agent and stage_history', () => {
-  createWorkspaceAgent('_test_ra_pm_adv', 'PM');
-  const runFolder = createWorkspaceRun('pm-ready');
+  createWorkspaceAgent('_test_ra_analyst_adv', 'Analyst');
+  const runFolder = createWorkspaceRun('analyze');
   createMinimalPMBrief(runFolder);
 
   const out = execFileSync('node', [DP_SCRIPT, 'advance', runFolder, '--confirm',
-    '--agent_id', '_test_ra_pm_adv'], { encoding: 'utf8' });
+    '--agent_id', '_test_ra_analyst_adv'], { encoding: 'utf8' });
   const parsed = JSON.parse(out);
   assert(parsed.ok === true, 'should be ok');
-  assert(parsed.advanced_to === 'ux-ready', 'should advance to ux-ready');
+  assert(parsed.advanced_to === 'plan', 'should advance to plan');
 
   const status = JSON.parse(fs.readFileSync(path.join(runFolder, 'status.json'), 'utf8'));
-  assert(status.responsible_agent === '_test_ra_pm_adv',
-    `responsible_agent should be _test_ra_pm_adv, got: ${status.responsible_agent}`);
+  assert(status.responsible_agent === '_test_ra_analyst_adv',
+    `responsible_agent should be _test_ra_analyst_adv, got: ${status.responsible_agent}`);
 
-  // Find the ux-ready stage_history entry
-  const uxEntry = status.stage_history.find(e => e.stage === 'ux-ready');
-  assert(uxEntry, 'should have ux-ready stage_history entry');
-  assert(uxEntry.agent_id === '_test_ra_pm_adv',
-    `ux-ready agent_id should be _test_ra_pm_adv, got: ${uxEntry.agent_id}`);
+  // Find the plan stage_history entry
+  const planEntry = status.stage_history.find(e => e.stage === 'plan');
+  assert(planEntry, 'should have plan stage_history entry');
+  assert(planEntry.agent_id === '_test_ra_analyst_adv',
+    `plan agent_id should be _test_ra_analyst_adv, got: ${planEntry.agent_id}`);
 });
 
 test('advance without --agent_id preserves existing responsible_agent', () => {
-  createWorkspaceAgent('_test_ra_pm_adv2', 'PM');
-  const runFolder = createWorkspaceRun('pm-ready');
+  const runFolder = createWorkspaceRun('analyze');
   createMinimalPMBrief(runFolder);
 
   // Set responsible_agent manually
@@ -222,9 +221,9 @@ test('advance without --agent_id preserves existing responsible_agent', () => {
     `responsible_agent should be preserved as original-agent, got: ${status.responsible_agent}`);
 
   // stage_history entry should have agent_id: null
-  const uxEntry = status.stage_history.find(e => e.stage === 'ux-ready');
-  assert(uxEntry, 'should have ux-ready entry');
-  assert(uxEntry.agent_id === null, `agent_id should be null, got: ${uxEntry.agent_id}`);
+  const planEntry = status.stage_history.find(e => e.stage === 'plan');
+  assert(planEntry, 'should have plan entry');
+  assert(planEntry.agent_id === null, `agent_id should be null, got: ${planEntry.agent_id}`);
 });
 
 // ---------------------------------------------------------------------------
@@ -232,18 +231,18 @@ console.log('\n--- orchestrate_one ---');
 // ---------------------------------------------------------------------------
 
 test('orchestrate_one with --agent_id records agent_id in stage_history', () => {
-  createWorkspaceAgent('_test_ra_pm_orch', 'PM');
-  const runFolder = createWorkspaceRun('pm-ready');
+  createWorkspaceAgent('_test_ra_analyst_orch', 'Analyst');
+  const runFolder = createWorkspaceRun('analyze');
   createMinimalPMBrief(runFolder);
 
   const out = execFileSync('node', [DP_SCRIPT, 'orchestrate_one', runFolder,
-    '--agent_id', '_test_ra_pm_orch'], { encoding: 'utf8' });
+    '--agent_id', '_test_ra_analyst_orch'], { encoding: 'utf8' });
   const parsed = JSON.parse(out);
   assert(parsed.ok === true, 'should be ok');
 
   const status = JSON.parse(fs.readFileSync(path.join(runFolder, 'status.json'), 'utf8'));
-  assert(status.responsible_agent === '_test_ra_pm_orch',
-    `responsible_agent should be _test_ra_pm_orch, got: ${status.responsible_agent}`);
+  assert(status.responsible_agent === '_test_ra_analyst_orch',
+    `responsible_agent should be _test_ra_analyst_orch, got: ${status.responsible_agent}`);
 });
 
 test('orchestrate_one without --agent_id preserves responsible_agent', () => {
@@ -296,7 +295,7 @@ test('normalizeStatus preserves existing responsible_agent', () => {
     project: 'test',
     created_at: '2025-01-01T00:00:00Z',
     updated_at: '2025-01-01T00:00:00Z',
-    current_stage: 'pm-ready',
+    current_stage: 'analyze',
     blocked: false,
     blocked_reason: null,
     responsible_agent: 'my-agent',

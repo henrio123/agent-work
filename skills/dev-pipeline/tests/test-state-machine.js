@@ -15,8 +15,8 @@ const path = require('node:path');
 const os = require('node:os');
 
 const {
-  TOOL_VERSION, STAGE_CONFIG, ARTIFACT_SCHEMA_MAP,
-  getNextStageInfo, normalizeStatus, validateSchema,
+  TOOL_VERSION, STAGE_CONFIG, STAGE_MIGRATION, ARTIFACT_SCHEMA_MAP,
+  getNextStageInfo, normalizeStatus, validateSchema, migrateStage,
 } = require('../scripts/dev-pipeline.js');
 
 const WORKSPACE_ROOT = process.env.WORKSPACE_ROOT || path.resolve(os.homedir(), 'dev', 'agent-work');
@@ -69,8 +69,8 @@ function writeArtifact(name, content) {
 // -------------------------------------------------------------------------
 console.log('\n--- STAGE_CONFIG structure ---');
 
-test('STAGE_CONFIG has all 6 role stages', () => {
-  const expected = ['pm-ready', 'ux-ready', 'arch-ready', 'dev-ready', 'qa-ready', 'review'];
+test('STAGE_CONFIG has all 5 role stages', () => {
+  const expected = ['analyze', 'plan', 'implement', 'validate', 'review'];
   for (const stage of expected) {
     assert.ok(STAGE_CONFIG[stage], `missing ${stage}`);
   }
@@ -86,8 +86,8 @@ test('Each stage has role, requiredArtifacts, taskFile, template, next', () => {
   }
 });
 
-test('Stage chain is linear: pm-ready → ux-ready → arch-ready → dev-ready → qa-ready → review → done', () => {
-  let stage = 'pm-ready';
+test('Stage chain is linear: analyze → plan → implement → validate → review → done', () => {
+  let stage = 'analyze';
   const visited = [];
   while (stage !== 'done') {
     visited.push(stage);
@@ -95,7 +95,7 @@ test('Stage chain is linear: pm-ready → ux-ready → arch-ready → dev-ready 
     assert.ok(config, `no config for ${stage}`);
     stage = config.next;
   }
-  assert.deepStrictEqual(visited, ['pm-ready', 'ux-ready', 'arch-ready', 'dev-ready', 'qa-ready', 'review']);
+  assert.deepStrictEqual(visited, ['analyze', 'plan', 'implement', 'validate', 'review']);
 });
 
 // -------------------------------------------------------------------------
@@ -123,68 +123,68 @@ test('intake → next is task-pack-generated', () => {
   assert.strictEqual(info.action, 'generate_task_pack');
 });
 
-test('task-pack-generated → next is pm-ready', () => {
+test('task-pack-generated → next is analyze', () => {
   const status = makeStatus('task-pack-generated');
   const info = getNextStageInfo(TMP_RUN, status);
-  assert.strictEqual(info.next_stage, 'pm-ready');
-  assert.strictEqual(info.role, 'PM');
+  assert.strictEqual(info.next_stage, 'analyze');
+  assert.strictEqual(info.role, 'Analyst');
 });
 
-test('pm-ready without artifacts → gates_pass false, missing artifacts', () => {
-  const status = makeStatus('pm-ready');
+test('analyze without artifacts → gates_pass false, missing artifacts', () => {
+  const status = makeStatus('analyze');
   const info = getNextStageInfo(TMP_RUN, status);
   assert.strictEqual(info.gates_pass, false);
   assert.ok(info.missing_artifacts.includes('10-pm-brief.json'));
 });
 
-test('pm-ready with valid artifact → gates_pass true, next ux-ready', () => {
+test('analyze with valid artifact → gates_pass true, next plan', () => {
   writeArtifact('10-pm-brief.json', {
     ticket_id: 'TEST-1', title: 't', project: 'p',
     problem_statement: 'x', scope: 'y', acceptance_criteria: [],
   });
-  const status = makeStatus('pm-ready');
+  const status = makeStatus('analyze');
   const info = getNextStageInfo(TMP_RUN, status);
   assert.strictEqual(info.gates_pass, true);
-  assert.strictEqual(info.next_stage, 'ux-ready');
+  assert.strictEqual(info.next_stage, 'plan');
 });
 
-test('arch-ready without artifact → gates_pass false', () => {
-  const status = makeStatus('arch-ready');
+test('plan without artifact → gates_pass false', () => {
+  const status = makeStatus('plan');
   const info = getNextStageInfo(TMP_RUN, status);
   assert.strictEqual(info.gates_pass, false);
 });
 
-test('arch-ready with valid artifact → gates_pass true, next dev-ready', () => {
+test('plan with valid artifact → gates_pass true, next implement', () => {
   writeArtifact('20-arch-design.json', {
     ticket_id: 'TEST-1', approach: 'a', components: [], file_changes: [],
   });
-  const status = makeStatus('arch-ready');
+  const status = makeStatus('plan');
   const info = getNextStageInfo(TMP_RUN, status);
   assert.strictEqual(info.gates_pass, true);
-  assert.strictEqual(info.next_stage, 'dev-ready');
+  assert.strictEqual(info.next_stage, 'implement');
 });
 
-test('dev-ready needs both diff and notes', () => {
-  const status = makeStatus('dev-ready');
+test('implement needs both diff and notes', () => {
+  const status = makeStatus('implement');
   const info = getNextStageInfo(TMP_RUN, status);
   assert.strictEqual(info.gates_pass, false);
   assert.ok(info.missing_artifacts.length > 0);
 });
 
-test('dev-ready with both artifacts → gates_pass true', () => {
+test('implement with both artifacts → gates_pass true', () => {
   writeArtifact('40-dev-patch.diff', 'diff --git a/foo b/foo\n+bar\n');
   writeArtifact('41-dev-notes.json', { ticket_id: 'TEST-1', files_changed: [], summary: 's' });
-  const status = makeStatus('dev-ready');
+  const status = makeStatus('implement');
   const info = getNextStageInfo(TMP_RUN, status);
   assert.strictEqual(info.gates_pass, true);
-  assert.strictEqual(info.next_stage, 'qa-ready');
+  assert.strictEqual(info.next_stage, 'validate');
 });
 
-test('qa-ready with valid report → gates_pass true', () => {
+test('validate with valid report → gates_pass true', () => {
   writeArtifact('50-qa-report.json', {
     ticket_id: 'TEST-1', tests_run: 1, tests_passed: 1, tests_failed: 0, verdict: 'pass',
   });
-  const status = makeStatus('qa-ready');
+  const status = makeStatus('validate');
   const info = getNextStageInfo(TMP_RUN, status);
   assert.strictEqual(info.gates_pass, true);
   assert.strictEqual(info.next_stage, 'review');
@@ -205,17 +205,17 @@ test('review with valid report → gates_pass true, next done', () => {
 // -------------------------------------------------------------------------
 console.log('\n--- Idempotency ---');
 
-test('getNextStageInfo is idempotent (pm-ready, gates pass)', () => {
-  const status = makeStatus('pm-ready');
+test('getNextStageInfo is idempotent (analyze, gates pass)', () => {
+  const status = makeStatus('analyze');
   const a = getNextStageInfo(TMP_RUN, status);
   const b = getNextStageInfo(TMP_RUN, status);
   assert.deepStrictEqual(a, b);
 });
 
-test('getNextStageInfo is idempotent (dev-ready, gates fail)', () => {
+test('getNextStageInfo is idempotent (implement, gates fail)', () => {
   // Remove diff to make gates fail
   try { fs.unlinkSync(path.join(TMP_RUN, '40-dev-patch.diff')); } catch {}
-  const status = makeStatus('dev-ready');
+  const status = makeStatus('implement');
   const a = getNextStageInfo(TMP_RUN, status);
   const b = getNextStageInfo(TMP_RUN, status);
   assert.deepStrictEqual(a, b);
@@ -229,11 +229,11 @@ test('getNextStageInfo is idempotent (dev-ready, gates fail)', () => {
 // -------------------------------------------------------------------------
 console.log('\n--- Advance refusal ---');
 
-test('advance gate check: arch-ready fails without 20-arch-design.json removed', () => {
+test('advance gate check: plan fails without 20-arch-design.json removed', () => {
   const saved = path.join(TMP_RUN, '20-arch-design.json');
   const backup = fs.readFileSync(saved, 'utf8');
   fs.unlinkSync(saved);
-  const status = makeStatus('arch-ready');
+  const status = makeStatus('plan');
   const info = getNextStageInfo(TMP_RUN, status);
   assert.strictEqual(info.gates_pass, false);
   assert.ok(info.missing_artifacts.includes('20-arch-design.json'));
@@ -245,7 +245,7 @@ test('invalid JSON artifact fails validation', () => {
   const badPath = path.join(TMP_RUN, '50-qa-report.json');
   const backup = fs.readFileSync(badPath, 'utf8');
   fs.writeFileSync(badPath, '{ not valid json }}}', 'utf8');
-  const status = makeStatus('qa-ready');
+  const status = makeStatus('validate');
   const info = getNextStageInfo(TMP_RUN, status);
   assert.strictEqual(info.gates_pass, false);
   assert.ok(info.invalid_artifacts.length > 0);
@@ -257,7 +257,7 @@ test('empty diff artifact fails validation', () => {
   const diffPath = path.join(TMP_RUN, '40-dev-patch.diff');
   const backup = fs.readFileSync(diffPath, 'utf8');
   fs.writeFileSync(diffPath, '', 'utf8');
-  const status = makeStatus('dev-ready');
+  const status = makeStatus('implement');
   const info = getNextStageInfo(TMP_RUN, status);
   assert.strictEqual(info.gates_pass, false);
   // Restore
@@ -327,6 +327,49 @@ test('blocked defaults to false', () => {
   const s = normalizeStatus({ current_stage: 'intake' });
   assert.strictEqual(s.blocked, false);
   assert.strictEqual(s.blocked_reason, null);
+});
+
+test('old stage pm-ready migrates to analyze', () => {
+  const s = normalizeStatus({ current_stage: 'pm-ready' });
+  assert.strictEqual(s.current_stage, 'analyze');
+});
+
+test('old stage arch-ready migrates to plan', () => {
+  const s = normalizeStatus({ current_stage: 'arch-ready' });
+  assert.strictEqual(s.current_stage, 'plan');
+});
+
+test('old stage dev-ready migrates to implement', () => {
+  const s = normalizeStatus({ current_stage: 'dev-ready' });
+  assert.strictEqual(s.current_stage, 'implement');
+});
+
+test('old stage qa-ready migrates to validate', () => {
+  const s = normalizeStatus({ current_stage: 'qa-ready' });
+  assert.strictEqual(s.current_stage, 'validate');
+});
+
+test('old stage ux-ready migrates to analyze', () => {
+  const s = normalizeStatus({ current_stage: 'ux-ready' });
+  assert.strictEqual(s.current_stage, 'analyze');
+});
+
+test('stage_history entries migrate old stage names', () => {
+  const s = normalizeStatus({
+    current_stage: 'review',
+    stage_history: [
+      { stage: 'pm-ready', started_at: 't', finished_at: 't' },
+      { stage: 'arch-ready', started_at: 't', finished_at: 't' },
+      { stage: 'dev-ready', started_at: 't', finished_at: 't' },
+      { stage: 'qa-ready', started_at: 't', finished_at: 't' },
+      { stage: 'review', started_at: 't', finished_at: null },
+    ],
+  });
+  assert.strictEqual(s.stage_history[0].stage, 'analyze');
+  assert.strictEqual(s.stage_history[1].stage, 'plan');
+  assert.strictEqual(s.stage_history[2].stage, 'implement');
+  assert.strictEqual(s.stage_history[3].stage, 'validate');
+  assert.strictEqual(s.stage_history[4].stage, 'review');
 });
 
 // -------------------------------------------------------------------------

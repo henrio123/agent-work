@@ -76,14 +76,14 @@ function makeTempRun(name, statusOverrides = {}) {
     project: 'test',
     created_at: '2026-01-01T00:00:00.000Z',
     updated_at: '2026-01-01T00:00:00.000Z',
-    current_stage: 'pm-ready',
+    current_stage: 'analyze',
     blocked: false,
     blocked_reason: null,
     required_user_input: [],
     stage_history: [
       { stage: 'intake', started_at: '2026-01-01T00:00:00.000Z', finished_at: '2026-01-01T00:00:01.000Z', artifact_paths: ['00-intake.json'] },
       { stage: 'task-pack-generated', started_at: '2026-01-01T00:00:01.000Z', finished_at: '2026-01-01T00:00:02.000Z', artifact_paths: ['30-dev-claude-task.txt'] },
-      { stage: 'pm-ready', started_at: '2026-01-01T00:00:02.000Z', finished_at: null, artifact_paths: [], role: 'PM' },
+      { stage: 'analyze', started_at: '2026-01-01T00:00:02.000Z', finished_at: null, artifact_paths: [], role: 'Analyst' },
     ],
     next_actions: [],
     ...statusOverrides,
@@ -149,7 +149,7 @@ test('done stage stops immediately with final_action none', () => {
 });
 
 // -------------------------------------------------------------------------
-// Test 3: intake → task-pack → pm-ready → needs_artifacts (via direct call)
+// Test 3: intake → task-pack → analyze → needs_artifacts (via direct call)
 // -------------------------------------------------------------------------
 console.log('\n--- intake with scaffold adapter ---');
 
@@ -170,7 +170,7 @@ test('intake stage generates task pack then stops at needs_artifacts', () => {
 
   if (result.final_action === 'error') throw new Error(`error: ${result.trace.join('; ')}`);
 
-  // Should have generated task pack and advanced to pm-ready, then produced PM artifact
+  // Should have generated task pack and advanced to analyze, then produced analysis artifact
   if (!result.trace.some((t) => t.includes('generating task pack'))) {
     throw new Error('did not generate task pack');
   }
@@ -190,10 +190,10 @@ test('intake stage generates task pack then stops at needs_artifacts', () => {
 // -------------------------------------------------------------------------
 console.log('\n--- needs_artifacts with scaffold adapter ---');
 
-test('pm-ready with task file: scaffold adapter writes PM brief and advances', () => {
+test('analyze with task file: scaffold adapter writes analysis brief and advances', () => {
   const { relDir, absDir } = makeTempRun('auto-pm');
   // Create task file so run_next_safe returns needs_artifacts
-  fs.writeFileSync(path.join(absDir, '31-pm-claude-task.txt'), 'PM task content', 'utf8');
+  fs.writeFileSync(path.join(absDir, '31-analyze-task.txt'), 'Analyst task content', 'utf8');
 
   const result = runAutonomous(relDir, {
     maxSteps: 10,
@@ -207,22 +207,22 @@ test('pm-ready with task file: scaffold adapter writes PM brief and advances', (
   }
   if (result.agent_calls < 1) throw new Error('expected at least 1 agent call');
 
-  // Should have advanced beyond pm-ready
+  // Should have advanced beyond analyze
   const status = JSON.parse(fs.readFileSync(path.join(absDir, 'status.json'), 'utf8'));
-  if (status.current_stage === 'pm-ready') {
-    throw new Error('still at pm-ready after writing artifact');
+  if (status.current_stage === 'analyze') {
+    throw new Error('still at analyze after writing artifact');
   }
 });
 
-test('dev-ready: scaffold adapter writes diff and notes, advances to qa-ready', () => {
+test('implement: scaffold adapter writes diff and notes, advances to validate', () => {
   const { relDir, absDir } = makeTempRun('auto-dev', {
-    current_stage: 'dev-ready',
+    current_stage: 'implement',
     stage_history: [
       { stage: 'intake', started_at: '2026-01-01T00:00:00.000Z', finished_at: '2026-01-01T00:00:01.000Z', artifact_paths: ['00-intake.json'] },
-      { stage: 'dev-ready', started_at: '2026-01-01T00:00:02.000Z', finished_at: null, artifact_paths: [], role: 'Dev' },
+      { stage: 'implement', started_at: '2026-01-01T00:00:02.000Z', finished_at: null, artifact_paths: [], role: 'Dev' },
     ],
   });
-  fs.writeFileSync(path.join(absDir, '34-dev-claude-task.txt'), 'Dev task content', 'utf8');
+  fs.writeFileSync(path.join(absDir, '33-implement-task.txt'), 'Dev task content', 'utf8');
 
   const result = runAutonomous(relDir, {
     maxSteps: 10,
@@ -235,8 +235,8 @@ test('dev-ready: scaffold adapter writes diff and notes, advances to qa-ready', 
   if (!result.artifacts_written.includes('41-dev-notes.json')) throw new Error('missing notes');
 
   const status = JSON.parse(fs.readFileSync(path.join(absDir, 'status.json'), 'utf8'));
-  if (status.current_stage === 'dev-ready') {
-    throw new Error('still at dev-ready');
+  if (status.current_stage === 'implement') {
+    throw new Error('still at implement');
   }
 });
 
@@ -247,7 +247,7 @@ console.log('\n--- dry_run ---');
 
 test('dry_run returns needs_artifacts without invoking agent', () => {
   const { relDir, absDir } = makeTempRun('auto-dry');
-  fs.writeFileSync(path.join(absDir, '31-pm-claude-task.txt'), 'PM task', 'utf8');
+  fs.writeFileSync(path.join(absDir, '31-analyze-task.txt'), 'Analyst task', 'utf8');
 
   const r = runCmd('run_next_autonomous', relDir, '--dry_run');
   if (r.json.final_action !== 'needs_artifacts') throw new Error(`expected needs_artifacts, got ${r.json.final_action}`);
@@ -287,9 +287,9 @@ test('autonomous runner does not create any new run directories', () => {
     .map((e) => e.name);
   const nonTestBefore = before.filter((n) => !n.startsWith('_test_'));
 
-  // Run on a pm-ready with scaffold adapter
+  // Run on an analyze stage with scaffold adapter
   const { relDir, absDir } = makeTempRun('auto-safety');
-  fs.writeFileSync(path.join(absDir, '31-pm-claude-task.txt'), 'task', 'utf8');
+  fs.writeFileSync(path.join(absDir, '31-analyze-task.txt'), 'task', 'utf8');
   runAutonomous(relDir, { maxSteps: 10, maxAgentCalls: 3, agentAdapter: scaffoldAdapter });
 
   const after = fs.readdirSync(RUNS_DIR, { withFileTypes: true })
@@ -320,7 +320,7 @@ console.log('\n--- idempotency ---');
 
 test('rerun after artifacts exist skips them and does not overwrite', () => {
   const { relDir, absDir } = makeTempRun('auto-idemp');
-  fs.writeFileSync(path.join(absDir, '31-pm-claude-task.txt'), 'task', 'utf8');
+  fs.writeFileSync(path.join(absDir, '31-analyze-task.txt'), 'task', 'utf8');
 
   // First run writes artifact
   const r1 = runAutonomous(relDir, { maxSteps: 5, maxAgentCalls: 2, agentAdapter: scaffoldAdapter });
@@ -395,7 +395,7 @@ console.log('\n--- audit log ---');
 
 test('audit log is created when auditLog option is true', () => {
   const { relDir, absDir } = makeTempRun('auto-audit');
-  fs.writeFileSync(path.join(absDir, '31-pm-claude-task.txt'), 'PM task', 'utf8');
+  fs.writeFileSync(path.join(absDir, '31-analyze-task.txt'), 'Analyst task', 'utf8');
 
   const result = runAutonomous(relDir, {
     maxSteps: 5,
@@ -424,7 +424,7 @@ test('audit log is created when auditLog option is true', () => {
 
 test('audit log is NOT created when auditLog option is false', () => {
   const { relDir, absDir } = makeTempRun('auto-no-audit');
-  fs.writeFileSync(path.join(absDir, '31-pm-claude-task.txt'), 'PM task', 'utf8');
+  fs.writeFileSync(path.join(absDir, '31-analyze-task.txt'), 'Analyst task', 'utf8');
 
   runAutonomous(relDir, {
     maxSteps: 5,
@@ -439,7 +439,7 @@ test('audit log is NOT created when auditLog option is false', () => {
 
 test('audit log contains agent_invoke and artifact_write events', () => {
   const { relDir, absDir } = makeTempRun('auto-audit-events');
-  fs.writeFileSync(path.join(absDir, '31-pm-claude-task.txt'), 'PM task', 'utf8');
+  fs.writeFileSync(path.join(absDir, '31-analyze-task.txt'), 'Analyst task', 'utf8');
 
   runAutonomous(relDir, {
     maxSteps: 5,
@@ -475,7 +475,7 @@ test('audit log contains stop event on done stage', () => {
 
 test('audit log appends on rerun (does not truncate)', () => {
   const { relDir, absDir } = makeTempRun('auto-audit-append');
-  fs.writeFileSync(path.join(absDir, '31-pm-claude-task.txt'), 'PM task', 'utf8');
+  fs.writeFileSync(path.join(absDir, '31-analyze-task.txt'), 'Analyst task', 'utf8');
 
   // First run
   runAutonomous(relDir, {
@@ -521,7 +521,7 @@ console.log('\n--- stop signal ---');
 
 test('stop signal triggers final_action stopped', () => {
   const { relDir, absDir } = makeTempRun('auto-stop');
-  fs.writeFileSync(path.join(absDir, '31-pm-claude-task.txt'), 'PM task', 'utf8');
+  fs.writeFileSync(path.join(absDir, '31-analyze-task.txt'), 'Analyst task', 'utf8');
 
   // Create .stop before running
   fs.writeFileSync(path.join(absDir, STOP_FILENAME), '', 'utf8');
@@ -540,7 +540,7 @@ test('stop signal triggers final_action stopped', () => {
 
 test('stop signal emits audit log stop event', () => {
   const { relDir, absDir } = makeTempRun('auto-stop-audit');
-  fs.writeFileSync(path.join(absDir, '31-pm-claude-task.txt'), 'PM task', 'utf8');
+  fs.writeFileSync(path.join(absDir, '31-analyze-task.txt'), 'Analyst task', 'utf8');
   fs.writeFileSync(path.join(absDir, STOP_FILENAME), '', 'utf8');
 
   runAutonomous(relDir, {
@@ -573,7 +573,7 @@ console.log('\n--- resume ---');
 
 test('resume after stop removal continues from current state', () => {
   const { relDir, absDir } = makeTempRun('auto-resume');
-  fs.writeFileSync(path.join(absDir, '31-pm-claude-task.txt'), 'PM task', 'utf8');
+  fs.writeFileSync(path.join(absDir, '31-analyze-task.txt'), 'Analyst task', 'utf8');
 
   // First run: stopped
   fs.writeFileSync(path.join(absDir, STOP_FILENAME), '', 'utf8');

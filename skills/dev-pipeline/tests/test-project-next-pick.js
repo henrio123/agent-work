@@ -135,7 +135,7 @@ test('returns needs_task_pack for linked intake run', () => {
 });
 
 test('returns needs_artifacts for linked run with needs_artifacts', () => {
-  const tmpDir = makeTempRun(os.tmpdir(), 'pm-ready', {
+  const tmpDir = makeTempRun(os.tmpdir(), 'analyze', {
     last_autonomous_summary: { final_action: 'needs_artifacts' },
   });
   const result = classifyTask({ status: 'in_progress', blocked: false, stop_signal: false, run_folder: tmpDir, owner_role: 'DEV' }, '/');
@@ -143,7 +143,7 @@ test('returns needs_artifacts for linked run with needs_artifacts', () => {
 });
 
 test('returns other for linked run in active stage', () => {
-  const tmpDir = makeTempRun(os.tmpdir(), 'pm-ready');
+  const tmpDir = makeTempRun(os.tmpdir(), 'analyze');
   const result = classifyTask({ status: 'in_progress', blocked: false, stop_signal: false, run_folder: tmpDir, owner_role: 'DEV' }, '/');
   if (result !== 'other') throw new Error(`expected other, got ${result}`);
 });
@@ -201,7 +201,7 @@ test('picks in_progress over todo', () => {
   const wsRoot = makeTempWorkspace('proj-status', [
     { id: 'T-TODO', status: 'todo', priority: 'P0' },
   ]);
-  const tmpDir = makeTempRun(os.tmpdir(), 'pm-ready');
+  const tmpDir = makeTempRun(os.tmpdir(), 'analyze');
   // Add an in_progress item with run_folder
   fs.writeFileSync(
     path.join(wsRoot, '.claw', 'backlog', 'T-PROG.json'),
@@ -223,7 +223,7 @@ test('needs_task_pack bucket outranks needs_artifacts', () => {
   const wsRoot = makeTempWorkspace('proj-bucket', [
     { id: 'T-INTAKE', status: 'todo', priority: 'P2' },
   ]);
-  const tmpDir = makeTempRun(os.tmpdir(), 'pm-ready', {
+  const tmpDir = makeTempRun(os.tmpdir(), 'analyze', {
     last_autonomous_summary: { final_action: 'needs_artifacts' },
   });
   // Add an in_progress item with needs_artifacts run

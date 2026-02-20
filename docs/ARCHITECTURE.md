@@ -169,7 +169,7 @@ blocked    blocked
 ### 6.2 Run `current_stage` Transitions
 
 ```
-intake --> task-pack-generated --> pm-ready --> arch-ready --> dev-ready --> qa-ready --> review --> done
+intake --> task-pack-generated --> analyze --> plan --> implement --> validate --> review --> done
                                                                                          |
                                                                                       blocked
 ```
@@ -178,10 +178,10 @@ Each role stage requires specific artifacts to pass gates:
 
 | Stage | Role | Required Artifacts |
 |-------|------|--------------------|
-| `pm-ready` | PM | `10-pm-brief.json` |
-| `arch-ready` | Architect | `20-arch-design.json` |
-| `dev-ready` | Dev | `40-dev-patch.diff`, `41-dev-notes.json` |
-| `qa-ready` | QA | `50-qa-report.json` |
+| `analyze` | Analyst | `10-pm-brief.json` |
+| `plan` | Architect | `20-arch-design.json` |
+| `implement` | Dev | `40-dev-patch.diff`, `41-dev-notes.json` |
+| `validate` | QA | `50-qa-report.json` |
 | `review` | Review | `60-review-report.json` |
 
 Advancement: `run_next_safe` checks if all required artifacts exist and validate against their schemas. If gates pass, it closes the current stage in `stage_history`, sets `current_stage` to the next stage, and generates the next role's task file.

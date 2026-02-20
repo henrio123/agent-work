@@ -87,10 +87,10 @@ function renderHTML() {
   .badge-in-progress { background: #f0883e33; color: #f0883e; }
   .badge-blocked { background: #f8514933; color: #f85149; }
   .badge-review { background: #d29a2833; color: #d29a28; }
-  .badge-pm-ready { background: #da3633ff; color: #fff; }
-  .badge-arch-ready { background: #8b5cf6ff; color: #fff; }
-  .badge-dev-ready { background: #f0883eff; color: #fff; }
-  .badge-qa-ready { background: #1f6febff; color: #fff; }
+  .badge-analyze { background: #da3633ff; color: #fff; }
+  .badge-plan { background: #8b5cf6ff; color: #fff; }
+  .badge-implement { background: #f0883eff; color: #fff; }
+  .badge-validate { background: #1f6febff; color: #fff; }
   .badge-done { background: #3fb95033; color: #3fb950; }
   .role-tag { display: inline-block; padding: 1px 6px; border-radius: 4px; font-size: 0.7rem; background: #30363d; color: #c9d1d9; margin-left: 4px; }
   .blocked-icon { color: #f85149; margin-left: 4px; }

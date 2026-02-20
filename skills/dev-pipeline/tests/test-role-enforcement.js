@@ -114,7 +114,7 @@ console.log('\n--- checkRoleForStage ---');
 // ---------------------------------------------------------------------------
 
 test('returns ok with skipped when no agent_id (backward compat)', () => {
-  const result = checkRoleForStage(null, 'pm-ready');
+  const result = checkRoleForStage(null, 'analyze');
   assert(result.ok === true, 'should be ok');
   assert(result.skipped === true, 'should be skipped');
 });
@@ -140,43 +140,43 @@ test('returns ok with skipped for non-role stage (blocked)', () => {
   assert(result.ok === true, 'should be ok');
 });
 
-test('returns ok for correct role (PM at pm-ready)', () => {
+test('returns ok for correct role (Analyst at analyze)', () => {
   const agentsDir = makeTempDir();
-  initAgent('_test_pm_check', 'PM', { agentsDir });
-  const result = checkRoleForStage('_test_pm_check', 'pm-ready', { agentsDir });
+  initAgent('_test_analyst_check', 'Analyst', { agentsDir });
+  const result = checkRoleForStage('_test_analyst_check', 'analyze', { agentsDir });
   assert(result.ok === true, 'should be ok');
-  assert(result.role === 'PM', 'role should be PM');
-  assert(result.stage === 'pm-ready', 'stage should be pm-ready');
+  assert(result.role === 'Analyst', 'role should be Analyst');
+  assert(result.stage === 'analyze', 'stage should be analyze');
 });
 
-test('returns ok for correct role (Dev at dev-ready)', () => {
+test('returns ok for correct role (Dev at implement)', () => {
   const agentsDir = makeTempDir();
   initAgent('_test_dev_check', 'Dev', { agentsDir });
-  const result = checkRoleForStage('_test_dev_check', 'dev-ready', { agentsDir });
+  const result = checkRoleForStage('_test_dev_check', 'implement', { agentsDir });
   assert(result.ok === true, 'should be ok');
 });
 
-test('returns error for wrong role (DEV agent at pm-ready)', () => {
+test('returns error for wrong role (DEV agent at analyze)', () => {
   const agentsDir = makeTempDir();
   initAgent('_test_wrong_role', 'Dev', { agentsDir });
-  const result = checkRoleForStage('_test_wrong_role', 'pm-ready', { agentsDir });
+  const result = checkRoleForStage('_test_wrong_role', 'analyze', { agentsDir });
   assert(result.ok === false, 'should not be ok');
   assert(result.error.includes('Role mismatch'), `error should mention mismatch: ${result.error}`);
   assert(result.error.includes('Dev'), 'should mention agent role');
-  assert(result.error.includes('PM'), 'should mention required role');
+  assert(result.error.includes('Analyst'), 'should mention required role');
 });
 
-test('returns error for wrong role (QA agent at arch-ready)', () => {
+test('returns error for wrong role (QA agent at plan)', () => {
   const agentsDir = makeTempDir();
   initAgent('_test_qa_wrong', 'QA', { agentsDir });
-  const result = checkRoleForStage('_test_qa_wrong', 'arch-ready', { agentsDir });
+  const result = checkRoleForStage('_test_qa_wrong', 'plan', { agentsDir });
   assert(result.ok === false, 'should not be ok');
   assert(result.error.includes('Architect'), 'should mention required Architect role');
 });
 
 test('returns error for nonexistent agent', () => {
   const agentsDir = makeTempDir();
-  const result = checkRoleForStage('_nonexistent_agent', 'pm-ready', { agentsDir });
+  const result = checkRoleForStage('_nonexistent_agent', 'analyze', { agentsDir });
   assert(result.ok === false, 'should not be ok');
   assert(result.error.includes('not found'), `error should mention not found: ${result.error}`);
 });
@@ -184,10 +184,10 @@ test('returns error for nonexistent agent', () => {
 test('checks all 5 STAGE_CONFIG roles', () => {
   const agentsDir = makeTempDir();
   const roles = [
-    { stage: 'pm-ready', role: 'PM' },
-    { stage: 'arch-ready', role: 'Architect' },
-    { stage: 'dev-ready', role: 'Dev' },
-    { stage: 'qa-ready', role: 'QA' },
+    { stage: 'analyze', role: 'Analyst' },
+    { stage: 'plan', role: 'Architect' },
+    { stage: 'implement', role: 'Dev' },
+    { stage: 'validate', role: 'QA' },
     { stage: 'review', role: 'Review' },
   ];
   for (const { stage, role } of roles) {
@@ -204,7 +204,7 @@ console.log('\n--- CLI record_artifact ---');
 
 test('record_artifact rejects wrong role via --agent_id', () => {
   createWorkspaceAgent('_test_cli_dev_re', 'Dev');
-  const runFolder = createWorkspaceRun('pm-ready');
+  const runFolder = createWorkspaceRun('analyze');
   createMinimalPMBrief(runFolder);
 
   let exitedNonZero = false;
@@ -223,12 +223,12 @@ test('record_artifact rejects wrong role via --agent_id', () => {
 });
 
 test('record_artifact accepts correct role via --agent_id', () => {
-  createWorkspaceAgent('_test_cli_pm_re', 'PM');
-  const runFolder = createWorkspaceRun('pm-ready');
+  createWorkspaceAgent('_test_cli_analyst_re', 'Analyst');
+  const runFolder = createWorkspaceRun('analyze');
   createMinimalPMBrief(runFolder);
 
   const out = execFileSync('node', [DP_SCRIPT, 'record_artifact', runFolder,
-    path.join(runFolder, '10-pm-brief.json'), '--agent_id', '_test_cli_pm_re'], {
+    path.join(runFolder, '10-pm-brief.json'), '--agent_id', '_test_cli_analyst_re'], {
     encoding: 'utf8',
   });
   const parsed = JSON.parse(out);
@@ -237,7 +237,7 @@ test('record_artifact accepts correct role via --agent_id', () => {
 });
 
 test('record_artifact works without --agent_id (backward compat)', () => {
-  const runFolder = createWorkspaceRun('pm-ready');
+  const runFolder = createWorkspaceRun('analyze');
   createMinimalPMBrief(runFolder);
 
   const out = execFileSync('node', [DP_SCRIPT, 'record_artifact', runFolder,
@@ -252,7 +252,7 @@ console.log('\n--- CLI advance ---');
 
 test('advance rejects wrong role via --agent_id', () => {
   createWorkspaceAgent('_test_cli_dev_adv', 'Dev');
-  const runFolder = createWorkspaceRun('pm-ready');
+  const runFolder = createWorkspaceRun('analyze');
   createMinimalPMBrief(runFolder);
 
   let exitedNonZero = false;
@@ -269,15 +269,15 @@ test('advance rejects wrong role via --agent_id', () => {
 });
 
 test('advance accepts correct role via --agent_id', () => {
-  createWorkspaceAgent('_test_cli_pm_adv', 'PM');
-  const runFolder = createWorkspaceRun('pm-ready');
+  createWorkspaceAgent('_test_cli_analyst_adv', 'Analyst');
+  const runFolder = createWorkspaceRun('analyze');
   createMinimalPMBrief(runFolder);
 
   const out = execFileSync('node', [DP_SCRIPT, 'advance', runFolder, '--confirm',
-    '--agent_id', '_test_cli_pm_adv'], { encoding: 'utf8' });
+    '--agent_id', '_test_cli_analyst_adv'], { encoding: 'utf8' });
   const parsed = JSON.parse(out);
   assert(parsed.ok === true, 'should be ok');
-  assert(parsed.advanced_to === 'ux-ready', 'should advance to ux-ready');
+  assert(parsed.advanced_to === 'plan', 'should advance to plan');
 });
 
 // ---------------------------------------------------------------------------
@@ -286,7 +286,7 @@ console.log('\n--- CLI orchestrate_one ---');
 
 test('orchestrate_one rejects wrong role via --agent_id', () => {
   createWorkspaceAgent('_test_cli_qa_orch', 'QA');
-  const runFolder = createWorkspaceRun('pm-ready');
+  const runFolder = createWorkspaceRun('analyze');
 
   let exitedNonZero = false;
   try {
@@ -317,15 +317,15 @@ console.log('\n--- autonomous runner ---');
 // ---------------------------------------------------------------------------
 
 test('autonomous runner passes --agent_id to record_artifact', () => {
-  createWorkspaceAgent('_test_auto_pm', 'PM');
-  const runFolder = createWorkspaceRun('pm-ready');
-  fs.writeFileSync(path.join(runFolder, '31-pm-claude-task.txt'), 'test task', 'utf8');
+  createWorkspaceAgent('_test_auto_analyst', 'Analyst');
+  const runFolder = createWorkspaceRun('analyze');
+  fs.writeFileSync(path.join(runFolder, '31-analyze-task.txt'), 'test task', 'utf8');
 
   const result = runAutonomous(runFolder, {
     maxSteps: 5,
     maxAgentCalls: 1,
     agentAdapter: scaffoldAdapter,
-    agentId: '_test_auto_pm',
+    agentId: '_test_auto_analyst',
     progress: false,
   });
 
@@ -336,8 +336,8 @@ test('autonomous runner passes --agent_id to record_artifact', () => {
 
 test('autonomous runner rejects wrong role when recording', () => {
   createWorkspaceAgent('_test_auto_dev_wrong', 'Dev');
-  const runFolder = createWorkspaceRun('pm-ready');
-  fs.writeFileSync(path.join(runFolder, '31-pm-claude-task.txt'), 'test task', 'utf8');
+  const runFolder = createWorkspaceRun('analyze');
+  fs.writeFileSync(path.join(runFolder, '31-analyze-task.txt'), 'test task', 'utf8');
 
   const result = runAutonomous(runFolder, {
     maxSteps: 5,
@@ -354,8 +354,8 @@ test('autonomous runner rejects wrong role when recording', () => {
 });
 
 test('autonomous runner works without agentId (backward compat)', () => {
-  const runFolder = createWorkspaceRun('pm-ready');
-  fs.writeFileSync(path.join(runFolder, '31-pm-claude-task.txt'), 'test task', 'utf8');
+  const runFolder = createWorkspaceRun('analyze');
+  fs.writeFileSync(path.join(runFolder, '31-analyze-task.txt'), 'test task', 'utf8');
 
   const result = runAutonomous(runFolder, {
     maxSteps: 5,
