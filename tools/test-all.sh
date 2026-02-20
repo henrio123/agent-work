@@ -37,6 +37,7 @@ SUITES=(
   "$TESTS_DIR/test-schema-strictness.js"
   "$TESTS_DIR/test-drive-preflight.js"
   "$TESTS_DIR/test-backlog-update-status.js"
+  "$TESTS_DIR/test-drive-loop.js"
 )
 
 total_passed=0

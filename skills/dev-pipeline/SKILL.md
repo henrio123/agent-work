@@ -665,7 +665,44 @@ One-shot driver that picks a backlog task, ensures a run exists, and drives it o
 
 If the picked task has no `run_folder`, creates one (intake + status.json) and links it back to the backlog item. If a task pack exists in `projects/<project_id>/task-packs/<task_id>.json`, it is copied into the new run as `10-pm-brief.json` (only if the file doesn't already exist). Then calls the existing autonomous runner once.
 
+**Preflight graph validation:** Before creating or driving a run, validates the backlog graph for the picked project. If the graph is invalid (cycles, parent errors, epic completion errors), the drive is skipped and a JSON warning is emitted to stderr: `{"warning":"skipped_invalid_graph","project_id":"...","cycles":[...],"parent_errors":[...],"epic_completion_errors":[...]}`. The result includes `graph_invalid: true`.
+
 **Output:** `{ ok, action: "drive_complete"|"drive_created_run"|"drive_skipped", picked, run_folder, autonomous }`
+
+#### project-drive-loop
+
+Cron-friendly loop wrapper for project-next-drive. Runs the driver repeatedly until no eligible work remains, max iterations reached, or a `.stop` file is detected.
+
+```bash
+./tools/project-drive-loop.sh [--sleep N] [--max N] [--project <id>]
+```
+
+| Option | Env Var | Default | Description |
+|--------|---------|---------|-------------|
+| `--sleep N` | `LOOP_SLEEP_SECONDS` | 5 | Seconds between iterations |
+| `--max N` | `LOOP_MAX_ITERATIONS` | 100 | Max iterations (0 = unlimited) |
+| `--project <id>` | `LOOP_PROJECT_ID` | (all) | Restrict to one project |
+
+**Stop conditions:**
+- `WORKSPACE_ROOT/.stop` file detected → `stop_reason: "stop_file"`
+- Max iterations reached → `stop_reason: "max_iterations"`
+- No eligible work → `stop_reason: "no_eligible_work"`
+- Driver error → `stop_reason: "drive_error"`
+
+**Output (on exit):** `{"ok":true,"iterations":N,"runs_created":N,"drives_attempted":N,"stop_reason":"..."}`
+
+#### backlog-update-status
+
+Canonical tool for transitioning backlog item status. Enforces the epic completion guard: an epic cannot be marked done if any of its children are not done.
+
+```bash
+./tools/backlog-update-status.sh <project_id> <item_id> <new_status>
+```
+
+**Epic completion guard:** If the item is type `epic` and the new status is `done`, the tool reads all sibling backlog items. If any child (items with `parent_id` referencing this epic) has a status other than `done`, the transition is rejected without writing to disk.
+
+**Output (success):** `{ ok, id, project_id, old_status, new_status }`
+**Output (blocked):** `{ ok: false, error: "Cannot mark epic '...' as done: N child(ren) not done", incomplete_children: [...] }`
 
 ### Graph Validation
 
@@ -935,6 +972,10 @@ node skills/dev-pipeline/tests/test-picker-graph.js        # graph-aware picker 
 node skills/dev-pipeline/tests/test-epic-completion.js     # epic completion rule tests (13 tests)
 node skills/dev-pipeline/tests/test-blocked-reason.js      # blocked reason enforcement tests (8 tests)
 node skills/dev-pipeline/tests/test-dashboard-deps.js      # dashboard dependency chain tests (12 tests)
+node skills/dev-pipeline/tests/test-schema-strictness.js   # schema strictness validation (65 tests)
+node skills/dev-pipeline/tests/test-drive-preflight.js     # preflight graph validation tests (6 tests)
+node skills/dev-pipeline/tests/test-backlog-update-status.js # write-time epic completion guard (11 tests)
+node skills/dev-pipeline/tests/test-drive-loop.js          # drive loop wrapper tests (4 tests)
 ```
 
 ## Security
