@@ -122,7 +122,7 @@ test('respects optional fields (tags, depends_on, parent_id, phase, stop_conditi
 
   const result = createTicketAndBacklog(baseParams({
     ticket_id: 'T-OPT-01',
-    tags: ['booking', 'urgent'],
+    tags: ['feature', 'urgent'],
     depends_on: ['T-OTHER'],
     parent_id: 'EPIC-1',
     phase: 'Phase 1',
@@ -131,7 +131,7 @@ test('respects optional fields (tags, depends_on, parent_id, phase, stop_conditi
   assert(result.ok === true, `expected ok: true, got: ${result.error}`);
 
   const data = JSON.parse(fs.readFileSync(result.backlog_path, 'utf8'));
-  assert(JSON.stringify(data.tags) === '["booking","urgent"]', 'tags mismatch');
+  assert(JSON.stringify(data.tags) === '["feature","urgent"]', 'tags mismatch');
   assert(JSON.stringify(data.depends_on) === '["T-OTHER"]', 'depends_on mismatch');
   assert(data.parent_id === 'EPIC-1', 'parent_id mismatch');
   assert(data.phase === 'Phase 1', 'phase mismatch');

@@ -3,7 +3,7 @@
 
 /**
  * generate-context-pack.js — Deterministic repo scanner that produces a
- * "context pack" for a specific focus area (e.g. booking-flow).
+ * "context pack" for a specific focus area (e.g. checkout, onboarding).
  *
  * Output files (written to WORKSPACE_ROOT/.claw/context/):
  *   - <focus>.context.json   (machine-readable)
@@ -11,7 +11,9 @@
  *   - <focus>.files.txt      (newline-separated file list)
  *
  * Usage:
- *   node generate-context-pack.js --focus booking-flow [--workspace /path]
+ *   node generate-context-pack.js --focus <area> [--workspace /path] [--scan-dir <relative-dir>]
+ *
+ * The --scan-dir flag overrides the default scan directory (src/app/<focus>).
  *
  * Determinism guarantees:
  *   - All lists sorted alphabetically
@@ -86,11 +88,8 @@ function findFiles(baseDir, testFn, _rel) {
  */
 function extractImports(source) {
   const imports = new Set();
-  // ES import: import X from 'Y' or import { X } from 'Y'
   const esRe = /import\s+(?:[\s\S]*?\s+from\s+)?['"]([^'"]+)['"]/g;
-  // Dynamic import: import('Y')
   const dynRe = /import\(\s*['"]([^'"]+)['"]\s*\)/g;
-  // require('Y')
   const reqRe = /require\(\s*['"]([^'"]+)['"]\s*\)/g;
 
   let m;
@@ -112,10 +111,8 @@ function detectStatePatterns(source) {
   if (/\buseMemo\b/.test(source)) patterns.push('useMemo');
   if (/\buseCallback\b/.test(source)) patterns.push('useCallback');
   if (/\buseRef\b/.test(source)) patterns.push('useRef');
-  // State libraries
   if (/\buseStore\b|\bcreate\b.*zustand/i.test(source)) patterns.push('zustand');
   if (/\buseSelector\b|\buseDispatch\b/.test(source)) patterns.push('redux');
-  // Server actions / data fetching
   if (/['"]use server['"]/.test(source)) patterns.push('server-action');
   if (/\bfetch\s*\(/.test(source)) patterns.push('fetch');
   if (/\baxios\b/.test(source)) patterns.push('axios');
@@ -129,14 +126,11 @@ function detectStatePatterns(source) {
  */
 function extractApiCalls(source) {
   const endpoints = new Set();
-  // fetch('/api/...') or fetch(`/api/...`)
   const fetchRe = /fetch\s*\(\s*[`'"](\/api\/[^`'"]*)[`'"]/g;
   let m;
   while ((m = fetchRe.exec(source)) !== null) {
-    // Normalize template literals: replace ${...} with :param
     endpoints.add(m[1].replace(/\$\{[^}]+\}/g, ':param'));
   }
-  // Also match string concatenation patterns like '/api/appointments/' + id
   const concatRe = /fetch\s*\(\s*['"]?(\/api\/[^'"+ ]*)/g;
   while ((m = concatRe.exec(source)) !== null) {
     endpoints.add(m[1]);
@@ -146,13 +140,10 @@ function extractApiCalls(source) {
 
 /**
  * Extract i18n translation key usage from source.
- * Looks for t('key'), t.key, translations.key patterns.
  */
 function extractI18nKeys(source) {
   const keys = new Set();
-  // t('key') or t("key") or t(`key`)
   const tCallRe = /\bt\s*\(\s*['"`]([a-zA-Z_][a-zA-Z0-9_.]*?)['"`]\s*\)/g;
-  // t.key (direct property access on translation object)
   const tDotRe = /\bt\.([a-zA-Z_][a-zA-Z0-9_]*)/g;
   let m;
   while ((m = tCallRe.exec(source)) !== null) keys.add(m[1]);
@@ -165,8 +156,8 @@ function extractI18nKeys(source) {
  */
 function extractAnalyticsEvents(source) {
   const events = new Set();
-  // trackBookingEvent('event_name', ...) or trackEvent('event_name', ...)
-  const trackRe = /track(?:Booking)?Event\s*\(\s*['"`]([a-zA-Z_]+)['"`]/g;
+  // Match trackEvent, trackXxxEvent, etc.
+  const trackRe = /track\w*Event\s*\(\s*['"`]([a-zA-Z_]+)['"`]/g;
   let m;
   while ((m = trackRe.exec(source)) !== null) events.add(m[1]);
   return [...events].sort();
@@ -188,46 +179,56 @@ function detectUxPatterns(source) {
 }
 
 // ---------------------------------------------------------------------------
-// Focus: booking-flow
+// Generic focus area scanner
 // ---------------------------------------------------------------------------
 
-function scanBookingFlow(wsRoot) {
+/**
+ * Scan a focus area within a workspace.
+ *
+ * @param {string} wsRoot - workspace root
+ * @param {string} focus - focus area name (used in output metadata)
+ * @param {string} scanDir - absolute path to the directory to scan
+ */
+function scanFocusArea(wsRoot, focus, scanDir) {
   const srcDir = path.join(wsRoot, 'src');
-  const bookDir = path.join(srcDir, 'app', 'book');
 
-  if (!fs.existsSync(bookDir)) {
-    fail(`Booking flow directory not found: ${path.relative(wsRoot, bookDir)}`);
+  if (!fs.existsSync(scanDir)) {
+    fail(`Focus directory not found: ${path.relative(wsRoot, scanDir)}`);
   }
 
-  // 1. Route detection — find all page.tsx under /book
-  const bookingFiles = findFiles(bookDir, (rel, name) =>
+  // Compute the relative prefix for this scan directory
+  const scanRelPrefix = path.relative(wsRoot, scanDir).replace(/\\/g, '/');
+  // Derive the route prefix from the app-relative path
+  const appDir = path.join(srcDir, 'app');
+  const routePrefix = fs.existsSync(appDir) && scanDir.startsWith(appDir)
+    ? '/' + path.relative(appDir, scanDir).replace(/\\/g, '/')
+    : '/' + focus;
+
+  // 1. Route detection — find all page/source files under focus dir
+  const focusFiles = findFiles(scanDir, (rel, name) =>
     /\.(tsx?|jsx?)$/.test(name)
   );
 
-  // Map routes
   const routes = [];
-  const routePageMap = {};
-  for (const relFile of bookingFiles) {
+  for (const relFile of focusFiles) {
     if (path.basename(relFile) === 'page.tsx' || path.basename(relFile) === 'page.ts') {
       const routeDir = path.dirname(relFile);
-      const route = '/book' + (routeDir === '.' ? '' : '/' + routeDir.replace(/\\/g, '/'));
-      const fullPath = 'src/app/book/' + relFile;
+      const route = routePrefix + (routeDir === '.' ? '' : '/' + routeDir.replace(/\\/g, '/'));
+      const fullPath = scanRelPrefix + '/' + relFile;
       routes.push({ route, page: fullPath });
-      routePageMap[route] = fullPath;
     }
   }
   routes.sort((a, b) => a.route.localeCompare(b.route));
 
-  // 2. Component graph — for each booking file, extract imports
-  const allBookingFilePaths = bookingFiles.map(f => 'src/app/book/' + f);
+  // 2. Component graph — for each focus file, extract imports
+  const allFocusFilePaths = focusFiles.map(f => scanRelPrefix + '/' + f);
 
-  // Also find shared booking components
-  const bookComponentDir = path.join(bookDir, 'components');
-  const bookComponents = findFiles(bookComponentDir, (rel, name) =>
+  const componentDir = path.join(scanDir, 'components');
+  const focusComponents = findFiles(componentDir, (rel, name) =>
     /\.(tsx?|jsx?)$/.test(name)
-  ).map(f => 'src/app/book/components/' + f);
+  ).map(f => scanRelPrefix + '/components/' + f);
 
-  const allFiles = [...new Set([...allBookingFilePaths, ...bookComponents])].sort();
+  const allFiles = [...new Set([...allFocusFilePaths, ...focusComponents])].sort();
 
   // Analyze each file
   const fileAnalysis = {};
@@ -249,9 +250,8 @@ function scanBookingFlow(wsRoot) {
     const analyticsEvents = extractAnalyticsEvents(source);
     const uxPatterns = detectUxPatterns(source);
 
-    // Identify component imports (relative or from components/)
     const componentImports = imports.filter(i =>
-      i.startsWith('./') || i.startsWith('../') || i.startsWith('@/components') || i.startsWith('@/app/book/components')
+      i.startsWith('./') || i.startsWith('../') || i.startsWith('@/components') || i.startsWith('@/app/')
     ).sort();
 
     fileAnalysis[relFile] = {
@@ -272,22 +272,29 @@ function scanBookingFlow(wsRoot) {
     });
   }
 
-  // 3. Also scan API routes relevant to booking
+  // 3. Discover API route files by scanning endpoints called from focus area
   const apiDir = path.join(srcDir, 'app', 'api');
-  const bookingApiFiles = [];
-  const apiPatterns = ['appointments', 'customers', 'services', 'barbers', 'slots', 'shops'];
-  for (const pattern of apiPatterns) {
-    const apiSubDir = path.join(apiDir, pattern);
-    if (fs.existsSync(apiSubDir)) {
-      const files = findFiles(apiSubDir, (rel, name) => /\.(tsx?|jsx?)$/.test(name));
-      for (const f of files) {
-        bookingApiFiles.push('src/app/api/' + pattern + '/' + f);
+  const apiRouteFiles = [];
+  if (fs.existsSync(apiDir)) {
+    // Extract unique API route prefixes from detected endpoints
+    const apiPrefixes = new Set();
+    for (const ep of allApiEndpoints) {
+      const match = ep.match(/^\/api\/([^/?]+)/);
+      if (match) apiPrefixes.add(match[1]);
+    }
+    for (const prefix of [...apiPrefixes].sort()) {
+      const apiSubDir = path.join(apiDir, prefix);
+      if (fs.existsSync(apiSubDir)) {
+        const files = findFiles(apiSubDir, (rel, name) => /\.(tsx?|jsx?)$/.test(name));
+        for (const f of files) {
+          apiRouteFiles.push('src/app/api/' + prefix + '/' + f);
+        }
       }
     }
+    apiRouteFiles.sort();
   }
-  bookingApiFiles.sort();
 
-  // 4. Scan Prisma schema for booking-related models
+  // 4. Scan Prisma schema for models
   const prismaModels = [];
   const prismaSchemaPath = path.join(wsRoot, 'prisma', 'schema.prisma');
   const prismaSource = readFileIfExists(prismaSchemaPath);
@@ -300,29 +307,38 @@ function scanBookingFlow(wsRoot) {
     prismaModels.sort();
   }
 
-  // 5. Scan analytics definition file
-  const analyticsFile = path.join(srcDir, 'lib', 'analytics', 'booking.ts');
-  const analyticsSource = readFileIfExists(analyticsFile);
+  // 5. Scan for analytics definition files (any file with Event type definitions in src/lib/)
   const definedEvents = [];
-  if (analyticsSource) {
-    // Extract from type literal union
-    const eventRe = /'\s*([a-zA-Z_]+)\s*'/g;
-    const typeSection = analyticsSource.match(/BookingEventName\s*=[\s\S]*?;/);
-    if (typeSection) {
-      let m;
-      while ((m = eventRe.exec(typeSection[0])) !== null) {
-        definedEvents.push(m[1]);
+  let analyticsFilePath = null;
+  const libDir = path.join(srcDir, 'lib');
+  if (fs.existsSync(libDir)) {
+    const analyticsDir = path.join(libDir, 'analytics');
+    if (fs.existsSync(analyticsDir)) {
+      const analyticsFiles = findFiles(analyticsDir, (rel, name) => /\.(tsx?|jsx?)$/.test(name));
+      for (const af of analyticsFiles) {
+        const afSource = readFileIfExists(path.join(analyticsDir, af));
+        if (afSource) {
+          // Look for type definitions with EventName
+          const typeSection = afSource.match(/\w+EventName\s*=[\s\S]*?;/);
+          if (typeSection) {
+            const eventRe = /'\s*([a-zA-Z_]+)\s*'/g;
+            let m;
+            while ((m = eventRe.exec(typeSection[0])) !== null) {
+              definedEvents.push(m[1]);
+            }
+            analyticsFilePath = 'src/lib/analytics/' + af;
+          }
+        }
       }
     }
-    definedEvents.sort();
   }
+  definedEvents.sort();
 
   // 6. i18n — scan translation file for all available keys
+  const allTranslationKeys = [];
   const translationsFile = path.join(srcDir, 'lib', 'i18n', 'translations.ts');
   const translationsSource = readFileIfExists(translationsFile);
-  const allTranslationKeys = [];
   if (translationsSource) {
-    // Extract interface keys
     const keyRe = /^\s+(\w+)\s*:/gm;
     let m;
     while ((m = keyRe.exec(translationsSource)) !== null) {
@@ -331,29 +347,24 @@ function scanBookingFlow(wsRoot) {
     allTranslationKeys.sort();
   }
 
-  // Booking-used i18n keys vs all available
   const usedKeys = [...allI18nKeys].sort();
-  const bookingRelatedTranslationKeys = allTranslationKeys.filter(k =>
-    usedKeys.includes(k) ||
-    /book|service|barber|time|slot|confirm|appointment|cancel|reschedule|upsell/i.test(k)
-  ).sort();
 
   // Build context pack
   const commitHash = getGitCommitHash(wsRoot);
 
   const context = {
     metadata: {
-      focus: 'booking-flow',
+      focus,
       workspace: wsRoot,
       commit: commitHash,
-      files_scanned: allFiles.length + bookingApiFiles.length,
+      files_scanned: allFiles.length + apiRouteFiles.length,
     },
     routes: routes,
     files: {
-      booking_pages: allBookingFilePaths.sort(),
-      booking_components: bookComponents.sort(),
-      booking_api: bookingApiFiles,
-      analytics: analyticsSource ? ['src/lib/analytics/booking.ts'] : [],
+      focus_pages: allFocusFilePaths.sort(),
+      focus_components: focusComponents.sort(),
+      api_route_files: apiRouteFiles,
+      analytics: analyticsFilePath ? [analyticsFilePath] : [],
       i18n: translationsSource ? ['src/lib/i18n/translations.ts'] : [],
       prisma_schema: prismaSource ? ['prisma/schema.prisma'] : [],
     },
@@ -373,20 +384,17 @@ function scanBookingFlow(wsRoot) {
       ),
     },
     api_endpoints: {
-      called_from_booking: [...allApiEndpoints].sort(),
-      api_route_files: bookingApiFiles,
+      called_from_focus: [...allApiEndpoints].sort(),
+      api_route_files: apiRouteFiles,
     },
     i18n: {
-      locales: ['en', 'et', 'ru'],
-      keys_used_in_booking: usedKeys,
-      booking_related_keys: bookingRelatedTranslationKeys,
+      keys_used_in_focus: usedKeys,
       total_translation_keys: allTranslationKeys.length,
     },
     analytics: {
       defined_events: definedEvents,
-      events_used_in_booking: [...allAnalyticsEvents].sort(),
-      backend: 'console.debug only (no production backend)',
-      analytics_file: analyticsSource ? 'src/lib/analytics/booking.ts' : null,
+      events_used_in_focus: [...allAnalyticsEvents].sort(),
+      analytics_file: analyticsFilePath,
     },
     ux_signals: {
       patterns_detected: Object.fromEntries(
@@ -424,9 +432,9 @@ function generateSummaryMarkdown(ctx) {
   lines.push('');
 
   lines.push('## File Inventory');
-  lines.push(`- Booking pages: ${ctx.files.booking_pages.length}`);
-  lines.push(`- Booking components: ${ctx.files.booking_components.length}`);
-  lines.push(`- API route files: ${ctx.files.booking_api.length}`);
+  lines.push(`- Focus pages: ${ctx.files.focus_pages.length}`);
+  lines.push(`- Focus components: ${ctx.files.focus_components.length}`);
+  lines.push(`- API route files: ${ctx.files.api_route_files.length}`);
   lines.push('');
 
   lines.push('## Component Imports');
@@ -443,22 +451,20 @@ function generateSummaryMarkdown(ctx) {
   lines.push('');
 
   lines.push('## API Endpoints Called');
-  ctx.api_endpoints.called_from_booking.forEach(e => lines.push(`- ${e}`));
+  ctx.api_endpoints.called_from_focus.forEach(e => lines.push(`- ${e}`));
   lines.push('');
 
   lines.push('## i18n');
-  lines.push(`Locales: ${ctx.i18n.locales.join(', ')}`);
-  lines.push(`Keys used in booking flow: ${ctx.i18n.keys_used_in_booking.length} / ${ctx.i18n.total_translation_keys} total`);
-  if (ctx.i18n.keys_used_in_booking.length > 0) {
+  lines.push(`Keys used in focus area: ${ctx.i18n.keys_used_in_focus.length} / ${ctx.i18n.total_translation_keys} total`);
+  if (ctx.i18n.keys_used_in_focus.length > 0) {
     lines.push('');
-    ctx.i18n.keys_used_in_booking.forEach(k => lines.push(`- ${k}`));
+    ctx.i18n.keys_used_in_focus.forEach(k => lines.push(`- ${k}`));
   }
   lines.push('');
 
   lines.push('## Analytics Events');
-  lines.push(`Defined: ${ctx.analytics.defined_events.length} | Used in booking: ${ctx.analytics.events_used_in_booking.length}`);
-  lines.push(`Backend: ${ctx.analytics.backend}`);
-  ctx.analytics.events_used_in_booking.forEach(e => lines.push(`- ${e}`));
+  lines.push(`Defined: ${ctx.analytics.defined_events.length} | Used in focus: ${ctx.analytics.events_used_in_focus.length}`);
+  ctx.analytics.events_used_in_focus.forEach(e => lines.push(`- ${e}`));
   lines.push('');
 
   lines.push('## UX Signals');
@@ -486,20 +492,18 @@ function generateFileList(ctx) {
 // Main
 // ---------------------------------------------------------------------------
 
-function run(wsRoot, focus) {
-  if (!focus) fail('Missing --focus argument. Supported: booking-flow');
+function run(wsRoot, focus, scanDirOverride) {
+  if (!focus) fail('Missing --focus argument.');
 
   const clawDir = path.join(wsRoot, '.claw');
   if (!fs.existsSync(clawDir)) fail('.claw/ directory not found in workspace');
 
-  let context;
-  switch (focus) {
-    case 'booking-flow':
-      context = scanBookingFlow(wsRoot);
-      break;
-    default:
-      fail(`Unknown focus: ${focus}. Supported: booking-flow`);
-  }
+  // Determine scan directory
+  const scanDir = scanDirOverride
+    ? path.resolve(wsRoot, scanDirOverride)
+    : path.join(wsRoot, 'src', 'app', focus);
+
+  const context = scanFocusArea(wsRoot, focus, scanDir);
 
   // Write outputs
   const outDir = path.join(clawDir, 'context');
@@ -519,9 +523,9 @@ function run(wsRoot, focus) {
     commit: context.metadata.commit,
     files_scanned: context.metadata.files_scanned,
     routes: context.routes.length,
-    api_endpoints: context.api_endpoints.called_from_booking.length,
-    i18n_keys: context.i18n.keys_used_in_booking.length,
-    analytics_events: context.analytics.events_used_in_booking.length,
+    api_endpoints: context.api_endpoints.called_from_focus.length,
+    i18n_keys: context.i18n.keys_used_in_focus.length,
+    analytics_events: context.analytics.events_used_in_focus.length,
     ux_patterns: Object.keys(context.ux_signals.patterns_detected).length,
     outputs: {
       json: path.relative(wsRoot, jsonPath),
@@ -538,19 +542,23 @@ function run(wsRoot, focus) {
 if (require.main === module) {
   const args = process.argv.slice(2);
   let focus = null;
+  let scanDir = null;
 
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--focus' && i + 1 < args.length) {
       focus = args[i + 1];
       i++;
+    } else if (args[i] === '--scan-dir' && i + 1 < args.length) {
+      scanDir = args[i + 1];
+      i++;
     }
   }
 
   if (!focus) {
-    fail('Usage: generate-context-pack.js --focus booking-flow');
+    fail('Usage: generate-context-pack.js --focus <area> [--scan-dir <dir>]');
   }
 
-  run(WORKSPACE_ROOT, focus);
+  run(WORKSPACE_ROOT, focus, scanDir);
 }
 
-module.exports = { run, scanBookingFlow };
+module.exports = { run, scanFocusArea };
