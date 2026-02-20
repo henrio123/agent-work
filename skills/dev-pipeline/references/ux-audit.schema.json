@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ux-audit",
+  "description": "Reference schema for optional 15-ux-audit.json artifacts produced during UX analysis.",
+  "type": "object",
+  "required": [
+    "ticket_id", "title", "project", "audit_date", "flow_name",
+    "locales_tested", "findings", "summary"
+  ],
+  "properties": {
+    "ticket_id": { "type": "string" },
+    "title": { "type": "string" },
+    "project": { "type": "string" },
+    "audit_date": { "type": "string" },
+    "flow_name": { "type": "string" },
+    "locales_tested": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "severity", "description", "screen", "recommendation"],
+        "properties": {
+          "id": { "type": "string" },
+          "severity": {
+            "type": "string",
+            "enum": ["critical", "major", "minor", "info"]
+          },
+          "description": { "type": "string" },
+          "screen": { "type": "string" },
+          "recommendation": { "type": "string" }
+        },
+        "additionalProperties": false
+      }
+    },
+    "summary": {
+      "type": "object",
+      "required": ["critical", "major", "minor", "info"],
+      "properties": {
+        "critical": { "type": "integer" },
+        "major": { "type": "integer" },
+        "minor": { "type": "integer" },
+        "info": { "type": "integer" }
+      },
+      "additionalProperties": false
+    },
+    "accessibility": { "type": "string" },
+    "time_to_complete": { "type": "string" }
+  },
+  "additionalProperties": false
+}
