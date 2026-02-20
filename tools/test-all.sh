@@ -43,6 +43,8 @@ SUITES=(
   "$TESTS_DIR/test-apply-dev-patch.js"
   "$TESTS_DIR/test-generate-context-pack.js"
   "$TESTS_DIR/test-capability-registry.js"
+  "$TESTS_DIR/test-goal-selector.js"
+  "$TESTS_DIR/test-create-mission.js"
 )
 
 total_passed=0
