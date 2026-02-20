@@ -46,6 +46,8 @@ SUITES=(
   "$TESTS_DIR/test-goal-selector.js"
   "$TESTS_DIR/test-create-mission.js"
   "$TESTS_DIR/test-ux-audit-e2e.js"
+  "$TESTS_DIR/test-security-audit-e2e.js"
+  "$TESTS_DIR/test-performance-audit-e2e.js"
 )
 
 total_passed=0
