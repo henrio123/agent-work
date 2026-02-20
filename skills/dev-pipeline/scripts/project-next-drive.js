@@ -39,6 +39,7 @@ function safePath(p, workspaceRoot) {
 
 const { pickNextTask } = require(path.resolve(__dirname, 'project-next-pick.js'));
 const { driveOnce } = require(path.resolve(__dirname, 'run-next-drive.js'));
+const { validateBacklogGraph } = require(path.resolve(__dirname, 'validate-backlog-graph.js'));
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -188,6 +189,28 @@ function projectDriveOnce(options = {}) {
 
   const projectId = pickResult.project_id;
   const taskId = pickResult.task_id;
+
+  // Preflight: validate backlog graph before creating or driving a run
+  const graphOpts = {};
+  if (options.projectsDir) graphOpts.projectsDir = options.projectsDir;
+  const graphResult = validateBacklogGraph(projectId, graphOpts);
+  if (graphResult.ok && !graphResult.valid) {
+    const warning = {
+      warning: 'skipped_invalid_graph',
+      project_id: projectId,
+      cycles: graphResult.cycles,
+      parent_errors: graphResult.parent_errors,
+      epic_completion_errors: graphResult.epic_completion_errors,
+    };
+    process.stderr.write(JSON.stringify(warning) + '\n');
+    return {
+      ok: true,
+      action: 'drive_skipped',
+      picked: pickResult,
+      graph_invalid: true,
+    };
+  }
+
   let runFolder = pickResult.run_folder;
   let createdRun = false;
 
