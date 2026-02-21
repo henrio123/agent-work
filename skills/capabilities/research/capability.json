@@ -1,0 +1,19 @@
+{
+  "name": "research",
+  "version": "1.0.0",
+  "description": "Injects a research stage between analyze and plan. Produces structured hypotheses, methods, findings, and conclusions instead of code patches.",
+  "stages": [
+    {
+      "name": "research",
+      "after": "analyze",
+      "role": "Researcher",
+      "requiredArtifacts": ["18-research-findings.json"],
+      "taskFile": "38-research-task.txt",
+      "template": "claude-research-pack.txt"
+    }
+  ],
+  "artifactSchemas": {
+    "18-research-findings.json": "research-findings.schema.json"
+  },
+  "stageMigrations": {}
+}

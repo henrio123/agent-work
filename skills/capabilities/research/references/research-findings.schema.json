@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Research Findings",
+  "description": "Schema for 18-research-findings.json — structured research output provided by the research capability.",
+  "type": "object",
+  "required": ["ticket_id", "hypotheses", "methods", "findings", "conclusion", "open_questions"],
+  "properties": {
+    "ticket_id": { "type": "string" },
+    "hypotheses": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "statement", "status"],
+        "properties": {
+          "id": { "type": "string" },
+          "statement": { "type": "string" },
+          "status": {
+            "type": "string",
+            "enum": ["confirmed", "rejected", "inconclusive"]
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "methods": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "description", "tools_used"],
+        "properties": {
+          "id": { "type": "string" },
+          "description": { "type": "string" },
+          "tools_used": {
+            "type": "array",
+            "items": { "type": "string" }
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "hypothesis_id", "description", "evidence", "confidence"],
+        "properties": {
+          "id": { "type": "string" },
+          "hypothesis_id": { "type": "string" },
+          "description": { "type": "string" },
+          "evidence": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "confidence": {
+            "type": "string",
+            "enum": ["high", "medium", "low"]
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "conclusion": { "type": "string" },
+    "open_questions": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  },
+  "additionalProperties": false
+}

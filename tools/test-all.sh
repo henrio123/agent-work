@@ -50,6 +50,7 @@ SUITES=(
   "$TESTS_DIR/test-performance-audit-e2e.js"
   "$TESTS_DIR/test-artifact-classify.js"
   "$TESTS_DIR/test-artifact-index.js"
+  "$TESTS_DIR/test-research-e2e.js"
 )
 
 total_passed=0

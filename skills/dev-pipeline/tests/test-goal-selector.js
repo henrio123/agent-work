@@ -99,6 +99,27 @@ test('no intents detected for generic goal', () => {
   assert.deepStrictEqual(intents, []);
 });
 
+test('detects research intent from keywords', () => {
+  assert.ok(parseIntents('research caching strategies').includes('research'));
+  assert.ok(parseIntents('investigate the login failure').includes('research'));
+  assert.ok(parseIntents('explore different database options').includes('research'));
+  assert.ok(parseIntents('study the impact of pagination').includes('research'));
+  assert.ok(parseIntents('evaluate Redis vs Memcached').includes('research'));
+  assert.ok(parseIntents('compare frontend frameworks').includes('research'));
+  assert.ok(parseIntents('spike on WebSocket integration').includes('research'));
+  assert.ok(parseIntents('prototype the new API design').includes('research'));
+  assert.ok(parseIntents('run an experiment on caching').includes('research'));
+  assert.ok(parseIntents('proof of concept for SSR').includes('research'));
+  assert.ok(parseIntents('check the POC results').includes('research'));
+  assert.ok(parseIntents('feasibility analysis of migration').includes('research'));
+});
+
+test('research intent combined with other intents', () => {
+  const intents = parseIntents('research security vulnerabilities in the auth flow');
+  assert.ok(intents.includes('research'));
+  assert.ok(intents.includes('security'));
+});
+
 // =========================================================================
 // detectStack
 // =========================================================================
@@ -178,9 +199,19 @@ test('performance intent selects performance_audit capability', () => {
   assert.deepStrictEqual(caps, ['performance_audit']);
 });
 
+test('research intent selects research capability', () => {
+  const caps = selectCapabilities(['research'], { stack: 'unknown' });
+  assert.deepStrictEqual(caps, ['research']);
+});
+
 test('multiple intents select multiple capabilities (sorted)', () => {
   const caps = selectCapabilities(['security', 'ux'], { stack: 'nextjs' });
   assert.deepStrictEqual(caps, ['security_audit', 'ux_audit']);
+});
+
+test('research + security intents select both capabilities (sorted)', () => {
+  const caps = selectCapabilities(['research', 'security'], { stack: 'rust' });
+  assert.deepStrictEqual(caps, ['research', 'security_audit']);
 });
 
 test('no intents + CosmWasm stack defaults to security_audit', () => {
@@ -234,6 +265,14 @@ test('Rust/CosmWasm fixture with security goal selects security_audit', () => {
   assert.strictEqual(mission.stack.stack, 'cosmwasm');
   assert.ok(mission.intents.includes('security'));
   assert.ok(mission.capabilities.includes('security_audit'));
+});
+
+test('research goal selects research capability', () => {
+  const dir = makeFixture({ 'next.config.js': '' });
+  const mission = createMission(dir, 'research caching strategies for the API');
+  assert.strictEqual(mission.stack.stack, 'nextjs');
+  assert.ok(mission.intents.includes('research'));
+  assert.ok(mission.capabilities.includes('research'));
 });
 
 test('throws for empty goal', () => {

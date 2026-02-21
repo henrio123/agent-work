@@ -26,6 +26,7 @@ const INTENT_PATTERNS = [
   { intent: 'security', patterns: [/\bsecurit/i, /\bvulnerabilit/i, /\bowasp\b/i, /\bauth\b/i, /\bxss\b/i, /\bsql\s*inject/i, /\bcve\b/i, /\bpentest/i, /\baudit\b.*\bsecur/i, /\bsecur.*\baudit\b/i] },
   { intent: 'performance', patterns: [/\bperformanc/i, /\boptimiz/i, /\blatency\b/i, /\bthroughput\b/i, /\bbenchmark/i, /\bprofil/i, /\bslow\b/i, /\bfast\b/i, /\bspeed\b/i, /\bcache\b/i, /\bbundle\s*siz/i] },
   { intent: 'refactor', patterns: [/\brefactor/i, /\bclean\s*up\b/i, /\btechnical\s*debt\b/i, /\bcode\s*quality\b/i, /\barchitect/i, /\brestructur/i] },
+  { intent: 'research', patterns: [/\bresearch\b/i, /\binvestigat/i, /\bexplor/i, /\bstud(?:y|ies)\b/i, /\bevaluat/i, /\bcompar/i, /\bspike\b/i, /\bprototyp/i, /\bexperiment/i, /\bproof\s*of\s*concept\b/i, /\bpoc\b/i, /\bfeasibilit/i] },
 ];
 
 /**
@@ -120,6 +121,7 @@ const INTENT_CAPABILITY_MAP = {
   'ux': 'ux_audit',
   'security': 'security_audit',
   'performance': 'performance_audit',
+  'research': 'research',
 };
 
 // Stack-specific capability overrides or additions
