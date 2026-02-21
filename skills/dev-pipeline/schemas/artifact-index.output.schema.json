@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "artifact-index output",
+  "description": "Output schema for ./tools/artifact-index.sh",
+  "type": "object",
+  "required": ["ok", "generated_at", "artifacts", "summary"],
+  "additionalProperties": false,
+  "properties": {
+    "ok": { "type": "boolean", "const": true },
+    "generated_at": { "type": "string" },
+    "artifacts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "artifact_file", "semantic_type", "stage", "run_id",
+          "project_id", "created_at", "size_bytes", "schema_file", "capability"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "artifact_file": { "type": "string" },
+          "semantic_type": {
+            "type": "string",
+            "enum": [
+              "analysis", "audit", "design", "implementation",
+              "metadata", "review-verdict", "task", "test-result"
+            ]
+          },
+          "stage": { "type": ["string", "null"] },
+          "run_id": { "type": "string" },
+          "project_id": { "type": "string" },
+          "created_at": { "type": "string" },
+          "size_bytes": { "type": "number", "minimum": 0 },
+          "schema_file": { "type": ["string", "null"] },
+          "capability": { "type": ["string", "null"] }
+        }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "required": ["total_artifacts", "by_type", "by_project", "runs_scanned"],
+      "additionalProperties": false,
+      "properties": {
+        "total_artifacts": { "type": "number", "minimum": 0 },
+        "by_type": {
+          "type": "object",
+          "additionalProperties": { "type": "number", "minimum": 0 }
+        },
+        "by_project": {
+          "type": "object",
+          "additionalProperties": { "type": "number", "minimum": 0 }
+        },
+        "runs_scanned": { "type": "number", "minimum": 0 }
+      }
+    }
+  }
+}

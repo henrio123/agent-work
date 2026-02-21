@@ -42,7 +42,7 @@
       "description": "ISO 8601 timestamp when the artifact was created."
     },
     "size_bytes": {
-      "type": "integer",
+      "type": "number",
       "minimum": 0,
       "description": "File size in bytes."
     },
