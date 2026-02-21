@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Artifact Classification",
+  "description": "Semantic classification of a pipeline artifact.",
+  "type": "object",
+  "required": ["artifact_file", "semantic_type", "stage", "run_id", "project_id", "created_at"],
+  "additionalProperties": false,
+  "properties": {
+    "artifact_file": {
+      "type": "string",
+      "description": "Filename of the artifact (e.g. 10-pm-brief.json)."
+    },
+    "semantic_type": {
+      "type": "string",
+      "enum": [
+        "analysis",
+        "audit",
+        "design",
+        "implementation",
+        "metadata",
+        "review-verdict",
+        "task",
+        "test-result"
+      ],
+      "description": "Semantic category of the artifact."
+    },
+    "stage": {
+      "type": "string",
+      "description": "Pipeline stage that produced this artifact."
+    },
+    "run_id": {
+      "type": "string",
+      "description": "Run folder name (e.g. 20260221_120000_TICKET-1)."
+    },
+    "project_id": {
+      "type": "string",
+      "description": "Project that owns this run."
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp when the artifact was created."
+    },
+    "size_bytes": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "File size in bytes."
+    },
+    "schema_file": {
+      "type": ["string", "null"],
+      "description": "Schema filename used for validation, or null if none."
+    },
+    "capability": {
+      "type": ["string", "null"],
+      "description": "Capability name that provides this artifact, or null for core."
+    }
+  }
+}
