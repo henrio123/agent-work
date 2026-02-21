@@ -170,9 +170,12 @@ function projectDriveOnce(options = {}) {
   const quiet = options.quiet !== false; // quiet by default
   const agentAdapter = options.agentAdapter || undefined;
   const workspaceRoot = options.workspaceRoot || WORKSPACE_ROOT;
+  const projectIdFilter = options.projectId || undefined;
 
   // Step 1: Pick task
-  const pickResult = pickNextTask(options);
+  const pickOpts = { ...options };
+  if (projectIdFilter) pickOpts.projectId = projectIdFilter;
+  const pickResult = pickNextTask(pickOpts);
   if (!pickResult.ok) {
     return { ok: false, error: pickResult.error };
   }
@@ -273,6 +276,8 @@ function projectDriveOnce(options = {}) {
   // Run autonomous
   const autoOpts = { maxSteps, maxAgentCalls, dryRun, auditLog, progress: !quiet };
   if (agentAdapter) autoOpts.agentAdapter = agentAdapter;
+  // Phase 5: Pass recommended_agent from picker into runner
+  if (pickResult.recommended_agent) autoOpts.agentId = pickResult.recommended_agent;
   const autoResult = runAutonomous(runFolder, autoOpts);
 
   // Safety verify (ignore test dirs and the newly created run)
@@ -336,13 +341,35 @@ function projectDriveOnce(options = {}) {
     // Non-fatal
   }
 
-  return {
+  // Phase 5: Post-run lifecycle hooks (non-fatal)
+  let postRun = null;
+  try {
+    const { runPostRunHooks } = require(path.resolve(__dirname, 'post-run-hooks.js'));
+    const hookResult = runPostRunHooks({
+      workspaceRoot,
+      runFolder,
+      projectId,
+      agentId: pickResult.recommended_agent || undefined,
+    });
+    if (hookResult.ok && hookResult.action === 'post_run_hooks_complete') {
+      postRun = {
+        self_evaluation: hookResult.self_evaluation,
+        gaps_found: hookResult.gaps,
+      };
+    }
+  } catch {
+    // Non-fatal — post-run hooks should never fail the drive
+  }
+
+  const driveResult = {
     ok: true,
     action: createdRun ? 'drive_created_run' : 'drive_complete',
     picked: pickResult,
     run_folder: runFolder,
     autonomous: autoResult,
   };
+  if (postRun) driveResult.post_run = postRun;
+  return driveResult;
 }
 
 // ---------------------------------------------------------------------------

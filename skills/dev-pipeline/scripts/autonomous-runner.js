@@ -33,6 +33,7 @@ const {
 
 const DP_PATH = path.resolve(__dirname, 'dev-pipeline.js');
 const AGENT_MEMORY_PATH = path.resolve(__dirname, 'agent-memory.js');
+const PROMPT_CONTEXT_PATH = path.resolve(__dirname, 'prompt-context.js');
 
 const AUDIT_FILENAME = 'autonomous-audit.jsonl';
 const STOP_FILENAME = '.stop';
@@ -202,10 +203,38 @@ function claudeCodeAdapter(context) {
     return `- ${a}: required fields: [${required}]`;
   }).join('\n');
 
-  const prompt = [
-    `You are a ${context.role} agent working on ticket ${context.status.ticket_id}: ${context.status.title}`,
+  // Phase 5: Build adaptive prompt context (memory + workflow suggestions)
+  let promptContextText = '';
+  try {
+    const { buildPromptContext } = require(PROMPT_CONTEXT_PATH);
+    const ctxResult = buildPromptContext({
+      workspaceRoot: WORKSPACE_ROOT,
+      projectId: context.status.project,
+      agentId: context.agentId || null,
+    });
+    if (ctxResult.ok && ctxResult.context_text) {
+      promptContextText = ctxResult.context_text;
+    }
+  } catch {
+    // Non-fatal — prompt context is optional
+  }
+
+  const agentIdentity = context.agentId
+    ? `You are agent ${context.agentId}, a ${context.role} agent working on ticket ${context.status.ticket_id}: ${context.status.title}`
+    : `You are a ${context.role} agent working on ticket ${context.status.ticket_id}: ${context.status.title}`;
+
+  const promptParts = [
+    agentIdentity,
     `Project: ${context.status.project}`,
     `Current stage: ${context.status.current_stage}`,
+  ];
+
+  if (promptContextText) {
+    promptParts.push('');
+    promptParts.push(promptContextText);
+  }
+
+  promptParts.push(
     '',
     'Produce the following artifact drafts:',
     schemaDescriptions,
@@ -219,7 +248,9 @@ function claudeCodeAdapter(context) {
     '- Do not create any directories',
     '- Do not modify any existing files',
     `- Use ticket_id: "${context.status.ticket_id}" in all artifacts that require it`,
-  ].join('\n');
+  );
+
+  const prompt = promptParts.join('\n');
 
   try {
     execFileSync('claude', ['-p', prompt, '--output-format', 'json', '--max-turns', '5'], {
@@ -509,6 +540,7 @@ function runAutonomous(runFolder, options = {}) {
           missingArtifacts,
           currentStage,
           status,
+          agentId,
         };
 
         // Invoke agent

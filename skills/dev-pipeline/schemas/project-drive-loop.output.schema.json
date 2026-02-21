@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "project-drive-loop output",
+  "description": "Output schema for the JS drive loop — adaptive loop with hooks, project filter, and stop conditions.",
+  "type": "object",
+  "required": ["ok", "iterations", "runs_created", "drives_attempted", "stop_reason"],
+  "additionalProperties": false,
+  "properties": {
+    "ok": { "type": "boolean", "const": true },
+    "iterations": { "type": "number", "minimum": 0 },
+    "runs_created": { "type": "number", "minimum": 0 },
+    "drives_attempted": { "type": "number", "minimum": 0 },
+    "stop_reason": {
+      "type": "string",
+      "enum": ["stop_file", "max_iterations", "no_eligible_work", "drive_error", "max_consecutive_idle", "signal"]
+    },
+    "hook_results_summary": {
+      "type": "object",
+      "required": ["hooks_run", "hooks_failed"],
+      "additionalProperties": false,
+      "properties": {
+        "hooks_run": { "type": "number", "minimum": 0 },
+        "hooks_failed": { "type": "number", "minimum": 0 }
+      }
+    },
+    "project_filter": { "type": ["string", "null"] },
+    "last_sleep_ms": { "type": "number", "minimum": 0 }
+  }
+}

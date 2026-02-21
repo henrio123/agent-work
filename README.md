@@ -68,7 +68,8 @@ A stage advances only when all required artifacts exist and pass schema validati
 | **Level 1** | Manual AI usage | Past |
 | **Level 2** | Structured multi-agent execution | Done |
 | **Level 3** | Autonomous org with memory | Done |
-| **Level 4** | Self-improving AI organization | **Current** |
+| **Level 4** | Self-improving AI organization | Done |
+| **Level 5** | Closed-loop adaptive execution | **Current** |
 
 ### Level 2 (Current) — What's Done
 
@@ -121,6 +122,18 @@ The system provides deterministic multi-agent pipeline execution with full schem
 | Autonomous ticket creation | System identifies gaps and creates tickets without human intervention | DONE |
 | Adaptive role allocation | Agent assignment optimized based on workload and historical performance | DONE |
 
+### Level 5 — What's Done
+
+**Phase 5 (Closed-Loop Adaptive Execution) — Complete.**
+
+| Milestone | Description | Status |
+|-----------|-------------|--------|
+| Post-run lifecycle hooks | Self-eval + gap scan auto-triggered after every completed run | DONE |
+| Adaptive agent prompt | Agent memory and workflow suggestions injected into Claude Code prompt | DONE |
+| Agent assignment actuation | `recommended_agent` flows from picker through driver to runner and prompt | DONE |
+| Adaptive JS drive loop | Adaptive sleep, post-run hooks, project filtering, graceful stop conditions | DONE |
+| Dashboard Phase 5 fields | Last evaluation, hooks status, loop status in dashboard summary | DONE |
+
 ---
 
 ## Features
@@ -159,7 +172,12 @@ The system provides deterministic multi-agent pipeline execution with full schem
 - Gap scanner with auto-create backlog items (idempotent)
 - Agent performance profiling with recommended_agent in picker
 - Dashboard Phase 4 summary (performance, suggestions, gaps)
-- GitHub Actions CI (980+ tests, 53 suites)
+- Post-run lifecycle hooks (auto self-eval + gap scan after every run)
+- Adaptive agent prompt (memory + workflow suggestions injected into Claude Code prompt)
+- Agent assignment actuation (recommended_agent flows pick → drive → runner → prompt)
+- Adaptive JS drive loop (adaptive sleep, hooks, project filter, graceful stop)
+- Dashboard Phase 5 summary (last evaluation, hooks status, loop status)
+- GitHub Actions CI (1040+ tests, 58 suites)
 - Zero external npm dependencies
 
 ---
@@ -175,7 +193,7 @@ The system provides deterministic multi-agent pipeline execution with full schem
 ├── skills/
 │   ├── dev-pipeline/
 │   │   ├── SKILL.md                 # Comprehensive operational reference
-│   │   ├── scripts/                 # 30+ Node.js implementation files
+│   │   ├── scripts/                 # 33+ Node.js implementation files
 │   │   │   ├── dev-pipeline.js      # Core pipeline engine (state machine, schema validation, stage gates)
 │   │   │   ├── capability-registry.js # Capability loader, stage injection, template/schema resolution
 │   │   │   ├── goal-selector.js     # Deterministic intent + stack → capability mapping
@@ -185,9 +203,9 @@ The system provides deterministic multi-agent pipeline execution with full schem
 │   │   │   ├── project-next-drive.js # One-shot project driver with preflight validation
 │   │   │   ├── validate-backlog-graph.js  # DAG validator (cycles, parents, epic completion)
 │   │   │   └── ...                  # Index, dashboard, task-pack, ticket-store, agent-state
-│   │   ├── schemas/                 # 22 JSON Schema files (input + output schemas)
+│   │   ├── schemas/                 # 26 JSON Schema files (input + output schemas)
 │   │   ├── references/              # 7 artifact schemas (pm-brief, arch-design, dev-notes, etc.)
-│   │   └── tests/                   # 53 test suites, ~980 tests
+│   │   └── tests/                   # 58 test suites, ~1040 tests
 │   └── capabilities/               # Pluggable capability extensions
 │       ├── ux_audit/                # UX audit stage (after analyze)
 │       ├── security_audit/          # Security audit stage (after analyze)
@@ -227,7 +245,7 @@ The system provides deterministic multi-agent pipeline execution with full schem
 bash tools/test-all.sh
 ```
 
-Expected output: `TOTAL: N passed, 0 failed (53 suites)` (N ~980)
+Expected output: `TOTAL: N passed, 0 failed (58 suites)` (N ~1040)
 
 ### Initialize a Target Repo
 
@@ -333,7 +351,7 @@ Timestamps and git HEAD are the only sources of non-determinism.
 
 ### Testing Strategy
 
-- **53 test suites** with **~980 individual tests** covering:
+- **58 test suites** with **~1040 individual tests** covering:
   - State machine transitions and gate enforcement
   - Schema validation round-trips for all artifact types
   - Picker determinism and graph-aware constraint enforcement
@@ -451,7 +469,7 @@ git status
 - [x] Pluggable capability system with manifest-driven stage injection
 - [x] Goal-driven mission layer (deterministic intent + stack detection)
 - [x] 3 capabilities: UX audit, security audit, performance audit
-- [x] GitHub Actions CI (980+ tests, 53 suites, 0 failures)
+- [x] GitHub Actions CI (1040+ tests, 58 suites, 0 failures)
 - [x] `additionalProperties: false` on all schemas (governance rule enforced)
 - [x] Cron-friendly drive loop with safe stop
 - [x] Zero external dependencies
@@ -465,3 +483,8 @@ git status
 - [x] Phase 4: Workflow suggestions (recurring QA failures, bottlenecks, rejection rates, quality trends)
 - [x] Phase 4: Gap scanner with auto-create backlog items
 - [x] Phase 4: Agent performance profiles with recommended_agent in picker
+- [x] Phase 5: Post-run lifecycle hooks (auto self-eval + gap scan)
+- [x] Phase 5: Adaptive agent prompt (memory + suggestions in Claude Code prompt)
+- [x] Phase 5: Agent assignment actuation (recommended_agent pick → drive → runner)
+- [x] Phase 5: Adaptive JS drive loop (sleep, hooks, project filter, stop conditions)
+- [x] Phase 5: Dashboard closed-loop status fields

@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "post-run-hooks output",
+  "description": "Output schema for post-run lifecycle hooks — auto-triggered self-evaluation and gap scanning after a run completes.",
+  "type": "object",
+  "required": ["ok", "action"],
+  "additionalProperties": false,
+  "properties": {
+    "ok": { "type": "boolean" },
+    "action": {
+      "type": "string",
+      "enum": ["post_run_hooks_complete", "post_run_hooks_skipped"]
+    },
+    "skip_reason": { "type": "string" },
+    "self_evaluation": {
+      "type": "object",
+      "required": ["quality_score", "deviations_count", "suggestions_count"],
+      "additionalProperties": false,
+      "properties": {
+        "quality_score": { "type": ["number", "null"] },
+        "deviations_count": { "type": "number", "minimum": 0 },
+        "suggestions_count": { "type": "number", "minimum": 0 },
+        "memory_written": { "type": "boolean" },
+        "error": { "type": "string" }
+      }
+    },
+    "gaps": {
+      "type": "object",
+      "required": ["total_found", "auto_created_count"],
+      "additionalProperties": false,
+      "properties": {
+        "total_found": { "type": "number", "minimum": 0 },
+        "auto_created_count": { "type": "number", "minimum": 0 },
+        "error": { "type": "string" }
+      }
+    }
+  }
+}

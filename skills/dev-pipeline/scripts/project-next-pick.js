@@ -164,6 +164,7 @@ function classifyTask(entry, workspaceRoot, projectId, siblingItems) {
 // ---------------------------------------------------------------------------
 function pickNextTask(options = {}) {
   const workspaceRoot = options.workspaceRoot || WORKSPACE_ROOT;
+  const projectId = options.projectId || null;
   const indexResult = buildProjectIndex(options);
   if (!indexResult.ok) {
     return { ok: false, error: indexResult.error };
@@ -172,6 +173,9 @@ function pickNextTask(options = {}) {
   const candidates = [];
 
   for (const project of indexResult.projects) {
+    // Phase 5: filter by projectId if specified
+    if (projectId && project.project_id !== projectId) continue;
+
     for (const entry of project.backlog) {
       const bucket = classifyTask(entry, workspaceRoot, project.project_id, project.backlog);
       if (bucket === null) continue;

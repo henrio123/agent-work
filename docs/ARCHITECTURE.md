@@ -481,6 +481,45 @@ Make the system learn from its own execution history, identify inefficiencies, f
 3. **SC-3**: The gap scanner identifies unresolved issues from completed runs and can auto-create backlog items via `createTicketAndBacklog`. Implemented in `gap-scanner.js`. Tested by `test-gap-scanner.js` (12 tests).
 4. **SC-4**: Agent performance profiles are computed from stage_history and QA/review data. The picker output includes a `recommended_agent` field. Implemented in `agent-performance.js` + `project-next-pick.js`. Tested by `test-agent-performance.js` (13 tests).
 
+## Phase 5 — Closed-Loop Adaptive Execution
+
+### Purpose
+
+Close the observation-to-action loops opened in Phase 4. Where Phase 4 built measurement infrastructure, Phase 5 makes the system act on what it observes: auto-triggering evaluations, injecting insights into agent prompts, actuating agent assignment recommendations, and replacing the static bash loop with an adaptive JS loop.
+
+### Deliverables
+
+- **Post-Run Lifecycle Hooks** (`post-run-hooks.js`): After `runAutonomous()` completes inside `projectDriveOnce()`, automatically runs self-evaluation and gap scanning. Both hooks are non-fatal. Only fires for terminal run stages.
+- **Adaptive Agent Prompt** (`prompt-context.js`): Assembles agent memory entries (evaluations, lessons, warnings) and workflow suggestions into a structured text block injected into the Claude Code prompt. Agents now learn from prior run insights.
+- **Agent Assignment Actuation**: `recommended_agent` from the picker flows through drive → runner → prompt. Agent-specific memory is retrieved via `buildPromptContext()`. Agent identity is included in the prompt.
+- **Adaptive Drive Loop** (`project-drive-loop.js`): JS replacement for the bash drive loop. Adaptive sleep (1s after work, exponential backoff to 30s on idle, 60s on errors). Post-run hooks. Project filtering via `--project <id>`. Stop conditions: .stop file, max iterations, max consecutive idle, SIGTERM/SIGINT.
+- **Dashboard Phase 5 Fields**: `last_self_evaluation` (quality score from most recent evaluation), `post_run_hooks_enabled`, `adaptive_loop_status`.
+
+### Stop Condition
+
+1. **SC-1**: After a run completes, self-evaluation and gap scanning are automatically triggered. The evaluation is written to agent memory and gaps are auto-created as backlog items. Implemented in `post-run-hooks.js` + `project-next-drive.js`. Tested by `test-post-run-hooks.js` (12 tests).
+2. **SC-2**: The autonomous runner's prompt includes relevant agent memory (prior evaluations, lessons) and workflow suggestions for the current project. Implemented in `prompt-context.js` + `autonomous-runner.js`. Tested by `test-prompt-context.js` (11 tests).
+3. **SC-3**: `recommended_agent` from the picker is passed through to the autonomous runner and used to select the agent adapter. Implemented in `project-next-drive.js` + `autonomous-runner.js`. Tested by `test-agent-actuation.js` (6 tests).
+4. **SC-4**: The drive loop is a JS module with adaptive sleep, post-run hooks, and project filtering. Implemented in `project-drive-loop.js`. Tested by `test-drive-loop-js.js` (12 tests).
+
+### Closed-Loop Diagram
+
+```
+  project-drive-loop.js (adaptive sleep, hooks)
+    │
+    ├─→ project-next-pick.js (projectId filter)
+    │     └─→ recommended_agent from agent-performance.js
+    │
+    ├─→ project-next-drive.js
+    │     ├─→ runAutonomous(agentId from recommended_agent)
+    │     │     └─→ claudeCodeAdapter + buildPromptContext(memory + suggestions)
+    │     └─→ runPostRunHooks (self-eval + gap scan)
+    │           ├─→ selfEvaluateAndRecord → agent memory
+    │           └─→ scanGaps(autoCreate) → backlog items
+    │
+    └─→ adaptive sleep: 1s after work, backoff on idle, 60s on error
+```
+
 ## Evolution Governance Rules
 
 1. Only one phase may be active at a time. Work on Phase N+1 must not begin until Phase N meets all its stop conditions.

@@ -158,7 +158,21 @@
           }
         },
         "workflow_suggestions_count": { "type": "number", "minimum": 0 },
-        "pending_gaps_count": { "type": "number", "minimum": 0 }
+        "pending_gaps_count": { "type": "number", "minimum": 0 },
+        "last_self_evaluation": {
+          "type": ["object", "null"],
+          "properties": {
+            "quality_score": { "type": ["number", "null"] },
+            "run_folder": { "type": "string" },
+            "agent_id": { "type": ["string", "null"] }
+          },
+          "additionalProperties": false
+        },
+        "post_run_hooks_enabled": { "type": "boolean" },
+        "adaptive_loop_status": {
+          "type": "string",
+          "enum": ["available", "unavailable"]
+        }
       }
     }
   }

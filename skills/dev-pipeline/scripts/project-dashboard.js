@@ -293,6 +293,72 @@ function buildDashboard(options = {}) {
     }
   } catch { /* Non-fatal */ }
 
+  // Phase 5: last self-evaluation, post-run hooks status, adaptive loop status
+  summary.last_self_evaluation = null;
+  summary.post_run_hooks_enabled = false;
+  summary.adaptive_loop_status = 'unavailable';
+
+  // Check for post-run hooks module availability
+  try {
+    require(path.resolve(__dirname, 'post-run-hooks.js'));
+    summary.post_run_hooks_enabled = true;
+  } catch { /* Not available */ }
+
+  // Check for adaptive loop module availability
+  try {
+    require(path.resolve(__dirname, 'project-drive-loop.js'));
+    summary.adaptive_loop_status = 'available';
+  } catch { /* Not available */ }
+
+  // Find last self-evaluation from agent memory
+  try {
+    const memMod = getAgentMemoryModule();
+    const agentsDir = path.join(workspaceRoot, '.claw', 'agents');
+    if (fs.existsSync(agentsDir)) {
+      const agentDirs = fs.readdirSync(agentsDir, { withFileTypes: true })
+        .filter((e) => e.isDirectory())
+        .map((e) => e.name);
+
+      let latestEval = null;
+      let latestEvalAgent = null;
+
+      for (const agentId of agentDirs) {
+        try {
+          const mem = memMod.readMemory({
+            agentId,
+            filterProject: projectId,
+            filterType: 'evaluation',
+            workspaceRoot,
+            limit: 1,
+          });
+          if (mem.ok && mem.entries && mem.entries.length > 0) {
+            const entry = mem.entries[mem.entries.length - 1];
+            if (!latestEval || entry.timestamp > latestEval.timestamp) {
+              latestEval = entry;
+              latestEvalAgent = agentId;
+            }
+          }
+        } catch { /* Skip */ }
+      }
+
+      if (latestEval) {
+        // Parse quality score from content like "Self-evaluation: score=0.85, ..."
+        let qualityScore = null;
+        const scoreMatch = latestEval.content && latestEval.content.match(/score=([\d.]+)/);
+        if (scoreMatch) {
+          qualityScore = parseFloat(scoreMatch[1]);
+          if (isNaN(qualityScore)) qualityScore = null;
+        }
+
+        summary.last_self_evaluation = {
+          quality_score: qualityScore,
+          run_folder: latestEval.run_id || '',
+          agent_id: latestEvalAgent,
+        };
+      }
+    }
+  } catch { /* Non-fatal */ }
+
   return {
     ok: true,
     generated_at: new Date().toISOString(),

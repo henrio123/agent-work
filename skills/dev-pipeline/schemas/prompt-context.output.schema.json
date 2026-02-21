@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "prompt-context output",
+  "description": "Output schema for prompt context builder — assembles agent memory and workflow suggestions for injection into autonomous runner prompts.",
+  "type": "object",
+  "required": ["ok", "action"],
+  "additionalProperties": false,
+  "properties": {
+    "ok": { "type": "boolean" },
+    "action": {
+      "type": "string",
+      "enum": ["context_built", "no_context"]
+    },
+    "project_id": { "type": "string" },
+    "agent_id": { "type": ["string", "null"] },
+    "context_text": { "type": "string" },
+    "context_length": { "type": "number", "minimum": 0 },
+    "memory_entries_used": { "type": "number", "minimum": 0 },
+    "workflow_suggestions_used": { "type": "number", "minimum": 0 }
+  }
+}

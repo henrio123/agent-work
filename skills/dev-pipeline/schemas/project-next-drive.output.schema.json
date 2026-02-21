@@ -42,6 +42,34 @@
         "trace": { "type": "array" }
       },
       "additionalProperties": false
-    }
+    },
+    "post_run": {
+      "type": "object",
+      "required": ["self_evaluation", "gaps_found"],
+      "additionalProperties": false,
+      "properties": {
+        "self_evaluation": {
+          "type": ["object", "null"],
+          "properties": {
+            "quality_score": { "type": ["number", "null"] },
+            "deviations_count": { "type": "number", "minimum": 0 },
+            "suggestions_count": { "type": "number", "minimum": 0 },
+            "memory_written": { "type": "boolean" },
+            "error": { "type": "string" }
+          },
+          "additionalProperties": false
+        },
+        "gaps_found": {
+          "type": ["object", "null"],
+          "properties": {
+            "total_found": { "type": "number", "minimum": 0 },
+            "auto_created_count": { "type": "number", "minimum": 0 },
+            "error": { "type": "string" }
+          },
+          "additionalProperties": false
+        }
+      }
+    },
+    "graph_invalid": { "type": "boolean" }
   }
 }
