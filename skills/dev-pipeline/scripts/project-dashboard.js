@@ -24,8 +24,26 @@ const WORKSPACE_ROOT = process.env.WORKSPACE_ROOT || path.resolve(os.homedir(), 
 const STOP_FILENAME = '.stop';
 const AUDIT_FILENAME = 'autonomous-audit.jsonl';
 
-// Agent state for role resolution (lazy-loaded)
+// Lazy-loaded modules
 let _agentStateModule = null;
+let _artifactIndexModule = null;
+let _agentMemoryModule = null;
+
+function getArtifactIndexModule() {
+  if (!_artifactIndexModule) {
+    _artifactIndexModule = require(path.resolve(__dirname, 'artifact-index.js'));
+  }
+  return _artifactIndexModule;
+}
+
+function getAgentMemoryModule() {
+  if (!_agentMemoryModule) {
+    _agentMemoryModule = require(path.resolve(__dirname, 'agent-memory.js'));
+  }
+  return _agentMemoryModule;
+}
+
+// Agent state for role resolution (lazy-loaded)
 function getAgentStateModule() {
   if (!_agentStateModule) {
     _agentStateModule = require(path.resolve(__dirname, 'agent-state.js'));
@@ -179,6 +197,9 @@ function buildDashboard(options = {}) {
     };
   });
 
+  // Build knowledge state from artifact index and agent memory
+  const knowledgeState = buildKnowledgeState(projectId, workspaceRoot);
+
   projects.push({
     project_id: projectId,
     title: projectMeta.title || projectId,
@@ -186,8 +207,17 @@ function buildDashboard(options = {}) {
     totals,
     backlog: backlogItems,
     workload_by_agent: workloadByAgent,
+    knowledge_state: knowledgeState,
   });
   summary.projects = 1;
+
+  // Aggregate knowledge_summary from per-project knowledge_state
+  summary.knowledge_summary = {
+    total_artifacts: knowledgeState.total_artifacts,
+    total_research_findings: knowledgeState.research_findings_count,
+    total_memory_entries: knowledgeState.memory_entry_count,
+    artifact_counts_by_type: { ...knowledgeState.artifact_counts_by_type },
+  };
 
   // Ensure deterministic key ordering in workload_summary
   summary.workload_summary.runs_per_role = sortObjectKeys(summary.workload_summary.runs_per_role);
@@ -199,6 +229,97 @@ function buildDashboard(options = {}) {
     projects,
     summary,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Build knowledge state for a project
+// ---------------------------------------------------------------------------
+function buildKnowledgeState(projectId, workspaceRoot) {
+  const result = {
+    artifact_counts_by_type: {},
+    research_findings_count: 0,
+    memory_entry_count: 0,
+    total_artifacts: 0,
+  };
+
+  // 1. Scan artifact index for this project
+  try {
+    const indexMod = getArtifactIndexModule();
+    const index = indexMod.buildArtifactIndex({
+      workspaceRoot,
+      filterProject: projectId,
+    });
+    if (index.ok) {
+      result.total_artifacts = index.artifacts.length;
+      for (const art of index.artifacts) {
+        const t = art.semantic_type || 'unknown';
+        result.artifact_counts_by_type[t] = (result.artifact_counts_by_type[t] || 0) + 1;
+      }
+    }
+  } catch {
+    // Non-fatal — missing index module or no runs
+  }
+
+  // 2. Count research findings (artifacts with type 18-research-findings.json)
+  try {
+    const runsDir = path.join(workspaceRoot, '.claw', 'runs');
+    if (fs.existsSync(runsDir)) {
+      const runDirs = fs.readdirSync(runsDir, { withFileTypes: true })
+        .filter((e) => e.isDirectory())
+        .map((e) => e.name);
+
+      for (const runName of runDirs) {
+        const runDir = path.join(runsDir, runName);
+        const statusPath = path.join(runDir, 'status.json');
+        if (!fs.existsSync(statusPath)) continue;
+
+        try {
+          const status = JSON.parse(fs.readFileSync(statusPath, 'utf8'));
+          if (status.project !== projectId) continue;
+        } catch { continue; }
+
+        const findingsPath = path.join(runDir, '18-research-findings.json');
+        if (fs.existsSync(findingsPath)) {
+          result.research_findings_count++;
+        }
+      }
+    }
+  } catch {
+    // Non-fatal
+  }
+
+  // 3. Count agent memory entries for this project
+  try {
+    const memMod = getAgentMemoryModule();
+    const agentsDir = path.join(workspaceRoot, '.claw', 'agents');
+    if (fs.existsSync(agentsDir)) {
+      const agentDirs = fs.readdirSync(agentsDir, { withFileTypes: true })
+        .filter((e) => e.isDirectory())
+        .map((e) => e.name);
+
+      for (const agentId of agentDirs) {
+        try {
+          const mem = memMod.readMemory({
+            agentId,
+            filterProject: projectId,
+            workspaceRoot,
+          });
+          if (mem.ok) {
+            result.memory_entry_count += mem.total_entries;
+          }
+        } catch {
+          // Skip agents with unreadable memory
+        }
+      }
+    }
+  } catch {
+    // Non-fatal
+  }
+
+  // Sort artifact_counts_by_type keys for determinism
+  result.artifact_counts_by_type = sortObjectKeys(result.artifact_counts_by_type);
+
+  return result;
 }
 
 // ---------------------------------------------------------------------------

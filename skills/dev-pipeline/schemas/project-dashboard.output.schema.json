@@ -45,6 +45,20 @@
               }
             }
           },
+          "knowledge_state": {
+            "type": "object",
+            "required": ["artifact_counts_by_type", "research_findings_count", "memory_entry_count", "total_artifacts"],
+            "additionalProperties": false,
+            "properties": {
+              "artifact_counts_by_type": {
+                "type": "object",
+                "additionalProperties": { "type": "number", "minimum": 0 }
+              },
+              "research_findings_count": { "type": "number", "minimum": 0 },
+              "memory_entry_count": { "type": "number", "minimum": 0 },
+              "total_artifacts": { "type": "number", "minimum": 0 }
+            }
+          },
           "backlog": {
             "type": "array",
             "items": {
@@ -117,6 +131,20 @@
           "properties": {
             "runs_per_role": { "type": "object", "additionalProperties": { "type": "number" } },
             "stages_per_role": { "type": "object", "additionalProperties": { "type": "number" } }
+          }
+        },
+        "knowledge_summary": {
+          "type": "object",
+          "required": ["total_artifacts", "total_research_findings", "total_memory_entries", "artifact_counts_by_type"],
+          "additionalProperties": false,
+          "properties": {
+            "total_artifacts": { "type": "number", "minimum": 0 },
+            "total_research_findings": { "type": "number", "minimum": 0 },
+            "total_memory_entries": { "type": "number", "minimum": 0 },
+            "artifact_counts_by_type": {
+              "type": "object",
+              "additionalProperties": { "type": "number", "minimum": 0 }
+            }
           }
         }
       }
