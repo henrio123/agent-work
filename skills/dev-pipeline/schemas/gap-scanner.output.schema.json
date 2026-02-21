@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "gap-scanner output",
+  "description": "Output schema for ./tools/gap-scanner.sh — identifies unresolved issues from completed runs.",
+  "type": "object",
+  "required": ["ok", "action", "project_id", "gaps", "summary"],
+  "additionalProperties": false,
+  "properties": {
+    "ok": { "type": "boolean", "const": true },
+    "action": {
+      "type": "string",
+      "enum": ["gaps_scanned"]
+    },
+    "project_id": { "type": "string" },
+    "gaps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "type", "severity", "source_run", "title", "description"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string" },
+          "type": {
+            "type": "string",
+            "enum": ["qa_issue_no_followup", "review_changes_unaddressed", "research_open_question", "unresolved_question"]
+          },
+          "severity": {
+            "type": "string",
+            "enum": ["low", "medium", "high", "critical"]
+          },
+          "source_run": { "type": "string" },
+          "title": { "type": "string" },
+          "description": { "type": "string" },
+          "auto_created_ticket": { "type": ["string", "null"] }
+        }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "required": ["total_gaps", "by_type", "by_severity", "auto_created_count"],
+      "additionalProperties": false,
+      "properties": {
+        "total_gaps": { "type": "number" },
+        "by_type": {
+          "type": "object",
+          "additionalProperties": { "type": "number" }
+        },
+        "by_severity": {
+          "type": "object",
+          "additionalProperties": { "type": "number" }
+        },
+        "auto_created_count": { "type": "number" }
+      }
+    }
+  }
+}

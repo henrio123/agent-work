@@ -12,7 +12,7 @@
     "stage":      { "type": "string", "minLength": 1 },
     "type": {
       "type": "string",
-      "enum": ["observation", "lesson", "pattern", "warning"]
+      "enum": ["observation", "lesson", "pattern", "warning", "evaluation"]
     },
     "content":    { "type": "string", "minLength": 1, "maxLength": 2000 },
     "tags": {

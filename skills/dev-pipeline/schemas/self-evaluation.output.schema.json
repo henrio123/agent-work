@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "self-evaluation output",
+  "description": "Output schema for ./tools/self-evaluate.sh — structured self-evaluation of a completed run against project baselines.",
+  "type": "object",
+  "required": ["ok", "action", "run_folder", "project_id", "quality_score", "deviations", "suggestions"],
+  "additionalProperties": false,
+  "properties": {
+    "ok": { "type": "boolean", "const": true },
+    "action": {
+      "type": "string",
+      "enum": ["self_evaluation_complete"]
+    },
+    "run_folder": { "type": "string" },
+    "project_id": { "type": "string" },
+    "quality_score": { "type": ["number", "null"] },
+    "deviations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["metric", "run_value", "baseline_value", "direction", "severity"],
+        "additionalProperties": false,
+        "properties": {
+          "metric": { "type": "string" },
+          "run_value": { "type": ["number", "null"] },
+          "baseline_value": { "type": ["number", "null"] },
+          "direction": { "type": "string", "enum": ["better", "worse", "same"] },
+          "severity": { "type": "string", "enum": ["minor", "notable", "significant"] }
+        }
+      }
+    },
+    "suggestions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "title", "description"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string" },
+          "title": { "type": "string" },
+          "description": { "type": "string" }
+        }
+      }
+    },
+    "memory_written": { "type": "boolean" }
+  }
+}

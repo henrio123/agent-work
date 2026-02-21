@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "workflow-suggestions output",
+  "description": "Output schema for ./tools/workflow-suggest.sh — actionable workflow improvement suggestions based on run analytics.",
+  "type": "object",
+  "required": ["ok", "action", "project_id", "suggestions", "summary"],
+  "additionalProperties": false,
+  "properties": {
+    "ok": { "type": "boolean", "const": true },
+    "action": {
+      "type": "string",
+      "enum": ["suggestions_generated"]
+    },
+    "project_id": { "type": "string" },
+    "suggestions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "category", "title", "description", "evidence", "confidence", "priority"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string" },
+          "category": {
+            "type": "string",
+            "enum": ["recurring_qa_failure", "bottleneck_stage", "high_rejection_rate", "quality_trend"]
+          },
+          "title": { "type": "string" },
+          "description": { "type": "string" },
+          "evidence": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "confidence": {
+            "type": "string",
+            "enum": ["low", "medium", "high"]
+          },
+          "priority": {
+            "type": "string",
+            "enum": ["P0", "P1", "P2", "P3"]
+          }
+        }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "required": ["total_suggestions", "by_category", "by_confidence"],
+      "additionalProperties": false,
+      "properties": {
+        "total_suggestions": { "type": "number" },
+        "by_category": {
+          "type": "object",
+          "additionalProperties": { "type": "number" }
+        },
+        "by_confidence": {
+          "type": "object",
+          "additionalProperties": { "type": "number" }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,91 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "run-analytics output",
+  "description": "Output schema for ./tools/run-analytics.sh — per-run metrics and project-level aggregates from completed runs.",
+  "type": "object",
+  "required": ["ok", "action", "project_id", "runs", "aggregates"],
+  "additionalProperties": false,
+  "properties": {
+    "ok": { "type": "boolean", "const": true },
+    "action": {
+      "type": "string",
+      "enum": ["analytics_computed"]
+    },
+    "project_id": { "type": "string" },
+    "runs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "run_folder", "ticket_id", "current_stage",
+          "stage_durations", "total_duration_ms",
+          "qa_verdict", "qa_issues_count", "qa_issue_severities",
+          "review_verdict", "review_policy_violations_count", "review_comments_count",
+          "artifact_count", "autonomous_steps"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "run_folder": { "type": "string" },
+          "ticket_id": { "type": "string" },
+          "current_stage": { "type": "string" },
+          "responsible_agent": { "type": ["string", "null"] },
+          "stage_durations": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["stage", "duration_ms"],
+              "additionalProperties": false,
+              "properties": {
+                "stage": { "type": "string" },
+                "duration_ms": { "type": ["number", "null"] },
+                "agent_id": { "type": ["string", "null"] }
+              }
+            }
+          },
+          "total_duration_ms": { "type": ["number", "null"] },
+          "qa_verdict": { "type": ["string", "null"] },
+          "qa_issues_count": { "type": "number" },
+          "qa_issue_severities": {
+            "type": "object",
+            "additionalProperties": { "type": "number" }
+          },
+          "review_verdict": { "type": ["string", "null"] },
+          "review_policy_violations_count": { "type": "number" },
+          "review_comments_count": { "type": "number" },
+          "artifact_count": { "type": "number" },
+          "autonomous_steps": { "type": "number" }
+        }
+      }
+    },
+    "aggregates": {
+      "type": "object",
+      "required": [
+        "total_runs", "completed_runs",
+        "avg_duration_per_stage",
+        "qa_pass_rate", "qa_fail_rate",
+        "review_approval_rate", "review_rejection_rate",
+        "issue_severity_distribution",
+        "avg_autonomous_steps", "avg_artifact_count"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "total_runs": { "type": "number" },
+        "completed_runs": { "type": "number" },
+        "avg_duration_per_stage": {
+          "type": "object",
+          "additionalProperties": { "type": "number" }
+        },
+        "qa_pass_rate": { "type": ["number", "null"] },
+        "qa_fail_rate": { "type": ["number", "null"] },
+        "review_approval_rate": { "type": ["number", "null"] },
+        "review_rejection_rate": { "type": ["number", "null"] },
+        "issue_severity_distribution": {
+          "type": "object",
+          "additionalProperties": { "type": "number" }
+        },
+        "avg_autonomous_steps": { "type": ["number", "null"] },
+        "avg_artifact_count": { "type": ["number", "null"] }
+      }
+    }
+  }
+}

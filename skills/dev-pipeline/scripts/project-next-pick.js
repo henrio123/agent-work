@@ -36,6 +36,19 @@ const os = require('node:os');
 const WORKSPACE_ROOT = process.env.WORKSPACE_ROOT || path.resolve(os.homedir(), 'dev', 'agent-work');
 const { buildProjectIndex } = require(path.resolve(__dirname, 'project-index.js'));
 
+// Lazy-loaded agent performance module (Phase 4)
+let _agentPerfModule = null;
+function getAgentPerfModule() {
+  if (!_agentPerfModule) {
+    try {
+      _agentPerfModule = require(path.resolve(__dirname, 'agent-performance.js'));
+    } catch {
+      _agentPerfModule = null;
+    }
+  }
+  return _agentPerfModule;
+}
+
 const STATUS_RANK = { in_progress: 0, todo: 1, blocked: 2, done: 3 };
 const PRIORITY_RANK = { P0: 0, P1: 1, P2: 2, P3: 3 };
 const BUCKET_PRIORITY = { ready_for_run_creation: 0, needs_task_pack: 1, needs_artifacts: 2, other: 3 };
@@ -191,6 +204,22 @@ function pickNextTask(options = {}) {
   });
 
   const best = candidates[0];
+
+  // Phase 4: recommend best agent for this task's owner_role
+  let recommendedAgent = null;
+  try {
+    const perfMod = getAgentPerfModule();
+    if (perfMod) {
+      recommendedAgent = perfMod.recommendAgent({
+        workspaceRoot,
+        projectId: best.project_id,
+        role: best.entry.owner_role || undefined,
+      });
+    }
+  } catch {
+    // Non-fatal — recommendation is optional
+  }
+
   return {
     ok: true,
     action: 'picked_task',
@@ -199,6 +228,7 @@ function pickNextTask(options = {}) {
     run_folder: best.entry.run_folder,
     reason: `priority: ${best.bucket}, status: ${best.entry.status}, priority: ${best.entry.priority}`,
     priority_bucket: best.bucket,
+    recommended_agent: recommendedAgent,
   };
 }
 

@@ -21,7 +21,8 @@
         "task_id": { "type": "string" },
         "run_folder": { "type": ["string", "null"] },
         "reason": { "type": "string" },
-        "priority_bucket": { "type": "string" }
+        "priority_bucket": { "type": "string" },
+        "recommended_agent": { "type": ["string", "null"] }
       },
       "additionalProperties": false
     },

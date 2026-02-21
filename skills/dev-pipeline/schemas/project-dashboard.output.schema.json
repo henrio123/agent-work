@@ -146,7 +146,19 @@
               "additionalProperties": { "type": "number", "minimum": 0 }
             }
           }
-        }
+        },
+        "performance_summary": {
+          "type": "object",
+          "required": ["agents_tracked", "top_agent", "avg_performance_score"],
+          "additionalProperties": false,
+          "properties": {
+            "agents_tracked": { "type": "number", "minimum": 0 },
+            "top_agent": { "type": ["string", "null"] },
+            "avg_performance_score": { "type": ["number", "null"] }
+          }
+        },
+        "workflow_suggestions_count": { "type": "number", "minimum": 0 },
+        "pending_gaps_count": { "type": "number", "minimum": 0 }
       }
     }
   }

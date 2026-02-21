@@ -66,9 +66,9 @@ A stage advances only when all required artifacts exist and pass schema validati
 | Level | Name | Status |
 |-------|------|--------|
 | **Level 1** | Manual AI usage | Past |
-| **Level 2** | Structured multi-agent execution | **Current** |
-| **Level 3** | Autonomous org with memory | Next |
-| **Level 4** | Self-improving AI organization | Future |
+| **Level 2** | Structured multi-agent execution | Done |
+| **Level 3** | Autonomous org with memory | Done |
+| **Level 4** | Self-improving AI organization | **Current** |
 
 ### Level 2 (Current) — What's Done
 
@@ -93,30 +93,33 @@ The system provides deterministic multi-agent pipeline execution with full schem
 
 **Hardening & Ops — Complete.**
 - `additionalProperties: false` enforced on all 20+ schemas (output, input, reference).
-- GitHub Actions CI gate running 773 tests on every push and PR.
+- GitHub Actions CI gate running 980+ tests on every push and PR.
 - Preflight graph validation before creating or driving runs.
 - Cron-friendly drive loop wrapper with safe stop.
 
-### Level 3 (Next) — What's Needed
+### Level 3 — What's Done
 
-**Phase 3 (Knowledge & Artifact Layer) — Planned.**
-
-| Milestone | Description | Status |
-|-----------|-------------|--------|
-| Artifact classification | Tag each artifact with a semantic type (decision, design, implementation, test-result, research-finding) | TODO |
-| Global artifact index | Searchable index of all artifacts across projects and runs | TODO |
-| Research workflow | Dedicated workflow for research tasks with structured findings schema | TODO |
-| Agent memory | Append-only memory layer at `.claw/agents/<id>/memory/`, schema-validated | TODO |
-| Cross-run knowledge | Task pack generator references artifacts from prior runs when building context | TODO |
-
-### Level 4 (Future) — What It Becomes
+**Phase 3 (Knowledge & Artifact Layer) — Complete.**
 
 | Milestone | Description | Status |
 |-----------|-------------|--------|
-| Self-evaluation loops | Agents assess the quality of their own outputs against historical baselines | TODO |
-| Workflow optimization | System proposes pipeline improvements based on execution patterns | TODO |
-| Autonomous ticket creation | System identifies gaps and creates tickets without human intervention | TODO |
-| Adaptive role allocation | Agent assignment optimized based on workload and historical performance | TODO |
+| Artifact classification | Tag each artifact with a semantic type (decision, design, implementation, test-result, research-finding) | DONE |
+| Global artifact index | Searchable index of all artifacts across projects and runs | DONE |
+| Research workflow | Dedicated workflow for research tasks with structured findings schema | DONE |
+| Agent memory | Append-only memory layer at `.claw/agents/<id>/memory/`, schema-validated | DONE |
+| Cross-run knowledge | Task pack generator references artifacts from prior runs when building context | DONE |
+
+### Level 4 — What's Done
+
+**Phase 4 (Self-Improving AI Organization) — Complete.**
+
+| Milestone | Description | Status |
+|-----------|-------------|--------|
+| Run analytics engine | Per-run metrics and project-level aggregates from completed runs | DONE |
+| Self-evaluation loops | Agents assess the quality of their own outputs against historical baselines | DONE |
+| Workflow optimization | System proposes pipeline improvements based on execution patterns | DONE |
+| Autonomous ticket creation | System identifies gaps and creates tickets without human intervention | DONE |
+| Adaptive role allocation | Agent assignment optimized based on workload and historical performance | DONE |
 
 ---
 
@@ -146,16 +149,18 @@ The system provides deterministic multi-agent pipeline execution with full schem
 - Pluggable capability system (capability registry, manifest-driven stage injection)
 - Goal-driven mission layer (deterministic intent + stack detection, capability activation)
 - 3 capabilities: UX audit, security audit, performance audit
-- GitHub Actions CI (773 tests, 41 suites)
+- Artifact classification with semantic types and global artifact index
+- Research workflow with structured findings schema
+- Agent memory (append-only, schema-validated, cross-run)
+- Cross-run knowledge retention in task pack generation
+- Run analytics engine (per-run metrics + project-level aggregates)
+- Self-evaluation with quality score, deviation analysis, and memory persistence
+- Workflow suggestion engine (4 detection rules with evidence and confidence)
+- Gap scanner with auto-create backlog items (idempotent)
+- Agent performance profiling with recommended_agent in picker
+- Dashboard Phase 4 summary (performance, suggestions, gaps)
+- GitHub Actions CI (980+ tests, 53 suites)
 - Zero external npm dependencies
-
-### Planned
-
-- Artifact semantic classification and global index (Phase 3)
-- Research task workflow with structured findings (Phase 3)
-- Agent memory persistence across runs (Phase 3)
-- Cross-run knowledge retention in task packs (Phase 3)
-- Self-evaluation and adaptive optimization (Level 4)
 
 ---
 
@@ -170,7 +175,7 @@ The system provides deterministic multi-agent pipeline execution with full schem
 ├── skills/
 │   ├── dev-pipeline/
 │   │   ├── SKILL.md                 # Comprehensive operational reference
-│   │   ├── scripts/                 # 25 Node.js implementation files
+│   │   ├── scripts/                 # 30+ Node.js implementation files
 │   │   │   ├── dev-pipeline.js      # Core pipeline engine (state machine, schema validation, stage gates)
 │   │   │   ├── capability-registry.js # Capability loader, stage injection, template/schema resolution
 │   │   │   ├── goal-selector.js     # Deterministic intent + stack → capability mapping
@@ -180,9 +185,9 @@ The system provides deterministic multi-agent pipeline execution with full schem
 │   │   │   ├── project-next-drive.js # One-shot project driver with preflight validation
 │   │   │   ├── validate-backlog-graph.js  # DAG validator (cycles, parents, epic completion)
 │   │   │   └── ...                  # Index, dashboard, task-pack, ticket-store, agent-state
-│   │   ├── schemas/                 # 15 JSON Schema files (input + output schemas)
+│   │   ├── schemas/                 # 22 JSON Schema files (input + output schemas)
 │   │   ├── references/              # 7 artifact schemas (pm-brief, arch-design, dev-notes, etc.)
-│   │   └── tests/                   # 41 test suites, 773 tests
+│   │   └── tests/                   # 53 test suites, ~980 tests
 │   └── capabilities/               # Pluggable capability extensions
 │       ├── ux_audit/                # UX audit stage (after analyze)
 │       ├── security_audit/          # Security audit stage (after analyze)
@@ -222,7 +227,7 @@ The system provides deterministic multi-agent pipeline execution with full schem
 bash tools/test-all.sh
 ```
 
-Expected output: `TOTAL: 773 passed, 0 failed (41 suites)`
+Expected output: `TOTAL: N passed, 0 failed (53 suites)` (N ~980)
 
 ### Initialize a Target Repo
 
@@ -328,7 +333,7 @@ Timestamps and git HEAD are the only sources of non-determinism.
 
 ### Testing Strategy
 
-- **41 test suites** with **773 individual tests** covering:
+- **53 test suites** with **~980 individual tests** covering:
   - State machine transitions and gate enforcement
   - Schema validation round-trips for all artifact types
   - Picker determinism and graph-aware constraint enforcement
@@ -446,19 +451,17 @@ git status
 - [x] Pluggable capability system with manifest-driven stage injection
 - [x] Goal-driven mission layer (deterministic intent + stack detection)
 - [x] 3 capabilities: UX audit, security audit, performance audit
-- [x] GitHub Actions CI (773 tests, 41 suites, 0 failures)
+- [x] GitHub Actions CI (980+ tests, 53 suites, 0 failures)
 - [x] `additionalProperties: false` on all schemas (governance rule enforced)
 - [x] Cron-friendly drive loop with safe stop
 - [x] Zero external dependencies
-
-## Need To Be Done
-
-- [ ] **Phase 3: Artifact classification** — Tag artifacts with semantic types
-- [ ] **Phase 3: Global artifact index** — Cross-project searchable artifact catalog
-- [ ] **Phase 3: Research workflow** — Dedicated pipeline for research tasks with structured findings
-- [ ] **Phase 3: Agent memory** — Append-only memory layer persisting observations across runs
-- [ ] **Phase 3: Cross-run knowledge** — Task packs reference prior run artifacts for context
-- [ ] **Level 4: Self-evaluation** — Agents assess output quality against baselines
-- [ ] **Level 4: Workflow optimization** — System proposes pipeline improvements from execution data
-- [ ] **Level 4: Autonomous ticket creation** — System identifies gaps and creates work items
-- [ ] **Level 4: Adaptive role allocation** — Assignment optimized by workload and performance history
+- [x] Phase 3: Artifact classification with semantic types
+- [x] Phase 3: Global artifact index across projects and runs
+- [x] Phase 3: Research workflow with structured findings
+- [x] Phase 3: Agent memory persistence across runs
+- [x] Phase 3: Cross-run knowledge retention in task packs
+- [x] Phase 4: Run analytics engine (per-run metrics + project aggregates)
+- [x] Phase 4: Self-evaluation (quality score, deviations, suggestions, memory write)
+- [x] Phase 4: Workflow suggestions (recurring QA failures, bottlenecks, rejection rates, quality trends)
+- [x] Phase 4: Gap scanner with auto-create backlog items
+- [x] Phase 4: Agent performance profiles with recommended_agent in picker

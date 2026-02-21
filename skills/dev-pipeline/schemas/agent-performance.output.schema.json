@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "agent-performance output",
+  "description": "Output schema for ./tools/agent-performance.sh — agent performance profiles and recommendation.",
+  "type": "object",
+  "required": ["ok", "action", "project_id", "agents", "recommended_agent"],
+  "additionalProperties": false,
+  "properties": {
+    "ok": { "type": "boolean", "const": true },
+    "action": {
+      "type": "string",
+      "enum": ["performance_computed"]
+    },
+    "project_id": { "type": "string" },
+    "agents": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["agent_id", "runs_count", "qa_pass_rate", "review_approval_rate", "avg_duration_ms", "speed_factor", "performance_score"],
+        "additionalProperties": false,
+        "properties": {
+          "agent_id": { "type": "string" },
+          "runs_count": { "type": "number" },
+          "qa_pass_rate": { "type": ["number", "null"] },
+          "review_approval_rate": { "type": ["number", "null"] },
+          "avg_duration_ms": { "type": ["number", "null"] },
+          "speed_factor": { "type": ["number", "null"] },
+          "performance_score": { "type": ["number", "null"] }
+        }
+      }
+    },
+    "recommended_agent": { "type": ["string", "null"] },
+    "role_filter": { "type": ["string", "null"] }
+  }
+}

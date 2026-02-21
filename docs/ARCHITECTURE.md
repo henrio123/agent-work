@@ -370,7 +370,7 @@ The system currently provides:
 - An append-only audit log (`autonomous-audit.jsonl`) per run.
 - Read-only safety guarantees on all index, pick, dashboard, watch, and list tools.
 - A web dashboard (`dashboard.js`) on `localhost:18790` for run-level monitoring.
-- 773 tests across 41 suites with zero external npm dependencies.
+- 980+ tests across 53 suites with zero external npm dependencies.
 
 ## Target State
 
@@ -458,6 +458,28 @@ All of the following must be true before Phase 3 is complete:
 2. Research tasks have a dedicated workflow with a validated output schema.
 3. Agent memory persists across runs. An agent can write an observation in run N and read it in run N+1.
 4. The project dashboard output includes knowledge state (artifact counts by type, research findings count, memory entry count).
+
+## Phase 4 — Self-Improving AI Organization
+
+### Purpose
+
+Make the system learn from its own execution history, identify inefficiencies, fill gaps autonomously, and recommend optimal agent allocation.
+
+### Deliverables
+
+- **Run Analytics Engine** (`run-analytics.js`): Read-only analytics that scans completed runs for a project and computes per-run metrics (stage durations, QA/review outcomes, artifact counts, autonomous steps) plus project-level aggregates (pass rates, avg durations, severity distributions).
+- **Self-Evaluation** (`self-evaluate.js`): Compares a run's QA/review outcomes against project baselines. Produces a quality score (0.0–1.0), deviation list, and actionable suggestions. Writes evaluation to agent memory via `selfEvaluateAndRecord()`.
+- **Workflow Suggestions** (`workflow-suggest.js`): Detects workflow inefficiencies from run analytics: recurring QA failures, bottleneck stages, high rejection rates, and declining quality trends. Each suggestion includes evidence and confidence level.
+- **Gap Scanner** (`gap-scanner.js`): Identifies unresolved issues from completed runs (unaddressed QA issues, review changes, open research questions, unresolved task pack questions). Auto-create mode calls `createTicketAndBacklog()` per gap (idempotent).
+- **Agent Performance** (`agent-performance.js`): Computes per-agent performance scores (`0.4 * qa_pass_rate + 0.3 * review_approval_rate + 0.3 * speed_factor`). Recommends optimal agent for a given role. Integrated into `project-next-pick.js` as `recommended_agent` field.
+- **Dashboard Integration**: `project-dashboard.js` summary includes `performance_summary`, `workflow_suggestions_count`, and `pending_gaps_count`.
+
+### Stop Condition
+
+1. **SC-1**: A completed run produces a structured self-evaluation comparing QA/review outcomes against project historical baselines. Assessment is written to agent memory. Implemented in `self-evaluate.js`. Tested by `test-self-evaluate.js` (12 tests).
+2. **SC-2**: The workflow suggestion tool produces actionable suggestions with evidence when given a project with varying stage durations and QA failure rates. Implemented in `workflow-suggest.js`. Tested by `test-workflow-suggest.js` (11 tests).
+3. **SC-3**: The gap scanner identifies unresolved issues from completed runs and can auto-create backlog items via `createTicketAndBacklog`. Implemented in `gap-scanner.js`. Tested by `test-gap-scanner.js` (12 tests).
+4. **SC-4**: Agent performance profiles are computed from stage_history and QA/review data. The picker output includes a `recommended_agent` field. Implemented in `agent-performance.js` + `project-next-pick.js`. Tested by `test-agent-performance.js` (13 tests).
 
 ## Evolution Governance Rules
 

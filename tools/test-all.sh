@@ -54,6 +54,12 @@ SUITES=(
   "$TESTS_DIR/test-agent-memory.js"
   "$TESTS_DIR/test-cross-run-knowledge.js"
   "$TESTS_DIR/test-dashboard-knowledge.js"
+  "$TESTS_DIR/test-run-analytics.js"
+  "$TESTS_DIR/test-self-evaluate.js"
+  "$TESTS_DIR/test-workflow-suggest.js"
+  "$TESTS_DIR/test-gap-scanner.js"
+  "$TESTS_DIR/test-agent-performance.js"
+  "$TESTS_DIR/test-dashboard-phase4.js"
 )
 
 total_passed=0

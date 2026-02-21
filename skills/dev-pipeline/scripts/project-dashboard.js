@@ -28,6 +28,9 @@ const AUDIT_FILENAME = 'autonomous-audit.jsonl';
 let _agentStateModule = null;
 let _artifactIndexModule = null;
 let _agentMemoryModule = null;
+let _agentPerfModule = null;
+let _workflowSuggestModule = null;
+let _gapScannerModule = null;
 
 function getArtifactIndexModule() {
   if (!_artifactIndexModule) {
@@ -41,6 +44,30 @@ function getAgentMemoryModule() {
     _agentMemoryModule = require(path.resolve(__dirname, 'agent-memory.js'));
   }
   return _agentMemoryModule;
+}
+
+function getAgentPerfModule() {
+  if (!_agentPerfModule) {
+    try { _agentPerfModule = require(path.resolve(__dirname, 'agent-performance.js')); }
+    catch { _agentPerfModule = null; }
+  }
+  return _agentPerfModule;
+}
+
+function getWorkflowSuggestModule() {
+  if (!_workflowSuggestModule) {
+    try { _workflowSuggestModule = require(path.resolve(__dirname, 'workflow-suggest.js')); }
+    catch { _workflowSuggestModule = null; }
+  }
+  return _workflowSuggestModule;
+}
+
+function getGapScannerModule() {
+  if (!_gapScannerModule) {
+    try { _gapScannerModule = require(path.resolve(__dirname, 'gap-scanner.js')); }
+    catch { _gapScannerModule = null; }
+  }
+  return _gapScannerModule;
 }
 
 // Agent state for role resolution (lazy-loaded)
@@ -82,6 +109,9 @@ function buildDashboard(options = {}) {
     needs_task_pack: 0,
     needs_artifacts: 0,
     workload_summary: { runs_per_role: {}, stages_per_role: {} },
+    performance_summary: { agents_tracked: 0, top_agent: null, avg_performance_score: null },
+    workflow_suggestions_count: 0,
+    pending_gaps_count: 0,
   };
 
   // Read single project from .claw/project.json
@@ -222,6 +252,46 @@ function buildDashboard(options = {}) {
   // Ensure deterministic key ordering in workload_summary
   summary.workload_summary.runs_per_role = sortObjectKeys(summary.workload_summary.runs_per_role);
   summary.workload_summary.stages_per_role = sortObjectKeys(summary.workload_summary.stages_per_role);
+
+  // Phase 4: performance summary, workflow suggestions, gap counts
+  summary.performance_summary = { agents_tracked: 0, top_agent: null, avg_performance_score: null };
+  summary.workflow_suggestions_count = 0;
+  summary.pending_gaps_count = 0;
+
+  try {
+    const perfMod = getAgentPerfModule();
+    if (perfMod) {
+      const perf = perfMod.buildAgentPerformance({ workspaceRoot, projectId });
+      if (perf.ok) {
+        summary.performance_summary.agents_tracked = perf.agents.length;
+        summary.performance_summary.top_agent = perf.recommended_agent;
+        const scores = perf.agents.filter(a => a.performance_score !== null).map(a => a.performance_score);
+        if (scores.length > 0) {
+          summary.performance_summary.avg_performance_score = +(scores.reduce((s, v) => s + v, 0) / scores.length).toFixed(4);
+        }
+      }
+    }
+  } catch { /* Non-fatal */ }
+
+  try {
+    const wsMod = getWorkflowSuggestModule();
+    if (wsMod) {
+      const ws = wsMod.generateWorkflowSuggestions({ workspaceRoot, projectId });
+      if (ws.ok) {
+        summary.workflow_suggestions_count = ws.summary.total_suggestions;
+      }
+    }
+  } catch { /* Non-fatal */ }
+
+  try {
+    const gapMod = getGapScannerModule();
+    if (gapMod) {
+      const gaps = gapMod.scanGaps({ workspaceRoot, projectId });
+      if (gaps.ok) {
+        summary.pending_gaps_count = gaps.summary.total_gaps;
+      }
+    }
+  } catch { /* Non-fatal */ }
 
   return {
     ok: true,
