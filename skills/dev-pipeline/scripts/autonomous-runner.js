@@ -32,6 +32,7 @@ const {
 } = dp;
 
 const DP_PATH = path.resolve(__dirname, 'dev-pipeline.js');
+const AGENT_MEMORY_PATH = path.resolve(__dirname, 'agent-memory.js');
 
 const AUDIT_FILENAME = 'autonomous-audit.jsonl';
 const STOP_FILENAME = '.stop';
@@ -575,6 +576,33 @@ function runAutonomous(runFolder, options = {}) {
 
         if (!allDraftsValid) {
           trace.push('some drafts were invalid');
+        }
+
+        // Write memory observation after stage artifact production (if agent_id set)
+        if (agentId && artifactsWritten.length > 0) {
+          const stageArtifacts = agentResult.drafts
+            .filter(d => artifactsWritten.includes(d.targetArtifact))
+            .map(d => d.targetArtifact)
+            .sort();
+          if (stageArtifacts.length > 0) {
+            try {
+              execFileSync('node', [
+                AGENT_MEMORY_PATH, 'write_memory',
+                '--agent_id', agentId,
+                '--run_id', path.basename(resolvedFolder),
+                '--project_id', status.project || 'unknown',
+                '--stage', currentStage,
+                '--type', 'observation',
+                '--content', `Completed ${currentStage} for ${status.ticket_id}. Artifacts: ${stageArtifacts.join(', ')}`,
+                '--tags', [currentStage, status.ticket_id].join(','),
+              ], { encoding: 'utf8', timeout: 5000, env: process.env });
+              trace.push(`memory: wrote observation for ${currentStage}`);
+              audit.emit(stepsRun, action, currentStage, 'memory_write', `observation for ${currentStage}`);
+            } catch (e) {
+              // Non-fatal — memory write failure should not block pipeline
+              trace.push(`memory write failed (non-fatal): ${e.message}`);
+            }
+          }
         }
 
         continue;

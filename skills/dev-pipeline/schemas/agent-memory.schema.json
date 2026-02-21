@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "agent-memory",
+  "description": "A single agent memory entry at .claw/agents/<agent_id>/memory/<timestamp>.json",
+  "type": "object",
+  "required": ["id", "agent_id", "run_id", "project_id", "stage", "type", "content", "tags", "created_at"],
+  "properties": {
+    "id":         { "type": "string", "minLength": 1 },
+    "agent_id":   { "type": "string", "minLength": 1 },
+    "run_id":     { "type": "string", "minLength": 1 },
+    "project_id": { "type": "string", "minLength": 1 },
+    "stage":      { "type": "string", "minLength": 1 },
+    "type": {
+      "type": "string",
+      "enum": ["observation", "lesson", "pattern", "warning"]
+    },
+    "content":    { "type": "string", "minLength": 1, "maxLength": 2000 },
+    "tags": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "created_at": { "type": "string" }
+  },
+  "additionalProperties": false
+}

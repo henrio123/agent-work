@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "agent-memory-index output",
+  "description": "Output schema for read_memory — returns sorted memory entries for an agent.",
+  "type": "object",
+  "required": ["ok", "agent_id", "total_entries", "entries", "by_type"],
+  "additionalProperties": false,
+  "properties": {
+    "ok": { "type": "boolean", "const": true },
+    "agent_id": { "type": "string" },
+    "total_entries": { "type": "number", "minimum": 0 },
+    "entries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "agent_id", "run_id", "project_id", "stage", "type", "content", "tags", "created_at"],
+        "additionalProperties": false,
+        "properties": {
+          "id":         { "type": "string" },
+          "agent_id":   { "type": "string" },
+          "run_id":     { "type": "string" },
+          "project_id": { "type": "string" },
+          "stage":      { "type": "string" },
+          "type":       { "type": "string", "enum": ["observation", "lesson", "pattern", "warning"] },
+          "content":    { "type": "string" },
+          "tags":       { "type": "array", "items": { "type": "string" } },
+          "created_at": { "type": "string" }
+        }
+      }
+    },
+    "by_type": {
+      "type": "object",
+      "additionalProperties": { "type": "number", "minimum": 0 }
+    }
+  }
+}
