@@ -25,6 +25,9 @@ const os = require('node:os');
 
 const WORKSPACE_ROOT = process.env.WORKSPACE_ROOT || path.resolve(os.homedir(), 'dev', 'agent-work');
 
+const { buildArtifactIndex } = require(path.resolve(__dirname, 'artifact-index.js'));
+const { readMemory } = require(path.resolve(__dirname, 'agent-memory.js'));
+
 function safePath(p, workspaceRoot) {
   const root = workspaceRoot || WORKSPACE_ROOT;
   const resolved = path.resolve(root, p);
@@ -44,6 +47,140 @@ function now() {
 function loadTaskPackSchema() {
   const schemaPath = path.resolve(__dirname, '..', 'schemas', 'task-pack.schema.json');
   return JSON.parse(fs.readFileSync(schemaPath, 'utf8'));
+}
+
+// ---------------------------------------------------------------------------
+// Gather prior knowledge from artifact index + agent memory
+// ---------------------------------------------------------------------------
+const MAX_PRIOR_ARTIFACTS = 5;
+const MAX_PRIOR_MEMORIES = 5;
+const MAX_PRIOR_FINDINGS = 3;
+
+function gatherPriorKnowledge(projectId, workspaceRoot) {
+  const result = {
+    related_artifacts: [],
+    agent_memories: [],
+    related_findings: [],
+  };
+
+  // 1. Scan artifact index for same project (most recent runs first)
+  try {
+    const index = buildArtifactIndex({
+      workspaceRoot,
+      filterProject: projectId,
+    });
+
+    if (index.ok && index.artifacts.length > 0) {
+      // Artifacts are sorted by run_id ASC → take from end for most recent
+      // Exclude metadata and task artifacts — they're not useful context
+      const meaningful = index.artifacts.filter(
+        (a) => !['metadata', 'task'].includes(a.semantic_type)
+      );
+
+      // Take most recent N (from end of sorted array)
+      const recent = meaningful.slice(Math.max(0, meaningful.length - MAX_PRIOR_ARTIFACTS));
+
+      for (const art of recent) {
+        result.related_artifacts.push({
+          artifact_file: art.artifact_file,
+          run_id: art.run_id,
+          semantic_type: art.semantic_type,
+          relevance: 'same-project',
+        });
+      }
+    }
+  } catch {
+    // Non-fatal — missing index means no prior artifacts
+  }
+
+  // 2. Scan agent memory for same project (all agents, most recent entries)
+  try {
+    const agentsDir = path.join(workspaceRoot, '.claw', 'agents');
+    if (fs.existsSync(agentsDir)) {
+      const agentDirs = fs.readdirSync(agentsDir, { withFileTypes: true })
+        .filter((e) => e.isDirectory())
+        .map((e) => e.name);
+
+      let allMemories = [];
+      for (const agentId of agentDirs) {
+        try {
+          const mem = readMemory({
+            agentId,
+            filterProject: projectId,
+            workspaceRoot,
+          });
+          if (mem.ok && mem.entries.length > 0) {
+            allMemories.push(...mem.entries);
+          }
+        } catch {
+          // Skip agents with unreadable memory
+        }
+      }
+
+      // Sort by created_at descending (most recent first) and take top N
+      allMemories.sort((a, b) => b.created_at.localeCompare(a.created_at));
+      const topMemories = allMemories.slice(0, MAX_PRIOR_MEMORIES);
+
+      for (const mem of topMemories) {
+        result.agent_memories.push({
+          content: mem.content,
+          type: mem.type,
+          from_run: mem.run_id,
+        });
+      }
+    }
+  } catch {
+    // Non-fatal — missing agents dir means no memories
+  }
+
+  // 3. Scan for research findings in same project
+  try {
+    const runsDir = path.join(workspaceRoot, '.claw', 'runs');
+    if (fs.existsSync(runsDir)) {
+      const runDirs = fs.readdirSync(runsDir, { withFileTypes: true })
+        .filter((e) => e.isDirectory())
+        .map((e) => e.name)
+        .sort()
+        .reverse(); // most recent first
+
+      let findingsCount = 0;
+      for (const runName of runDirs) {
+        if (findingsCount >= MAX_PRIOR_FINDINGS) break;
+
+        const runDir = path.join(runsDir, runName);
+        const findingsPath = path.join(runDir, '18-research-findings.json');
+        if (!fs.existsSync(findingsPath)) continue;
+
+        // Check this run belongs to same project
+        const statusPath = path.join(runDir, 'status.json');
+        if (fs.existsSync(statusPath)) {
+          try {
+            const status = JSON.parse(fs.readFileSync(statusPath, 'utf8'));
+            if (status.project !== projectId) continue;
+          } catch {
+            continue;
+          }
+        }
+
+        try {
+          const findings = JSON.parse(fs.readFileSync(findingsPath, 'utf8'));
+          result.related_findings.push({
+            run_id: runName,
+            conclusion: findings.conclusion || '',
+            hypothesis_count: (findings.hypotheses || []).length,
+            finding_count: (findings.findings || []).length,
+          });
+          findingsCount++;
+        } catch {
+          // Skip malformed findings
+        }
+      }
+    }
+  } catch {
+    // Non-fatal
+  }
+
+  return result;
 }
 
 // ---------------------------------------------------------------------------
@@ -204,6 +341,11 @@ function generateTaskPack(projectId, taskId, options = {}) {
     }
   }
 
+  // -----------------------------------------------------------------------
+  // Gather prior knowledge from artifact index + agent memory
+  // -----------------------------------------------------------------------
+  const priorKnowledge = gatherPriorKnowledge(projectId, workspaceRoot);
+
   const ts = now();
   const taskPack = {
     task_id: taskId,
@@ -218,6 +360,7 @@ function generateTaskPack(projectId, taskId, options = {}) {
     constraints,
     suggested_next_agents: suggestedNextAgents,
     references,
+    prior_knowledge: priorKnowledge,
     created_at: ts,
     updated_at: ts,
   };
@@ -346,4 +489,4 @@ if (require.main === module) {
 // ---------------------------------------------------------------------------
 // Exports
 // ---------------------------------------------------------------------------
-module.exports = { generateTaskPack, validateTaskPack, listTaskPacks };
+module.exports = { generateTaskPack, validateTaskPack, listTaskPacks, gatherPriorKnowledge };

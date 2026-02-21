@@ -45,6 +45,54 @@
       "items": { "type": "string" }
     },
     "created_at": { "type": "string" },
-    "updated_at": { "type": "string" }
+    "updated_at": { "type": "string" },
+    "prior_knowledge": {
+      "type": "object",
+      "required": ["related_artifacts", "agent_memories", "related_findings"],
+      "additionalProperties": false,
+      "properties": {
+        "related_artifacts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["artifact_file", "run_id", "semantic_type", "relevance"],
+            "additionalProperties": false,
+            "properties": {
+              "artifact_file": { "type": "string" },
+              "run_id": { "type": "string" },
+              "semantic_type": { "type": "string" },
+              "relevance": { "type": "string" }
+            }
+          }
+        },
+        "agent_memories": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["content", "type", "from_run"],
+            "additionalProperties": false,
+            "properties": {
+              "content": { "type": "string" },
+              "type": { "type": "string" },
+              "from_run": { "type": "string" }
+            }
+          }
+        },
+        "related_findings": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["run_id", "conclusion", "hypothesis_count", "finding_count"],
+            "additionalProperties": false,
+            "properties": {
+              "run_id": { "type": "string" },
+              "conclusion": { "type": "string" },
+              "hypothesis_count": { "type": "number" },
+              "finding_count": { "type": "number" }
+            }
+          }
+        }
+      }
+    }
   }
 }
