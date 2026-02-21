@@ -883,6 +883,106 @@ Every run's `status.json` includes a `responsible_agent` field (top-level, strin
 - **Updated on transitions:** `advance`, `orchestrate_one`, and `record_artifact` update `responsible_agent` when `--agent_id` is provided; leave it unchanged otherwise. New `stage_history` entries always include `agent_id`.
 - **Backward compatibility:** `normalizeStatus()` sets `responsible_agent: null` when reading old `status.json` files that lack the field. No crash, no data loss.
 
+## Capability System
+
+The pipeline is extensible via capabilities — pluggable stage injections that require no core engine changes.
+
+### How It Works
+
+1. A workspace activates capabilities via `.claw/capabilities.json`:
+   ```json
+   { "capabilities": ["ux_audit", "security_audit"] }
+   ```
+2. At pipeline load time, the capability registry reads each capability's manifest from `skills/capabilities/<name>/capability.json`.
+3. Stages declared in the manifest are injected into the chain by relinking `next` pointers (e.g., `analyze → ux-audit → plan`).
+4. Templates and schemas resolve from the capability's directory first, falling back to core.
+
+### Capability Structure
+
+```
+skills/capabilities/<name>/
+  capability.json          # manifest (validated against capability-manifest.schema.json)
+  templates/               # stage task templates
+    claude-<name>-pack.txt
+  references/              # artifact schemas
+    <name>.schema.json
+```
+
+### Available Capabilities
+
+| Capability | Stage Injected | After | Role | Artifact | Schema |
+|------------|----------------|-------|------|----------|--------|
+| `ux_audit` | `ux-audit` | analyze | UX Analyst | `15-ux-audit.json` | `ux-audit.schema.json` |
+| `security_audit` | `security-audit` | analyze | Security Analyst | `16-security-audit.json` | `security-audit.schema.json` |
+| `performance_audit` | `performance-audit` | analyze | Performance Analyst | `17-performance-audit.json` | `performance-audit.schema.json` |
+
+### Capability Registry Tools
+
+The registry is used internally by `dev-pipeline.js` at load time. Three exports:
+
+- `loadCapabilities(workspaceRoot, engineRoot, defaultStages, coreArtifactSchemaMap)` — reads `.claw/capabilities.json`, validates manifests, injects stages, merges artifact schemas. Returns `{ stageConfig, artifactSchemaMap, stageMigrations, capabilityDirs }`.
+- `resolveTemplatePath(templateName, capabilityDirs, engineRoot)` — finds template in capability dirs first, falls back to `ENGINE_ROOT/templates/`.
+- `resolveSchemaPath(schemaName, capabilityDirs, engineRoot)` — finds schema in capability dirs first, falls back to core references.
+
+**Schema:** `capability-manifest.schema.json` (additionalProperties: false)
+
+### Safety Rules
+
+- **Reserved stage names:** `intake`, `task-pack-generated`, `done`, `blocked`, and all 5 default stage names cannot be used by capabilities.
+- **No code execution:** Manifests are data-only JSON. No `require()` of capability scripts.
+- **Path containment:** Capability names validated as bare directory names (no `/`, `..`, absolute paths).
+- **Fail-loud:** Invalid capabilities throw immediately. No silent fallback.
+- **No core override:** Capabilities cannot redeclare core artifact schemas.
+
+## Mission Layer
+
+Goal-driven capability activation. Translates a natural-language goal into deterministic capability selection.
+
+### How It Works
+
+1. `goal-selector.js` parses intents from goal text using keyword matching (no LLM).
+2. `detectStack()` reads workspace files to identify the tech stack (Next.js, Rust, CosmWasm, etc.).
+3. `selectCapabilities()` maps intents + stack to capability IDs. Smart defaults: CosmWasm/Rust/Solidity projects get `security_audit` automatically.
+4. `create-mission.js` writes `.claw/missions/<id>.json` and `.claw/capabilities.json`.
+
+### Mission Tools
+
+```bash
+./tools/create-mission.sh --workspace <path> --goal "improve UX of checkout"
+```
+
+Output:
+```json
+{
+  "ok": true,
+  "mission_id": "uuid",
+  "mission_path": ".claw/missions/<id>.json",
+  "capabilities": ["ux_audit"],
+  "stack": "nextjs",
+  "intents": ["ux"]
+}
+```
+
+### Intent Detection Keywords
+
+| Intent | Keywords |
+|--------|----------|
+| `ux` | ux, user experience, usability, accessibility, a11y, ui/ux, design review |
+| `security` | security, vulnerability, audit, penetration, owasp, cve, threat |
+| `performance` | performance, latency, throughput, optimization, speed, benchmark |
+| `refactor` | refactor, cleanup, technical debt, code quality, modernize |
+
+### Stack Detection
+
+| Stack | Signal Files |
+|-------|-------------|
+| `nextjs` | `next.config.js`, `next.config.ts`, `next.config.mjs` |
+| `cosmwasm` | `Cargo.toml` with `cosmwasm-std` |
+| `rust` | `Cargo.toml` (without cosmwasm) |
+| `solidity` | `hardhat.config.*`, `foundry.toml`, `truffle-config.js` |
+| `python` | `pyproject.toml`, `setup.py`, `requirements.txt` |
+| `generic` | fallback |
+
 ## Schemas
 
 All artifact schemas are in `{baseDir}/references/`:
@@ -904,6 +1004,12 @@ All output schemas are in `{baseDir}/schemas/`:
 - `project-dashboard.output.schema.json`
 - `task-pack.schema.json`
 - `agent-state.schema.json`
+- `capability-manifest.schema.json`
+- `agents.schema.json`
+- `backlog-item.schema.json`
+- `project.schema.json`
+- `validate-backlog-graph.output.schema.json`
+- `apply-dev-patch.output.schema.json`
 
 ## Typical Multi-Role Workflow
 
@@ -983,7 +1089,19 @@ node skills/dev-pipeline/tests/test-schema-strictness.js   # schema strictness v
 node skills/dev-pipeline/tests/test-drive-preflight.js     # preflight graph validation tests (6 tests)
 node skills/dev-pipeline/tests/test-backlog-update-status.js # write-time epic completion guard (11 tests)
 node skills/dev-pipeline/tests/test-drive-loop.js          # drive loop wrapper tests (4 tests)
+node skills/dev-pipeline/tests/test-create-ticket-and-backlog.js # ticket+backlog creation tests (11 tests)
+node skills/dev-pipeline/tests/test-init-workspace.js      # workspace bootstrap tests (9 tests)
+node skills/dev-pipeline/tests/test-apply-dev-patch.js     # dev patch application tests (5 tests)
+node skills/dev-pipeline/tests/test-generate-context-pack.js # context pack generation tests (30 tests)
+node skills/dev-pipeline/tests/test-capability-registry.js # capability registry tests (17 tests)
+node skills/dev-pipeline/tests/test-goal-selector.js       # goal selector + mission tests (29 tests)
+node skills/dev-pipeline/tests/test-create-mission.js      # mission CLI tests (9 tests)
+node skills/dev-pipeline/tests/test-ux-audit-e2e.js        # UX audit capability e2e tests (21 tests)
+node skills/dev-pipeline/tests/test-security-audit-e2e.js  # security audit capability e2e tests (16 tests)
+node skills/dev-pipeline/tests/test-performance-audit-e2e.js # performance audit capability e2e tests (16 tests)
 ```
+
+**Total: 41 suites, 773 tests.**
 
 ## Security
 

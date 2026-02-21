@@ -130,6 +130,28 @@ The `ticket-store.js` module provides `ensureTicket()` and `guardTicketId()` to 
 
 Ticket lifecycle: a ticket file is created first, then `create_run_from_ticket` reads it to create a run.
 
+### 4.7 `.claw/capabilities.json`
+
+Activates capabilities for a workspace. Read by the capability registry at pipeline load time.
+
+```json
+{ "capabilities": ["ux_audit", "security_audit"] }
+```
+
+Each capability name maps to a directory at `skills/capabilities/<name>/` containing a `capability.json` manifest, `templates/`, and `references/`. The registry validates each manifest against `capability-manifest.schema.json`, injects stages into the pipeline chain by relinking `next` pointers, and merges artifact schemas.
+
+If this file is absent, the pipeline uses `DEFAULT_STAGES` only (full backward compatibility).
+
+### 4.8 `.claw/missions/<id>.json`
+
+Records goal-driven capability activation decisions. Created by `create-mission.js`.
+
+Required fields: `id` (uuid), `goal` (string), `intents` (string array), `stack` (string), `capabilities` (string array), `created_at` (ISO 8601).
+
+The mission layer uses deterministic keyword matching (no LLM) to parse intents from goal text and `detectStack()` to identify the workspace's technology stack from file existence checks. The resulting capability list is written to both the mission file and `.claw/capabilities.json`.
+
+Mission files accumulate — each new mission creates a new file. `.claw/capabilities.json` is overwritten to reflect the latest mission's capabilities.
+
 ## 5. Determinism Model
 
 ### 5.1 What Must Be Deterministic
@@ -304,13 +326,27 @@ The autonomous runner is designed for safe reruns:
 
 `project-dashboard.sh` produces stable JSON with computed fields. A web frontend or TUI can consume this output directly via polling or watch mode.
 
-### 10.2 More Roles and Agent Ownership
+### 10.2 Capability System (Implemented)
 
-`agents.json` defines roles per project. New roles can be added by extending `STAGE_CONFIG` in `dev-pipeline.js`, adding corresponding schemas in `references/`, and templates in `templates/`.
+The primary extension mechanism. New audit/analysis stages are added as capabilities without modifying the core engine.
 
-### 10.3 More Artifact Types and Buckets
+**Adding a new capability:**
+1. Create `skills/capabilities/<name>/capability.json` with manifest (name, version, stages, artifactSchemas).
+2. Add template in `skills/capabilities/<name>/templates/`.
+3. Add artifact schema in `skills/capabilities/<name>/references/`.
+4. Activate in workspace via `.claw/capabilities.json`.
 
-The bucket classification in `project-next-pick.js` and the stage config in `dev-pipeline.js` are the extension points. New buckets can be added to `BUCKET_PRIORITY`. New artifact types require a new schema and a stage config entry.
+Three capabilities ship with the engine: `ux_audit`, `security_audit`, `performance_audit`. All inject after `analyze` and before `plan`.
+
+**Adding goal-selector support:** Update `parseIntents()` in `goal-selector.js` with keyword patterns, and `selectCapabilities()` with the intent→capability mapping.
+
+### 10.3 More Roles and Agent Ownership
+
+`agents.json` defines roles per project. New roles can be added via capabilities (preferred) or by extending `DEFAULT_STAGES` in `dev-pipeline.js`.
+
+### 10.4 More Artifact Types and Buckets
+
+The bucket classification in `project-next-pick.js` and the stage config in `dev-pipeline.js` are the extension points. New buckets can be added to `BUCKET_PRIORITY`. New artifact types require a new schema and a stage config entry. Capability-provided artifacts are registered via the `artifactSchemas` field in the capability manifest.
 
 # Evolution Roadmap — AI Organisation OS
 
@@ -322,7 +358,9 @@ The system currently provides:
 
 - A deterministic run engine that moves tickets through a fixed sequence of role stages (`intake` through `done`).
 - A multi-stage pipeline with five role stages (PM, Architect, Dev, QA, Review), each gated by schema-validated artifacts.
-- An external workspace model where all state lives in `<target-repo>/.claw/` (project.json, agents.json, backlog/, runs/, tickets/, etc.).
+- A pluggable capability system (`capability-registry.js`) that injects additional stages (UX audit, security audit, performance audit) into the pipeline via manifest-driven configuration. No core engine changes required to add new capabilities.
+- A goal-driven mission layer (`goal-selector.js`, `create-mission.js`) that translates natural-language goals into deterministic capability activation using keyword matching and stack detection.
+- An external workspace model where all state lives in `<target-repo>/.claw/` (project.json, agents.json, capabilities.json, missions/, backlog/, runs/, tickets/, etc.).
 - A deterministic project scheduler (`project-next-pick`) that classifies tasks into priority buckets and selects the next eligible task using stable sort rules.
 - A one-shot project driver (`project-next-drive`) that creates runs, links backlog items, and invokes the autonomous runner.
 - JSON schema enforcement on all tool outputs (`additionalProperties: false`) and all pipeline artifacts.
@@ -332,7 +370,7 @@ The system currently provides:
 - An append-only audit log (`autonomous-audit.jsonl`) per run.
 - Read-only safety guarantees on all index, pick, dashboard, watch, and list tools.
 - A web dashboard (`dashboard.js`) on `localhost:18790` for run-level monitoring.
-- Zero external npm dependencies.
+- 773 tests across 41 suites with zero external npm dependencies.
 
 ## Target State
 

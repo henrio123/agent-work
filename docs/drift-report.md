@@ -1,39 +1,33 @@
 # Domain Leakage Drift Report
 
-**Updated:** 2026-02-20
+**Updated:** 2026-02-21
 **Engine repo:** `/Users/henr/dev/agent-work`
-**Baseline:** 681 tests, 36 suites, commit `9864ae7`
+**Baseline:** 773 tests, 41 suites, commit `07fe834`
 
 ## Summary
 
-After Phase 1 (domain-neutral stage names, commit `ec05a69`) and Phase 2 (capability registry, commit `9864ae7`), pipeline stages are domain-neutral. Remaining domain leakage is in the context-pack generator, UX template/schema still in core, and tests using domain-specific fixtures.
+All domain leakage has been remediated. The engine is fully project-agnostic.
 
-| Pattern | Count | Severity | Location | Remediation |
-|---------|-------|----------|----------|-------------|
-| `booking` | ~80 | High | generate-context-pack.js, test, template | Refactor script to generic focus scanner |
-| `ux-ready` | 2 | Low | STAGE_MIGRATION (backward compat) | Keep — needed for legacy run migration |
-| `barber` | ~5 | Medium | Tests, template | Remove with context-pack refactor |
-| `claude-ux-pack.txt` | 1 | Medium | Core templates/ dir | Move to ux_audit capability |
-| `ux-audit.schema.json` | 1 | Medium | Core references/ dir | Move to ux_audit capability |
+| Phase | Status | Commit |
+|-------|--------|--------|
+| Phase 1: Domain-neutral stage names | DONE | `ec05a69` |
+| Phase 2: Capability registry | DONE | `9864ae7` |
+| UX migration into capability | DONE | `f19c8d8` |
+| Domain leakage removal (context-pack, tests) | DONE | `56bb9c2` |
+| Goal-driven capability selection | DONE | `7487816` |
+| Goal selector + mission tests | DONE | `1b2e42d` |
+| UX audit e2e tests | DONE | `1354d19` |
+| Security + performance audit e2e tests | DONE | `07fe834` |
 
-## Remediation Plan
+## Verification
 
-### Phase 2: Migrate UX into capability (this commit)
-1. Create `skills/capabilities/ux_audit/` with capability.json, templates/, references/
-2. Move `templates/claude-ux-pack.txt` → capability (make template domain-neutral)
-3. Move `skills/dev-pipeline/references/ux-audit.schema.json` → capability
-4. Refactor `generate-context-pack.js` to generic focus scanner (no hardcoded booking)
-5. Update `test-generate-context-pack.js` to use generic field names
-6. Update `test-create-ticket-and-backlog.js` tag fixture
-7. Update `tools/generate-context-pack.sh` comments
-
-### Phase 3: Goal-driven capability selection (this commit)
-1. Create `skills/dev-pipeline/scripts/goal-selector.js` — deterministic intent+stack→capability mapping
-2. Create `tools/create-mission.sh` — writes .claw/missions/ and .claw/capabilities.json
-3. Add stub capabilities: security_audit, performance_audit
-
-### Verification Target
-```
+```bash
 grep -rn "BARGER\|barger\|booking\|funnel" --include='*.js' --include='*.sh' --include='*.txt' --include='*.json' . | grep -v node_modules | grep -v drift-report.md
 ```
-Should return 0 results after remediation.
+
+**Result: 0 matches.** Zero domain leakage confirmed on 2026-02-21.
+
+## Remaining Notes
+
+- `ux-ready` exists in `ux_audit/capability.json` as a `stageMigrations` entry. This is intentional — it maps legacy `ux-ready` stage names to the new `ux-audit` stage for backward compatibility with old run folders.
+- No other domain-specific references remain in the codebase.

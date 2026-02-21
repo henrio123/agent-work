@@ -93,7 +93,7 @@ The system provides deterministic multi-agent pipeline execution with full schem
 
 **Hardening & Ops — Complete.**
 - `additionalProperties: false` enforced on all 20+ schemas (output, input, reference).
-- GitHub Actions CI gate running 630 tests on every push and PR.
+- GitHub Actions CI gate running 773 tests on every push and PR.
 - Preflight graph validation before creating or driving runs.
 - Cron-friendly drive loop wrapper with safe stop.
 
@@ -143,7 +143,10 @@ The system provides deterministic multi-agent pipeline execution with full schem
 - HTTP dashboard on localhost:18790
 - External workspace model (pure engine, `.claw/` in target repos)
 - Workspace bootstrap and patch application tools
-- GitHub Actions CI (630 tests, 34 suites)
+- Pluggable capability system (capability registry, manifest-driven stage injection)
+- Goal-driven mission layer (deterministic intent + stack detection, capability activation)
+- 3 capabilities: UX audit, security audit, performance audit
+- GitHub Actions CI (773 tests, 41 suites)
 - Zero external npm dependencies
 
 ### Planned
@@ -164,24 +167,29 @@ The system provides deterministic multi-agent pipeline execution with full schem
 │   ├── ARCHITECTURE.md          # System design, state machine, determinism model, evolution roadmap
 │   ├── GOVERNANCE.md            # Golden rules: schema enforcement, testing, no external deps
 │   └── ux-spec-autonomous-runner.md  # CLI contract for autonomous runner
-├── skills/dev-pipeline/
-│   ├── SKILL.md                 # Comprehensive operational reference (39KB)
-│   ├── scripts/                 # 19 Node.js implementation files
-│   │   ├── dev-pipeline.js      # Core pipeline engine (state machine, schema validation, stage gates)
-│   │   ├── autonomous-runner.js # Multi-agent autonomous execution loop
-│   │   ├── project-next-pick.js # Deterministic task picker
-│   │   ├── project-next-drive.js # One-shot project driver with preflight validation
-│   │   ├── validate-backlog-graph.js  # DAG validator (cycles, parents, epic completion)
-│   │   ├── backlog-update-status.js   # Status transitions with epic completion guard
-│   │   ├── workspace-paths.js         # Central .claw/ path resolver
-│   │   ├── init-workspace.js          # Bootstrap .claw/ in a target repo
-│   │   ├── apply-dev-patch.js         # Apply 40-dev-patch.diff to workspace
-│   │   └── ...                  # Index, dashboard, task-pack, ticket-store, agent-state
-│   ├── schemas/                 # 14 JSON Schema files (input + output schemas)
-│   ├── references/              # 7 artifact schemas (pm-brief, arch-design, dev-notes, etc.)
-│   └── tests/                   # 34 test suites, 630 tests
+├── skills/
+│   ├── dev-pipeline/
+│   │   ├── SKILL.md                 # Comprehensive operational reference
+│   │   ├── scripts/                 # 25 Node.js implementation files
+│   │   │   ├── dev-pipeline.js      # Core pipeline engine (state machine, schema validation, stage gates)
+│   │   │   ├── capability-registry.js # Capability loader, stage injection, template/schema resolution
+│   │   │   ├── goal-selector.js     # Deterministic intent + stack → capability mapping
+│   │   │   ├── create-mission.js    # CLI: goal → mission + capabilities.json
+│   │   │   ├── autonomous-runner.js # Multi-agent autonomous execution loop
+│   │   │   ├── project-next-pick.js # Deterministic task picker
+│   │   │   ├── project-next-drive.js # One-shot project driver with preflight validation
+│   │   │   ├── validate-backlog-graph.js  # DAG validator (cycles, parents, epic completion)
+│   │   │   └── ...                  # Index, dashboard, task-pack, ticket-store, agent-state
+│   │   ├── schemas/                 # 15 JSON Schema files (input + output schemas)
+│   │   ├── references/              # 7 artifact schemas (pm-brief, arch-design, dev-notes, etc.)
+│   │   └── tests/                   # 41 test suites, 773 tests
+│   └── capabilities/               # Pluggable capability extensions
+│       ├── ux_audit/                # UX audit stage (after analyze)
+│       ├── security_audit/          # Security audit stage (after analyze)
+│       └── performance_audit/       # Performance audit stage (after analyze)
 ├── tools/                       # shell wrappers (the public CLI surface)
 │   ├── dp.sh                    # Main CLI entry point
+│   ├── create-mission.sh        # Goal → capability activation
 │   ├── test-all.sh              # Master test gate
 │   ├── project-next-drive.sh    # One-shot project driver
 │   ├── project-drive-loop.sh    # Cron-friendly loop wrapper
@@ -191,7 +199,7 @@ The system provides deterministic multi-agent pipeline execution with full schem
 │   ├── _workspace.sh              # Shared --workspace flag parser
 │   └── ...                      # run-next-*, project-*, dashboard-*, ticket-*
 ├── openclaw/                    # OpenClaw integration docs and example config
-├── templates/                   # Role-specific task pack templates
+├── templates/                   # Core role-specific task pack templates
 ├── .github/workflows/test.yml   # CI: runs test-all.sh on push and PR
 ├── SOUL.md                      # Agent personality and principles
 ├── SECURITY.md                  # Security boundaries and access controls
@@ -214,7 +222,7 @@ The system provides deterministic multi-agent pipeline execution with full schem
 bash tools/test-all.sh
 ```
 
-Expected output: `TOTAL: 630 passed, 0 failed (34 suites)`
+Expected output: `TOTAL: 773 passed, 0 failed (41 suites)`
 
 ### Initialize a Target Repo
 
@@ -259,6 +267,14 @@ Remove `--dry_run` to execute for real.
 ```
 
 Stops on `.stop` file, max iterations, or no eligible work. Prints JSON summary on exit.
+
+### Create a Mission (Goal-Driven Capability Activation)
+
+```bash
+./tools/create-mission.sh --workspace /path/to/my-project --goal "improve UX of checkout"
+```
+
+Detects intents (`ux`) and stack (`nextjs`), activates the `ux_audit` capability, and writes `.claw/capabilities.json` + `.claw/missions/<id>.json`.
 
 ### Validate a Project's Backlog Graph
 
@@ -312,7 +328,7 @@ Timestamps and git HEAD are the only sources of non-determinism.
 
 ### Testing Strategy
 
-- **34 test suites** with **630 individual tests** covering:
+- **41 test suites** with **773 individual tests** covering:
   - State machine transitions and gate enforcement
   - Schema validation round-trips for all artifact types
   - Picker determinism and graph-aware constraint enforcement
@@ -321,6 +337,8 @@ Timestamps and git HEAD are the only sources of non-determinism.
   - Dashboard computed fields and dependency chain enrichment
   - Epic completion guards (validation-time and write-time)
   - Real data validation against live schemas
+  - Capability registry, goal-selector, and mission layer
+  - End-to-end capability injection (UX, security, performance audits)
 - **`tools/test-all.sh`** is the single gate. Zero failures required.
 - **GitHub Actions CI** runs on every push and PR.
 
@@ -425,7 +443,10 @@ git status
 - [x] Ticket persistence with anti-truncation guards
 - [x] External workspace model (pure engine, `.claw/` state in target repos)
 - [x] Workspace bootstrap (`init-workspace`) and patch application (`apply-dev-patch`)
-- [x] GitHub Actions CI (630 tests, 34 suites, 0 failures)
+- [x] Pluggable capability system with manifest-driven stage injection
+- [x] Goal-driven mission layer (deterministic intent + stack detection)
+- [x] 3 capabilities: UX audit, security audit, performance audit
+- [x] GitHub Actions CI (773 tests, 41 suites, 0 failures)
 - [x] `additionalProperties: false` on all schemas (governance rule enforced)
 - [x] Cron-friendly drive loop with safe stop
 - [x] Zero external dependencies
