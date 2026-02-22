@@ -328,6 +328,32 @@ function buildDashboard(options = {}) {
     if (typeof adp.applyDevPatch === 'function') summary.auto_patch_enabled = true;
   } catch { /* Not available */ }
 
+  // Phase 7: post-patch tests, auto-commit, backlog auto-completion, agent recommendation
+  summary.post_patch_tests_enabled = false;
+  summary.auto_commit_enabled = false;
+  summary.backlog_auto_completion_enabled = false;
+  summary.agent_recommendation_enabled = false;
+
+  try {
+    const ppv = require(path.resolve(__dirname, 'post-patch-verify.js'));
+    if (typeof ppv.runPostPatchTests === 'function') summary.post_patch_tests_enabled = true;
+  } catch { /* Not available */ }
+
+  try {
+    const ac = require(path.resolve(__dirname, 'auto-commit.js'));
+    if (typeof ac.autoCommit === 'function') summary.auto_commit_enabled = true;
+  } catch { /* Not available */ }
+
+  try {
+    const bus = require(path.resolve(__dirname, 'backlog-update-status.js'));
+    if (typeof bus.updateBacklogStatus === 'function') summary.backlog_auto_completion_enabled = true;
+  } catch { /* Not available */ }
+
+  try {
+    const ap = require(path.resolve(__dirname, 'agent-performance.js'));
+    if (typeof ap.recommendAgent === 'function') summary.agent_recommendation_enabled = true;
+  } catch { /* Not available */ }
+
   // Find last self-evaluation from agent memory
   try {
     const memMod = getAgentMemoryModule();

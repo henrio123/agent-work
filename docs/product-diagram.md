@@ -204,7 +204,7 @@
   │  ✓ Deterministic — same filesystem → same output                   │
   │  ✓ Role-enforced — wrong role cannot produce artifacts             │
   │  ✓ Capability system — extend without modifying core               │
-  │  ✓ 1090 tests, 62 suites, 0 failures                              │
+  │  ✓ 1140 tests, 66 suites, 0 failures                              │
   └──────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -224,7 +224,7 @@
   │
   ├── skills/
   │   ├── dev-pipeline/
-  │   │   ├── scripts/              # Core engine (37 modules)
+  │   │   ├── scripts/              # Core engine (39 modules)
   │   │   │   ├── dev-pipeline.js   #   State machine + stage config
   │   │   │   ├── capability-registry.js  # Capability loader
   │   │   │   ├── goal-selector.js  #   Intent → capability mapping
@@ -232,7 +232,7 @@
   │   │   │   └── ...
   │   │   ├── schemas/              # Tool I/O schemas (27)
   │   │   ├── references/           # Artifact schemas (7)
-  │   │   └── tests/                # Test suites (62)
+  │   │   └── tests/                # Test suites (66)
   │   │
   │   └── capabilities/             # Pluggable extensions
   │       ├── ux_audit/
@@ -282,8 +282,13 @@
   Post-run hooks, adaptive prompts,
   agent actuation, adaptive drive loop
 
-  Phase 6: Template-Enriched Exec      ████████████████████  CURRENT
+  Phase 6: Template-Enriched Exec      ████████████████████  DONE
   ────────────────────────────────
   Template prompts, artifact context,
   validation retry, auto-patch
+
+  Phase 7: Last-Mile Delivery          ████████████████████  CURRENT
+  ───────────────────────────
+  Post-patch tests, auto-commit,
+  backlog completion, agent fallback
 ```

@@ -49,7 +49,41 @@
             "error": { "type": ["string", "null"] }
           },
           "additionalProperties": false
+        },
+        "test_execution": {
+          "type": ["object", "null"],
+          "properties": {
+            "ok": { "type": "boolean" },
+            "test_command": { "type": ["string", "null"] },
+            "exit_code": { "type": ["number", "null"] },
+            "stdout_tail": { "type": "string" },
+            "stderr_tail": { "type": "string" },
+            "duration_ms": { "type": "number", "minimum": 0 },
+            "tests_discovered": { "type": "boolean" },
+            "error": { "type": "string" }
+          },
+          "additionalProperties": false
+        },
+        "auto_commit": {
+          "type": ["object", "null"],
+          "properties": {
+            "ok": { "type": "boolean" },
+            "commit_sha": { "type": ["string", "null"] },
+            "message": { "type": ["string", "null"] },
+            "error": { "type": ["string", "null"] }
+          },
+          "additionalProperties": false
         }
+      },
+      "additionalProperties": false
+    },
+    "backlog_completion": {
+      "type": "object",
+      "properties": {
+        "transitioned": { "type": "boolean" },
+        "old_status": { "type": "string" },
+        "new_status": { "type": "string" },
+        "error": { "type": "string" }
       },
       "additionalProperties": false
     },

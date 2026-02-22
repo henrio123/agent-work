@@ -176,7 +176,11 @@
         "template_enrichment_enabled": { "type": "boolean" },
         "artifact_context_enabled": { "type": "boolean" },
         "retry_loop_enabled": { "type": "boolean" },
-        "auto_patch_enabled": { "type": "boolean" }
+        "auto_patch_enabled": { "type": "boolean" },
+        "post_patch_tests_enabled": { "type": "boolean" },
+        "auto_commit_enabled": { "type": "boolean" },
+        "backlog_auto_completion_enabled": { "type": "boolean" },
+        "agent_recommendation_enabled": { "type": "boolean" }
       }
     }
   }

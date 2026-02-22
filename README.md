@@ -70,7 +70,8 @@ A stage advances only when all required artifacts exist and pass schema validati
 | **Level 3** | Autonomous org with memory | Done |
 | **Level 4** | Self-improving AI organization | Done |
 | **Level 5** | Closed-loop adaptive execution | Done |
-| **Level 6** | Template-enriched agent execution | **Current** |
+| **Level 6** | Template-enriched agent execution | Done |
+| **Level 7** | Last-mile delivery | **Current** |
 
 ### Levels 1–2 — What's Done
 
@@ -95,7 +96,7 @@ The system provides deterministic multi-agent pipeline execution with full schem
 
 **Hardening & Ops — Complete.**
 - `additionalProperties: false` enforced on all 34 schemas (output, input, reference).
-- GitHub Actions CI gate running 1090+ tests on every push and PR.
+- GitHub Actions CI gate running 1140+ tests on every push and PR.
 - Preflight graph validation before creating or driving runs.
 - Cron-friendly drive loop wrapper with safe stop.
 
@@ -147,6 +148,20 @@ The system provides deterministic multi-agent pipeline execution with full schem
 | Auto-patch application | Post-implement hook applies `40-dev-patch.diff` via `applyDevPatch()` (dry-run first) | DONE |
 | Dashboard Phase 6 fields | 4 feature flags in dashboard summary | DONE |
 
+### Level 7 — What's Done
+
+**Phase 7 (Last-Mile Delivery) — Complete.**
+
+| Milestone | Description | Status |
+|-----------|-------------|--------|
+| `artifactList` scope fix | Hoisted `artifactList` to function scope in `claudeCodeAdapter` | DONE |
+| Post-patch test execution | `discoverTestCommand()` + `runPostPatchTests()` in `post-patch-verify.js` | DONE |
+| Auto-commit | `autoCommit()` creates structured git commit (opt-in, never pushes) | DONE |
+| Backlog auto-completion | Run reaching `done` auto-transitions backlog item via `updateBacklogStatus` | DONE |
+| `recommendAgent` fallback | Picker fallback to `recommendAgent()` from `agent-performance.js` | DONE |
+| Claude adapter test coverage | Mock-based tests for all `claudeCodeAdapter` paths | DONE |
+| Dashboard Phase 7 fields | 4 feature flags in dashboard summary | DONE |
+
 ---
 
 ## Features
@@ -194,7 +209,12 @@ The system provides deterministic multi-agent pipeline execution with full schem
 - Validation retry loop (maxRetries with error feedback to agent)
 - Auto-patch application (post-implement dry-run + apply, non-fatal)
 - Dashboard Phase 6 feature flags
-- GitHub Actions CI (1090+ tests, 62 suites)
+- Post-patch test execution (discover + run project tests after patch application)
+- Auto-commit (opt-in structured git commit after successful tests, never pushes)
+- Backlog auto-completion (run → done transitions backlog item to done)
+- `recommendAgent` fallback (picker uses agent-performance when no recommendation)
+- Dashboard Phase 7 feature flags
+- GitHub Actions CI (1140+ tests, 66 suites)
 - Zero external npm dependencies
 
 ---
@@ -213,7 +233,7 @@ The system provides deterministic multi-agent pipeline execution with full schem
 ├── skills/
 │   ├── dev-pipeline/
 │   │   ├── SKILL.md                 # Comprehensive operational reference
-│   │   ├── scripts/                 # 37 Node.js implementation files
+│   │   ├── scripts/                 # 39 Node.js implementation files
 │   │   │   ├── dev-pipeline.js      # Core pipeline engine (state machine, schema validation, stage gates)
 │   │   │   ├── capability-registry.js # Capability loader, stage injection, template/schema resolution
 │   │   │   ├── goal-selector.js     # Deterministic intent + stack → capability mapping
@@ -226,7 +246,7 @@ The system provides deterministic multi-agent pipeline execution with full schem
 │   │   │   └── ...                  # Index, dashboard, task-pack, ticket-store, agent-state
 │   │   ├── schemas/                 # 27 JSON Schema files (input + output schemas)
 │   │   ├── references/              # 7 artifact schemas (pm-brief, arch-design, dev-notes, etc.)
-│   │   └── tests/                   # 62 test suites, ~1090 tests
+│   │   └── tests/                   # 66 test suites, ~1140 tests
 │   └── capabilities/               # Pluggable capability extensions
 │       ├── ux_audit/                # UX audit stage (after analyze)
 │       ├── security_audit/          # Security audit stage (after analyze)
@@ -267,7 +287,7 @@ The system provides deterministic multi-agent pipeline execution with full schem
 bash tools/test-all.sh
 ```
 
-Expected output: `TOTAL: N passed, 0 failed (62 suites)` (N ~1090)
+Expected output: `TOTAL: N passed, 0 failed (66 suites)` (N ~1140)
 
 ### Initialize a Target Repo
 
@@ -373,7 +393,7 @@ Timestamps and git HEAD are the only sources of non-determinism.
 
 ### Testing Strategy
 
-- **62 test suites** with **~1090 individual tests** covering:
+- **66 test suites** with **~1140 individual tests** covering:
   - State machine transitions and gate enforcement
   - Schema validation round-trips for all artifact types
   - Picker determinism and graph-aware constraint enforcement
@@ -491,7 +511,7 @@ git status
 - [x] Pluggable capability system with manifest-driven stage injection
 - [x] Goal-driven mission layer (deterministic intent + stack detection)
 - [x] 3 capabilities: UX audit, security audit, performance audit
-- [x] GitHub Actions CI (1090+ tests, 62 suites, 0 failures)
+- [x] GitHub Actions CI (1140+ tests, 66 suites, 0 failures)
 - [x] `additionalProperties: false` on all schemas (governance rule enforced)
 - [x] Cron-friendly drive loop with safe stop
 - [x] Zero external dependencies
@@ -515,3 +535,10 @@ git status
 - [x] Phase 6: Validation retry loop (maxRetries with error feedback)
 - [x] Phase 6: Post-implement auto-patch application (dry-run first, non-fatal)
 - [x] Phase 6: Dashboard feature flags (4 booleans)
+- [x] Phase 7: `artifactList` scope fix in `claudeCodeAdapter`
+- [x] Phase 7: Post-patch test execution (`discoverTestCommand` + `runPostPatchTests`)
+- [x] Phase 7: Auto-commit after successful tests (opt-in, never pushes)
+- [x] Phase 7: Backlog auto-completion (run done → backlog item done)
+- [x] Phase 7: `recommendAgent` fallback in project driver
+- [x] Phase 7: Claude adapter mock-based test coverage
+- [x] Phase 7: Dashboard feature flags (4 booleans)

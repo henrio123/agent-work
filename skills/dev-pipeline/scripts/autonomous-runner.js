@@ -36,6 +36,8 @@ const AGENT_MEMORY_PATH = path.resolve(__dirname, 'agent-memory.js');
 const PROMPT_CONTEXT_PATH = path.resolve(__dirname, 'prompt-context.js');
 const ADAPTER_PROMPT_BUILDER_PATH = path.resolve(__dirname, 'adapter-prompt-builder.js');
 const APPLY_DEV_PATCH_PATH = path.resolve(__dirname, 'apply-dev-patch.js');
+const POST_PATCH_VERIFY_PATH = path.resolve(__dirname, 'post-patch-verify.js');
+const AUTO_COMMIT_PATH = path.resolve(__dirname, 'auto-commit.js');
 
 const AUDIT_FILENAME = 'autonomous-audit.jsonl';
 const STOP_FILENAME = '.stop';
@@ -196,6 +198,11 @@ function claudeCodeAdapter(context) {
     return scaffoldAdapter(context);
   }
 
+  // Hoist artifactList to function scope so it's accessible in both prompt-building
+  // and post-invocation draft-checking paths (fixes scope bug where enriched prompt
+  // path left artifactList undefined).
+  const artifactList = context.missingArtifacts.sort();
+
   // Phase 6: Build enriched prompt via adapter-prompt-builder (with fallback)
   let prompt;
   try {
@@ -204,7 +211,6 @@ function claudeCodeAdapter(context) {
     prompt = promptResult.prompt;
   } catch {
     // Fallback to minimal prompt if adapter-prompt-builder is unavailable
-    const artifactList = context.missingArtifacts.sort();
     const schemaDescriptions = artifactList.map((a) => {
       const schema = loadArtifactSchema(a);
       if (!schema) return `- ${a}: no schema (write valid JSON with ticket_id)`;
@@ -365,6 +371,7 @@ function runAutonomous(runFolder, options = {}) {
   const auditLogEnabled = options.auditLog || false;
   const progressEnabled = options.progress !== false; // on by default for CLI
   const agentId = options.agentId || null;
+  const autoCommitEnabled = options.autoCommit || false;
 
   const trace = [];
   const artifactsWritten = [];
@@ -373,6 +380,8 @@ function runAutonomous(runFolder, options = {}) {
   let agentCalls = 0;
   let retriesAttempted = 0;
   let patchApplication = null;
+  let testExecution = null;
+  let commitResult = null;
 
   // Safety: resolve and validate run folder
   let resolvedFolder;
@@ -443,14 +452,14 @@ function runAutonomous(runFolder, options = {}) {
         trace.push(`step ${stepsRun}: stop signal detected`);
         audit.emit(stepsRun, '', '', 'stop', 'stop signal (.stop file)');
         progress.step(stepsRun, 'stopped', '', agentCalls, artifactsWritten.length);
-        return _result('stopped', trace, stepsRun, agentCalls, artifactsWritten, artifactsSkipped, maxSteps, maxAgentCalls, { retries_attempted: retriesAttempted, patch_application: patchApplication });
+        return _result('stopped', trace, stepsRun, agentCalls, artifactsWritten, artifactsSkipped, maxSteps, maxAgentCalls, { retries_attempted: retriesAttempted, patch_application: patchApplication, test_execution: testExecution, auto_commit: commitResult });
       }
 
       // Get current state via run_next_safe
       const result = callDP('run_next_safe', resolvedFolder);
       if (!result.json) {
         trace.push(`step ${stepsRun}: run_next_safe returned no JSON`);
-        return _result('error', trace, stepsRun, agentCalls, artifactsWritten, artifactsSkipped, maxSteps, maxAgentCalls, { retries_attempted: retriesAttempted, patch_application: patchApplication });
+        return _result('error', trace, stepsRun, agentCalls, artifactsWritten, artifactsSkipped, maxSteps, maxAgentCalls, { retries_attempted: retriesAttempted, patch_application: patchApplication, test_execution: testExecution, auto_commit: commitResult });
       }
 
       const action = result.json.action;
@@ -463,22 +472,22 @@ function runAutonomous(runFolder, options = {}) {
       if (action === 'none') {
         trace.push('run is complete');
         audit.emit(stepsRun, action, stage, 'stop', 'final_action=none');
-        return _result('none', trace, stepsRun, agentCalls, artifactsWritten, artifactsSkipped, maxSteps, maxAgentCalls, { retries_attempted: retriesAttempted, patch_application: patchApplication });
+        return _result('none', trace, stepsRun, agentCalls, artifactsWritten, artifactsSkipped, maxSteps, maxAgentCalls, { retries_attempted: retriesAttempted, patch_application: patchApplication, test_execution: testExecution, auto_commit: commitResult });
       }
       if (action === 'blocked') {
         trace.push(`blocked: ${result.json.blocked_reason || 'unknown'}`);
         audit.emit(stepsRun, action, stage, 'stop', `final_action=blocked, reason=${result.json.blocked_reason || 'unknown'}`);
-        return _result('blocked', trace, stepsRun, agentCalls, artifactsWritten, artifactsSkipped, maxSteps, maxAgentCalls, { retries_attempted: retriesAttempted, patch_application: patchApplication });
+        return _result('blocked', trace, stepsRun, agentCalls, artifactsWritten, artifactsSkipped, maxSteps, maxAgentCalls, { retries_attempted: retriesAttempted, patch_application: patchApplication, test_execution: testExecution, auto_commit: commitResult });
       }
       if (action === 'error') {
         trace.push(`error: ${result.json.error || 'unknown'}`);
         audit.emit(stepsRun, action, stage, 'stop', `final_action=error, error=${result.json.error || 'unknown'}`);
-        return _result('error', trace, stepsRun, agentCalls, artifactsWritten, artifactsSkipped, maxSteps, maxAgentCalls, { retries_attempted: retriesAttempted, patch_application: patchApplication });
+        return _result('error', trace, stepsRun, agentCalls, artifactsWritten, artifactsSkipped, maxSteps, maxAgentCalls, { retries_attempted: retriesAttempted, patch_application: patchApplication, test_execution: testExecution, auto_commit: commitResult });
       }
       if (action === 'stalled') {
         trace.push('stalled: no state change detected');
         audit.emit(stepsRun, action, stage, 'stop', 'final_action=stalled');
-        return _result('stalled', trace, stepsRun, agentCalls, artifactsWritten, artifactsSkipped, maxSteps, maxAgentCalls, { retries_attempted: retriesAttempted, patch_application: patchApplication });
+        return _result('stalled', trace, stepsRun, agentCalls, artifactsWritten, artifactsSkipped, maxSteps, maxAgentCalls, { retries_attempted: retriesAttempted, patch_application: patchApplication, test_execution: testExecution, auto_commit: commitResult });
       }
 
       // Needs task pack — generate it
@@ -489,7 +498,7 @@ function runAutonomous(runFolder, options = {}) {
         if (!tpResult.json || !tpResult.json.ok) {
           trace.push(`generate_task_pack failed: ${tpResult.stderr || 'unknown'}`);
           audit.emit(stepsRun, action, stage, 'stop', `final_action=error, generate_task_pack failed`);
-          return _result('error', trace, stepsRun, agentCalls, artifactsWritten, artifactsSkipped, maxSteps, maxAgentCalls, { retries_attempted: retriesAttempted, patch_application: patchApplication });
+          return _result('error', trace, stepsRun, agentCalls, artifactsWritten, artifactsSkipped, maxSteps, maxAgentCalls, { retries_attempted: retriesAttempted, patch_application: patchApplication, test_execution: testExecution, auto_commit: commitResult });
         }
         trace.push('task pack generated');
         continue;
@@ -510,13 +519,13 @@ function runAutonomous(runFolder, options = {}) {
         if (agentCalls >= maxAgentCalls) {
           trace.push(`max_agent_calls reached (${maxAgentCalls})`);
           audit.emit(stepsRun, action, currentStage, 'stop', `max_agent_calls reached (${maxAgentCalls})`);
-          return _result('needs_artifacts', trace, stepsRun, agentCalls, artifactsWritten, artifactsSkipped, maxSteps, maxAgentCalls, { retries_attempted: retriesAttempted, patch_application: patchApplication });
+          return _result('needs_artifacts', trace, stepsRun, agentCalls, artifactsWritten, artifactsSkipped, maxSteps, maxAgentCalls, { retries_attempted: retriesAttempted, patch_application: patchApplication, test_execution: testExecution, auto_commit: commitResult });
         }
 
         if (dryRun) {
           trace.push(`dry_run: would invoke ${role} agent for ${missingArtifacts.join(', ')}`);
           audit.emit(stepsRun, action, currentStage, 'stop', `dry_run: ${role}: ${missingArtifacts.join(', ')}`);
-          return _result('needs_artifacts', trace, stepsRun, agentCalls, artifactsWritten, artifactsSkipped, maxSteps, maxAgentCalls, { retries_attempted: retriesAttempted, patch_application: patchApplication });
+          return _result('needs_artifacts', trace, stepsRun, agentCalls, artifactsWritten, artifactsSkipped, maxSteps, maxAgentCalls, { retries_attempted: retriesAttempted, patch_application: patchApplication, test_execution: testExecution, auto_commit: commitResult });
         }
 
         // Build agent context
@@ -539,14 +548,14 @@ function runAutonomous(runFolder, options = {}) {
         } catch (e) {
           trace.push(`agent error: ${e.message}`);
           audit.emit(stepsRun, action, currentStage, 'stop', `final_action=error, agent error: ${e.message}`);
-          return _result('error', trace, stepsRun, agentCalls, artifactsWritten, artifactsSkipped, maxSteps, maxAgentCalls, { retries_attempted: retriesAttempted, patch_application: patchApplication });
+          return _result('error', trace, stepsRun, agentCalls, artifactsWritten, artifactsSkipped, maxSteps, maxAgentCalls, { retries_attempted: retriesAttempted, patch_application: patchApplication, test_execution: testExecution, auto_commit: commitResult });
         }
         agentCalls++;
 
         if (!agentResult || !agentResult.drafts || agentResult.drafts.length === 0) {
           trace.push('agent produced no drafts');
           audit.emit(stepsRun, action, currentStage, 'stop', 'final_action=error, agent produced no drafts');
-          return _result('error', trace, stepsRun, agentCalls, artifactsWritten, artifactsSkipped, maxSteps, maxAgentCalls, { retries_attempted: retriesAttempted, patch_application: patchApplication });
+          return _result('error', trace, stepsRun, agentCalls, artifactsWritten, artifactsSkipped, maxSteps, maxAgentCalls, { retries_attempted: retriesAttempted, patch_application: patchApplication, test_execution: testExecution, auto_commit: commitResult });
         }
 
         // Validate and write each draft (with retry support)
@@ -671,6 +680,53 @@ function runAutonomous(runFolder, options = {}) {
             patchApplication = { applied: false, error: patchErr.message };
             trace.push(`patch application error (non-fatal): ${patchErr.message}`);
           }
+
+          // Phase 7: Post-patch test execution
+          if (patchApplication && patchApplication.applied) {
+            try {
+              const { runPostPatchTests } = require(POST_PATCH_VERIFY_PATH);
+              audit.emit(stepsRun, action, currentStage, 'test_start', 'running post-patch tests');
+              const testResult = runPostPatchTests({ workspaceRoot: WORKSPACE_ROOT });
+              testExecution = {
+                ok: testResult.ok,
+                test_command: testResult.test_command,
+                exit_code: testResult.exit_code,
+                stdout_tail: testResult.stdout_tail,
+                stderr_tail: testResult.stderr_tail,
+                duration_ms: testResult.duration_ms,
+                tests_discovered: testResult.tests_discovered,
+              };
+              trace.push(`post-patch tests: ${testResult.tests_discovered ? (testResult.ok ? 'passed' : 'failed') : 'no tests found'}`);
+              audit.emit(stepsRun, action, currentStage, 'test_result', `ok=${testResult.ok}, discovered=${testResult.tests_discovered}`);
+            } catch (testErr) {
+              testExecution = { ok: false, error: testErr.message, tests_discovered: false };
+              trace.push(`post-patch test error (non-fatal): ${testErr.message}`);
+            }
+          }
+
+          // Phase 7: Auto-commit after successful tests (opt-in)
+          if (autoCommitEnabled && patchApplication && patchApplication.applied && (!testExecution || testExecution.ok !== false)) {
+            try {
+              const { autoCommit: doAutoCommit } = require(AUTO_COMMIT_PATH);
+              const status = readStatus(resolvedFolder);
+              audit.emit(stepsRun, action, currentStage, 'commit_start', 'auto-commit');
+              const cmtResult = doAutoCommit({
+                workspaceRoot: WORKSPACE_ROOT,
+                patchApplied: true,
+                testsOk: testExecution ? testExecution.ok : null,
+                ticketId: status.ticket_id,
+                title: status.title,
+                runFolder: path.relative(WORKSPACE_ROOT, resolvedFolder),
+                agentId: agentId || 'autonomous',
+              });
+              commitResult = { ok: cmtResult.ok, commit_sha: cmtResult.commit_sha, message: cmtResult.message, error: cmtResult.error };
+              trace.push(`auto-commit: ${cmtResult.ok ? cmtResult.commit_sha : cmtResult.error}`);
+              audit.emit(stepsRun, action, currentStage, 'commit_result', `ok=${cmtResult.ok}, sha=${cmtResult.commit_sha || 'none'}`);
+            } catch (cmtErr) {
+              commitResult = { ok: false, error: cmtErr.message };
+              trace.push(`auto-commit error (non-fatal): ${cmtErr.message}`);
+            }
+          }
         }
 
         // Write memory observation after stage artifact production (if agent_id set)
@@ -705,13 +761,13 @@ function runAutonomous(runFolder, options = {}) {
 
       // Unknown action
       trace.push(`unknown action: ${action}`);
-      return _result('error', trace, stepsRun, agentCalls, artifactsWritten, artifactsSkipped, maxSteps, maxAgentCalls, { retries_attempted: retriesAttempted, patch_application: patchApplication });
+      return _result('error', trace, stepsRun, agentCalls, artifactsWritten, artifactsSkipped, maxSteps, maxAgentCalls, { retries_attempted: retriesAttempted, patch_application: patchApplication, test_execution: testExecution, auto_commit: commitResult });
     }
 
     // Max steps reached
     trace.push(`max_steps reached (${maxSteps})`);
     audit.emit(stepsRun, '', '', 'stop', `max_steps reached (${maxSteps})`);
-    return _result('needs_artifacts', trace, stepsRun, agentCalls, artifactsWritten, artifactsSkipped, maxSteps, maxAgentCalls, { retries_attempted: retriesAttempted, patch_application: patchApplication });
+    return _result('needs_artifacts', trace, stepsRun, agentCalls, artifactsWritten, artifactsSkipped, maxSteps, maxAgentCalls, { retries_attempted: retriesAttempted, patch_application: patchApplication, test_execution: testExecution, auto_commit: commitResult });
 
   } finally {
     fs.mkdirSync = origMkdirSync;
@@ -742,6 +798,12 @@ function _result(finalAction, trace, stepsRun, agentCalls, artifactsWritten, art
   if (extras) {
     if (extras.retries_attempted !== undefined) result.retries_attempted = extras.retries_attempted;
     if (extras.patch_application !== undefined) result.patch_application = extras.patch_application;
+  }
+
+  // Phase 7 fields
+  if (extras) {
+    if (extras.test_execution !== undefined) result.test_execution = extras.test_execution;
+    if (extras.auto_commit !== undefined) result.auto_commit = extras.auto_commit;
   }
 
   return result;

@@ -277,7 +277,29 @@ function projectDriveOnce(options = {}) {
   const autoOpts = { maxSteps, maxAgentCalls, dryRun, auditLog, progress: !quiet };
   if (agentAdapter) autoOpts.agentAdapter = agentAdapter;
   // Phase 5: Pass recommended_agent from picker into runner
-  if (pickResult.recommended_agent) autoOpts.agentId = pickResult.recommended_agent;
+  if (pickResult.recommended_agent) {
+    autoOpts.agentId = pickResult.recommended_agent;
+  } else {
+    // Phase 7: Fallback to recommendAgent when picker has no recommendation
+    try {
+      const { recommendAgent } = require(path.resolve(__dirname, 'agent-performance.js'));
+      const stageRoleMap = { analyze: 'Analyst', plan: 'Architect', implement: 'Dev', validate: 'QA', review: 'Review' };
+      // Read current stage from status.json
+      const statusPath = path.join(safePath(runFolder, workspaceRoot), 'status.json');
+      if (fs.existsSync(statusPath)) {
+        const status = JSON.parse(fs.readFileSync(statusPath, 'utf8'));
+        const role = stageRoleMap[status.current_stage];
+        if (role) {
+          const recommended = recommendAgent({ workspaceRoot, projectId, role });
+          if (recommended) autoOpts.agentId = recommended;
+        }
+      }
+    } catch {
+      // Non-fatal — agent recommendation is best-effort
+    }
+  }
+  // Phase 7: Pass autoCommit option through to runner
+  if (options.autoCommit) autoOpts.autoCommit = true;
   const autoResult = runAutonomous(runFolder, autoOpts);
 
   // Safety verify (ignore test dirs and the newly created run)
@@ -361,6 +383,19 @@ function projectDriveOnce(options = {}) {
     // Non-fatal — post-run hooks should never fail the drive
   }
 
+  // Phase 7: Backlog auto-completion when run reaches done
+  let backlogCompletion = null;
+  if (autoResult.final_action === 'none') {
+    try {
+      const { updateBacklogStatus } = require(path.resolve(__dirname, 'backlog-update-status.js'));
+      const blDir = options.backlogDir || path.join(workspaceRoot, '.claw', 'backlog');
+      const result = updateBacklogStatus(projectId, taskId, 'done', { workspaceRoot, backlogDir: blDir });
+      backlogCompletion = { transitioned: result.ok, old_status: result.old_status || '', new_status: result.new_status || 'done', error: result.error || undefined };
+    } catch (e) {
+      backlogCompletion = { transitioned: false, error: e.message };
+    }
+  }
+
   const driveResult = {
     ok: true,
     action: createdRun ? 'drive_created_run' : 'drive_complete',
@@ -369,6 +404,7 @@ function projectDriveOnce(options = {}) {
     autonomous: autoResult,
   };
   if (postRun) driveResult.post_run = postRun;
+  if (backlogCompletion) driveResult.backlog_completion = backlogCompletion;
   return driveResult;
 }
 
