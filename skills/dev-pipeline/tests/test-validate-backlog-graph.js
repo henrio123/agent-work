@@ -312,10 +312,14 @@ test('CLI outputs valid JSON for temp project', () => {
 });
 
 test('CLI exits 1 for non-existent project', () => {
+  const emptyWsRoot = path.join(os.tmpdir(), `_test_graph_empty_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`);
+  fs.mkdirSync(emptyWsRoot, { recursive: true });
+  tmpDirs.push(emptyWsRoot);
   let exitedNonZero = false;
   try {
     execFileSync('node', [SCRIPT, 'nonexistent-project-xyz'], {
       encoding: 'utf8', stdio: 'pipe', timeout: 10000,
+      env: { ...process.env, WORKSPACE_ROOT: emptyWsRoot },
     });
   } catch (e) {
     exitedNonZero = true;

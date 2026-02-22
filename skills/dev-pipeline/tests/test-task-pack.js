@@ -393,9 +393,11 @@ test('CLI list outputs valid JSON', () => {
 });
 
 test('CLI generate exits 1 for non-existent project', () => {
+  const emptyWs = makeTempDir();
   try {
     execFileSync('node', [GEN_SCRIPT, '_nonexistent_proj_xyz', 'T-X'], {
       encoding: 'utf8', timeout: 10000,
+      env: { ...process.env, WORKSPACE_ROOT: emptyWs },
     });
     throw new Error('expected non-zero exit');
   } catch (e) {
