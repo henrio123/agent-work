@@ -8,13 +8,13 @@
 
 ## Filesystem Scope
 
-- **Workspace:** `/Users/henr/dev/agent-work` — all agent operations are restricted to this directory.
+- **Workspace:** Configured via `WORKSPACE_ROOT` environment variable — all agent operations are restricted to this directory.
 - **Permissions:** All workspace directories are `700` (owner-only read/write/execute).
 - **Config file:** `~/.openclaw/openclaw.json` is `600` (owner-only read/write).
 
 ## Skills
 
-- **Local skills only:** Skills are loaded from `/Users/henr/dev/agent-work/skills` via `skills.load.extraDirs`.
+- **Local skills only:** Skills are loaded from `$WORKSPACE_ROOT/skills` via `skills.load.extraDirs`.
 - **No remote registry:** ClawHub and remote skill registries are not configured. No `clawhub install` commands should be run.
 - **Bundled skills:** Allowed (`allowBundled: true`) as these ship with the verified npm package.
 

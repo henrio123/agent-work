@@ -95,8 +95,8 @@ The system provides deterministic multi-agent pipeline execution with full schem
 - Dashboard dependency chain visualization.
 
 **Hardening & Ops — Complete.**
-- `additionalProperties: false` enforced on all 34 schemas (output, input, reference).
-- GitHub Actions CI gate running 1140+ tests on every push and PR.
+- `additionalProperties: false` enforced on all schemas (output, input, reference).
+- GitHub Actions CI gate (`bash tools/test-all.sh`) on every push and PR.
 - Preflight graph validation before creating or driving runs.
 - Cron-friendly drive loop wrapper with safe stop.
 
@@ -146,7 +146,7 @@ The system provides deterministic multi-agent pipeline execution with full schem
 | Prior artifact context | `buildArtifactContext()` reads and injects prior artifact content into prompt | DONE |
 | Validation retry loop | `buildRetryPrompt()` provides error feedback, adapter retries up to `maxRetries` times | DONE |
 | Auto-patch application | Post-implement hook applies `40-dev-patch.diff` via `applyDevPatch()` (dry-run first) | DONE |
-| Dashboard Phase 6 fields | 4 feature flags in dashboard summary | DONE |
+| Dashboard Phase 6 fields | Feature flags in dashboard summary | DONE |
 
 ### Level 7 — What's Done
 
@@ -160,7 +160,7 @@ The system provides deterministic multi-agent pipeline execution with full schem
 | Backlog auto-completion | Run reaching `done` auto-transitions backlog item via `updateBacklogStatus` | DONE |
 | `recommendAgent` fallback | Picker fallback to `recommendAgent()` from `agent-performance.js` | DONE |
 | Claude adapter test coverage | Mock-based tests for all `claudeCodeAdapter` paths | DONE |
-| Dashboard Phase 7 fields | 4 feature flags in dashboard summary | DONE |
+| Dashboard Phase 7 fields | Feature flags in dashboard summary | DONE |
 
 ---
 
@@ -189,7 +189,7 @@ The system provides deterministic multi-agent pipeline execution with full schem
 - Workspace bootstrap and patch application tools
 - Pluggable capability system (capability registry, manifest-driven stage injection)
 - Goal-driven mission layer (deterministic intent + stack detection, capability activation)
-- 4 capabilities: UX audit, security audit, performance audit, research
+- Pluggable capabilities: UX audit, security audit, performance audit, research
 - Artifact classification with semantic types and global artifact index
 - Research workflow with structured findings schema
 - Agent memory (append-only, schema-validated, cross-run)
@@ -214,7 +214,7 @@ The system provides deterministic multi-agent pipeline execution with full schem
 - Backlog auto-completion (run → done transitions backlog item to done)
 - `recommendAgent` fallback (picker uses agent-performance when no recommendation)
 - Dashboard Phase 7 feature flags
-- GitHub Actions CI (1140+ tests, 66 suites)
+- GitHub Actions CI (run `bash tools/test-all.sh` for current counts)
 - Zero external npm dependencies
 
 ---
@@ -233,7 +233,7 @@ The system provides deterministic multi-agent pipeline execution with full schem
 ├── skills/
 │   ├── dev-pipeline/
 │   │   ├── SKILL.md                 # Comprehensive operational reference
-│   │   ├── scripts/                 # 39 Node.js implementation files
+│   │   ├── scripts/                 # Core engine (run `bash tools/doc-stats.sh`)
 │   │   │   ├── dev-pipeline.js      # Core pipeline engine (state machine, schema validation, stage gates)
 │   │   │   ├── capability-registry.js # Capability loader, stage injection, template/schema resolution
 │   │   │   ├── goal-selector.js     # Deterministic intent + stack → capability mapping
@@ -246,7 +246,7 @@ The system provides deterministic multi-agent pipeline execution with full schem
 │   │   │   └── ...                  # Index, dashboard, task-pack, ticket-store, agent-state
 │   │   ├── schemas/                 # 27 JSON Schema files (input + output schemas)
 │   │   ├── references/              # 7 artifact schemas (pm-brief, arch-design, dev-notes, etc.)
-│   │   └── tests/                   # 66 test suites, ~1140 tests
+│   │   └── tests/                   # Test suites (run `bash tools/test-all.sh`)
 │   └── capabilities/               # Pluggable capability extensions
 │       ├── ux_audit/                # UX audit stage (after analyze)
 │       ├── security_audit/          # Security audit stage (after analyze)
@@ -287,7 +287,7 @@ The system provides deterministic multi-agent pipeline execution with full schem
 bash tools/test-all.sh
 ```
 
-Expected output: `TOTAL: N passed, 0 failed (66 suites)` (N ~1140)
+Expected output: `TOTAL: N passed, 0 failed (M suites)` with zero failures.
 
 ### Initialize a Target Repo
 
@@ -393,7 +393,7 @@ Timestamps and git HEAD are the only sources of non-determinism.
 
 ### Testing Strategy
 
-- **66 test suites** with **~1140 individual tests** covering:
+- Comprehensive test coverage (`bash tools/test-all.sh`) covering:
   - State machine transitions and gate enforcement
   - Schema validation round-trips for all artifact types
   - Picker determinism and graph-aware constraint enforcement
@@ -510,8 +510,8 @@ git status
 - [x] Workspace bootstrap (`init-workspace`) and patch application (`apply-dev-patch`)
 - [x] Pluggable capability system with manifest-driven stage injection
 - [x] Goal-driven mission layer (deterministic intent + stack detection)
-- [x] 3 capabilities: UX audit, security audit, performance audit
-- [x] GitHub Actions CI (1140+ tests, 66 suites, 0 failures)
+- [x] Built-in capabilities: UX audit, security audit, performance audit
+- [x] GitHub Actions CI (all tests green, zero failures)
 - [x] `additionalProperties: false` on all schemas (governance rule enforced)
 - [x] Cron-friendly drive loop with safe stop
 - [x] Zero external dependencies
@@ -534,11 +534,11 @@ git status
 - [x] Phase 6: Prior artifact context injection (STAGE_ARTIFACT_DEPS, per-artifact truncation)
 - [x] Phase 6: Validation retry loop (maxRetries with error feedback)
 - [x] Phase 6: Post-implement auto-patch application (dry-run first, non-fatal)
-- [x] Phase 6: Dashboard feature flags (4 booleans)
+- [x] Phase 6: Dashboard feature flags
 - [x] Phase 7: `artifactList` scope fix in `claudeCodeAdapter`
 - [x] Phase 7: Post-patch test execution (`discoverTestCommand` + `runPostPatchTests`)
 - [x] Phase 7: Auto-commit after successful tests (opt-in, never pushes)
 - [x] Phase 7: Backlog auto-completion (run done → backlog item done)
 - [x] Phase 7: `recommendAgent` fallback in project driver
 - [x] Phase 7: Claude adapter mock-based test coverage
-- [x] Phase 7: Dashboard feature flags (4 booleans)
+- [x] Phase 7: Dashboard feature flags

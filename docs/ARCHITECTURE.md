@@ -13,7 +13,7 @@ The pipeline takes a ticket, creates a run, drives it through a fixed sequence o
 
 ## 2. System Boundaries and Invariants
 
-**Workspace root:** `~/dev/agent-work/`. All paths are resolved against this root via `safePath()`. Any path that resolves outside the workspace is rejected.
+**Workspace root:** Set via `WORKSPACE_ROOT` environment variable (defaults to `~/dev/agent-work/`). All paths are resolved against this root via `safePath()`. Any path that resolves outside the workspace is rejected.
 
 **Invariants:**
 
@@ -336,7 +336,7 @@ The primary extension mechanism. New audit/analysis stages are added as capabili
 3. Add artifact schema in `skills/capabilities/<name>/references/`.
 4. Activate in workspace via `.claw/capabilities.json`.
 
-Four capabilities ship with the engine: `ux_audit`, `security_audit`, `performance_audit`, and `research`. The first three inject after `analyze` and before `plan`. The `research` capability injects between `analyze` and `plan` for research-type workflows.
+The engine ships with built-in capabilities: `ux_audit`, `security_audit`, `performance_audit`, and `research`. The audit capabilities inject after `analyze` and before `plan`. The `research` capability injects between `analyze` and `plan` for research-type workflows. New capabilities can be added by creating a directory under `skills/capabilities/` with a `capability.json` manifest.
 
 **Adding goal-selector support:** Update `parseIntents()` in `goal-selector.js` with keyword patterns, and `selectCapabilities()` with the intent→capability mapping.
 
@@ -370,7 +370,7 @@ The system currently provides:
 - An append-only audit log (`autonomous-audit.jsonl`) per run.
 - Read-only safety guarantees on all index, pick, dashboard, watch, and list tools.
 - A web dashboard (`dashboard.js`) on `localhost:18790` for run-level monitoring.
-- 1090+ tests across 62 suites with zero external npm dependencies.
+- Comprehensive test coverage (`bash tools/test-all.sh`) with zero external npm dependencies.
 
 ## Target State
 

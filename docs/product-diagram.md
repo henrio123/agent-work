@@ -175,9 +175,9 @@
         │                         • performance ✗                        │
         ▼                                                                │
   goal-selector.js                Stack:                                 ▼
-  (deterministic                  • Cargo.toml found
-   rules, no LLM)                • cosmwasm-std dep              4. CHAIN INJECTION
-                                  → stack: "cosmwasm"             ═══════════════════
+  (deterministic                  • package.json found
+   rules, no LLM)                • next.config.js found          4. CHAIN INJECTION
+                                  → stack: "nextjs"               ═══════════════════
 
                                                                   analyze
                                                                      │
@@ -204,7 +204,7 @@
   │  ✓ Deterministic — same filesystem → same output                   │
   │  ✓ Role-enforced — wrong role cannot produce artifacts             │
   │  ✓ Capability system — extend without modifying core               │
-  │  ✓ 1140 tests, 66 suites, 0 failures                              │
+  │  ✓ All tests green (bash tools/test-all.sh)                        │
   └──────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -220,19 +220,19 @@
   │   ├── project-next-drive.sh     #   Project-level driver
   │   ├── project-dashboard.sh      #   Read-only dashboard JSON
   │   ├── dashboard-start.sh        #   HTTP UI on :18790
-  │   └── test-all.sh               #   1090 tests, single gate
+  │   └── test-all.sh               #   Single gate: all tests green
   │
   ├── skills/
   │   ├── dev-pipeline/
-  │   │   ├── scripts/              # Core engine (39 modules)
+  │   │   ├── scripts/              # Core engine modules
   │   │   │   ├── dev-pipeline.js   #   State machine + stage config
   │   │   │   ├── capability-registry.js  # Capability loader
   │   │   │   ├── goal-selector.js  #   Intent → capability mapping
   │   │   │   ├── autonomous-runner.js    # Agent loop
   │   │   │   └── ...
-  │   │   ├── schemas/              # Tool I/O schemas (27)
+  │   │   ├── schemas/              # Tool I/O schemas
   │   │   ├── references/           # Artifact schemas (7)
-  │   │   └── tests/                # Test suites (66)
+  │   │   └── tests/                # Test suites
   │   │
   │   └── capabilities/             # Pluggable extensions
   │       ├── ux_audit/
