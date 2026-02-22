@@ -34,6 +34,8 @@ const {
 const DP_PATH = path.resolve(__dirname, 'dev-pipeline.js');
 const AGENT_MEMORY_PATH = path.resolve(__dirname, 'agent-memory.js');
 const PROMPT_CONTEXT_PATH = path.resolve(__dirname, 'prompt-context.js');
+const ADAPTER_PROMPT_BUILDER_PATH = path.resolve(__dirname, 'adapter-prompt-builder.js');
+const APPLY_DEV_PATCH_PATH = path.resolve(__dirname, 'apply-dev-patch.js');
 
 const AUDIT_FILENAME = 'autonomous-audit.jsonl';
 const STOP_FILENAME = '.stop';
@@ -194,63 +196,45 @@ function claudeCodeAdapter(context) {
     return scaffoldAdapter(context);
   }
 
-  // Build deterministic prompt
-  const artifactList = context.missingArtifacts.sort();
-  const schemaDescriptions = artifactList.map((a) => {
-    const schema = loadArtifactSchema(a);
-    if (!schema) return `- ${a}: no schema (write valid JSON with ticket_id)`;
-    const required = (schema.required || []).sort().join(', ');
-    return `- ${a}: required fields: [${required}]`;
-  }).join('\n');
-
-  // Phase 5: Build adaptive prompt context (memory + workflow suggestions)
-  let promptContextText = '';
+  // Phase 6: Build enriched prompt via adapter-prompt-builder (with fallback)
+  let prompt;
   try {
-    const { buildPromptContext } = require(PROMPT_CONTEXT_PATH);
-    const ctxResult = buildPromptContext({
-      workspaceRoot: WORKSPACE_ROOT,
-      projectId: context.status.project,
-      agentId: context.agentId || null,
-    });
-    if (ctxResult.ok && ctxResult.context_text) {
-      promptContextText = ctxResult.context_text;
-    }
+    const { buildAdapterPrompt } = require(ADAPTER_PROMPT_BUILDER_PATH);
+    const promptResult = buildAdapterPrompt(context, { workspaceRoot: WORKSPACE_ROOT });
+    prompt = promptResult.prompt;
   } catch {
-    // Non-fatal — prompt context is optional
+    // Fallback to minimal prompt if adapter-prompt-builder is unavailable
+    const artifactList = context.missingArtifacts.sort();
+    const schemaDescriptions = artifactList.map((a) => {
+      const schema = loadArtifactSchema(a);
+      if (!schema) return `- ${a}: no schema (write valid JSON with ticket_id)`;
+      const required = (schema.required || []).sort().join(', ');
+      return `- ${a}: required fields: [${required}]`;
+    }).join('\n');
+
+    const agentIdentity = context.agentId
+      ? `You are agent ${context.agentId}, a ${context.role} agent working on ticket ${context.status.ticket_id}: ${context.status.title}`
+      : `You are a ${context.role} agent working on ticket ${context.status.ticket_id}: ${context.status.title}`;
+
+    prompt = [
+      agentIdentity,
+      `Project: ${context.status.project}`,
+      `Current stage: ${context.status.current_stage}`,
+      '',
+      'Produce the following artifact drafts:',
+      schemaDescriptions,
+      '',
+      `Write each artifact as a file with .draft suffix in: ${context.runFolder}`,
+      `For example, write ${artifactList[0]} content to ${path.join(context.runFolder, artifactList[0] + '.draft')}`,
+      '',
+      'Requirements:',
+      '- Each JSON artifact must be valid against its schema',
+      '- Diff artifacts must be valid unified diff format',
+      '- Do not create any directories',
+      '- Do not modify any existing files',
+      `- Use ticket_id: "${context.status.ticket_id}" in all artifacts that require it`,
+    ].join('\n');
   }
-
-  const agentIdentity = context.agentId
-    ? `You are agent ${context.agentId}, a ${context.role} agent working on ticket ${context.status.ticket_id}: ${context.status.title}`
-    : `You are a ${context.role} agent working on ticket ${context.status.ticket_id}: ${context.status.title}`;
-
-  const promptParts = [
-    agentIdentity,
-    `Project: ${context.status.project}`,
-    `Current stage: ${context.status.current_stage}`,
-  ];
-
-  if (promptContextText) {
-    promptParts.push('');
-    promptParts.push(promptContextText);
-  }
-
-  promptParts.push(
-    '',
-    'Produce the following artifact drafts:',
-    schemaDescriptions,
-    '',
-    `Write each artifact as a file with .draft suffix in: ${context.runFolder}`,
-    `For example, write ${artifactList[0]} content to ${path.join(context.runFolder, artifactList[0] + '.draft')}`,
-    '',
-    'Requirements:',
-    '- Each JSON artifact must be valid against its schema',
-    '- Diff artifacts must be valid unified diff format',
-    '- Do not create any directories',
-    '- Do not modify any existing files',
-    `- Use ticket_id: "${context.status.ticket_id}" in all artifacts that require it`,
-  );
-
-  const prompt = promptParts.join('\n');
 
   try {
     execFileSync('claude', ['-p', prompt, '--output-format', 'json', '--max-turns', '5'], {
@@ -375,6 +359,7 @@ function snapshotFiles(dirPath) {
 function runAutonomous(runFolder, options = {}) {
   const maxSteps = options.maxSteps || 50;
   const maxAgentCalls = options.maxAgentCalls || 20;
+  const maxRetries = options.maxRetries !== undefined ? options.maxRetries : 2;
   const dryRun = options.dryRun || false;
   const agentAdapter = options.agentAdapter || claudeCodeAdapter;
   const auditLogEnabled = options.auditLog || false;
@@ -386,6 +371,8 @@ function runAutonomous(runFolder, options = {}) {
   const artifactsSkipped = [];
   let stepsRun = 0;
   let agentCalls = 0;
+  let retriesAttempted = 0;
+  let patchApplication = null;
 
   // Safety: resolve and validate run folder
   let resolvedFolder;
@@ -456,14 +443,14 @@ function runAutonomous(runFolder, options = {}) {
         trace.push(`step ${stepsRun}: stop signal detected`);
         audit.emit(stepsRun, '', '', 'stop', 'stop signal (.stop file)');
         progress.step(stepsRun, 'stopped', '', agentCalls, artifactsWritten.length);
-        return _result('stopped', trace, stepsRun, agentCalls, artifactsWritten, artifactsSkipped, maxSteps, maxAgentCalls);
+        return _result('stopped', trace, stepsRun, agentCalls, artifactsWritten, artifactsSkipped, maxSteps, maxAgentCalls, { retries_attempted: retriesAttempted, patch_application: patchApplication });
       }
 
       // Get current state via run_next_safe
       const result = callDP('run_next_safe', resolvedFolder);
       if (!result.json) {
         trace.push(`step ${stepsRun}: run_next_safe returned no JSON`);
-        return _result('error', trace, stepsRun, agentCalls, artifactsWritten, artifactsSkipped, maxSteps, maxAgentCalls);
+        return _result('error', trace, stepsRun, agentCalls, artifactsWritten, artifactsSkipped, maxSteps, maxAgentCalls, { retries_attempted: retriesAttempted, patch_application: patchApplication });
       }
 
       const action = result.json.action;
@@ -476,22 +463,22 @@ function runAutonomous(runFolder, options = {}) {
       if (action === 'none') {
         trace.push('run is complete');
         audit.emit(stepsRun, action, stage, 'stop', 'final_action=none');
-        return _result('none', trace, stepsRun, agentCalls, artifactsWritten, artifactsSkipped, maxSteps, maxAgentCalls);
+        return _result('none', trace, stepsRun, agentCalls, artifactsWritten, artifactsSkipped, maxSteps, maxAgentCalls, { retries_attempted: retriesAttempted, patch_application: patchApplication });
       }
       if (action === 'blocked') {
         trace.push(`blocked: ${result.json.blocked_reason || 'unknown'}`);
         audit.emit(stepsRun, action, stage, 'stop', `final_action=blocked, reason=${result.json.blocked_reason || 'unknown'}`);
-        return _result('blocked', trace, stepsRun, agentCalls, artifactsWritten, artifactsSkipped, maxSteps, maxAgentCalls);
+        return _result('blocked', trace, stepsRun, agentCalls, artifactsWritten, artifactsSkipped, maxSteps, maxAgentCalls, { retries_attempted: retriesAttempted, patch_application: patchApplication });
       }
       if (action === 'error') {
         trace.push(`error: ${result.json.error || 'unknown'}`);
         audit.emit(stepsRun, action, stage, 'stop', `final_action=error, error=${result.json.error || 'unknown'}`);
-        return _result('error', trace, stepsRun, agentCalls, artifactsWritten, artifactsSkipped, maxSteps, maxAgentCalls);
+        return _result('error', trace, stepsRun, agentCalls, artifactsWritten, artifactsSkipped, maxSteps, maxAgentCalls, { retries_attempted: retriesAttempted, patch_application: patchApplication });
       }
       if (action === 'stalled') {
         trace.push('stalled: no state change detected');
         audit.emit(stepsRun, action, stage, 'stop', 'final_action=stalled');
-        return _result('stalled', trace, stepsRun, agentCalls, artifactsWritten, artifactsSkipped, maxSteps, maxAgentCalls);
+        return _result('stalled', trace, stepsRun, agentCalls, artifactsWritten, artifactsSkipped, maxSteps, maxAgentCalls, { retries_attempted: retriesAttempted, patch_application: patchApplication });
       }
 
       // Needs task pack — generate it
@@ -502,7 +489,7 @@ function runAutonomous(runFolder, options = {}) {
         if (!tpResult.json || !tpResult.json.ok) {
           trace.push(`generate_task_pack failed: ${tpResult.stderr || 'unknown'}`);
           audit.emit(stepsRun, action, stage, 'stop', `final_action=error, generate_task_pack failed`);
-          return _result('error', trace, stepsRun, agentCalls, artifactsWritten, artifactsSkipped, maxSteps, maxAgentCalls);
+          return _result('error', trace, stepsRun, agentCalls, artifactsWritten, artifactsSkipped, maxSteps, maxAgentCalls, { retries_attempted: retriesAttempted, patch_application: patchApplication });
         }
         trace.push('task pack generated');
         continue;
@@ -523,13 +510,13 @@ function runAutonomous(runFolder, options = {}) {
         if (agentCalls >= maxAgentCalls) {
           trace.push(`max_agent_calls reached (${maxAgentCalls})`);
           audit.emit(stepsRun, action, currentStage, 'stop', `max_agent_calls reached (${maxAgentCalls})`);
-          return _result('needs_artifacts', trace, stepsRun, agentCalls, artifactsWritten, artifactsSkipped, maxSteps, maxAgentCalls);
+          return _result('needs_artifacts', trace, stepsRun, agentCalls, artifactsWritten, artifactsSkipped, maxSteps, maxAgentCalls, { retries_attempted: retriesAttempted, patch_application: patchApplication });
         }
 
         if (dryRun) {
           trace.push(`dry_run: would invoke ${role} agent for ${missingArtifacts.join(', ')}`);
           audit.emit(stepsRun, action, currentStage, 'stop', `dry_run: ${role}: ${missingArtifacts.join(', ')}`);
-          return _result('needs_artifacts', trace, stepsRun, agentCalls, artifactsWritten, artifactsSkipped, maxSteps, maxAgentCalls);
+          return _result('needs_artifacts', trace, stepsRun, agentCalls, artifactsWritten, artifactsSkipped, maxSteps, maxAgentCalls, { retries_attempted: retriesAttempted, patch_application: patchApplication });
         }
 
         // Build agent context
@@ -552,20 +539,70 @@ function runAutonomous(runFolder, options = {}) {
         } catch (e) {
           trace.push(`agent error: ${e.message}`);
           audit.emit(stepsRun, action, currentStage, 'stop', `final_action=error, agent error: ${e.message}`);
-          return _result('error', trace, stepsRun, agentCalls, artifactsWritten, artifactsSkipped, maxSteps, maxAgentCalls);
+          return _result('error', trace, stepsRun, agentCalls, artifactsWritten, artifactsSkipped, maxSteps, maxAgentCalls, { retries_attempted: retriesAttempted, patch_application: patchApplication });
         }
         agentCalls++;
 
         if (!agentResult || !agentResult.drafts || agentResult.drafts.length === 0) {
           trace.push('agent produced no drafts');
           audit.emit(stepsRun, action, currentStage, 'stop', 'final_action=error, agent produced no drafts');
-          return _result('error', trace, stepsRun, agentCalls, artifactsWritten, artifactsSkipped, maxSteps, maxAgentCalls);
+          return _result('error', trace, stepsRun, agentCalls, artifactsWritten, artifactsSkipped, maxSteps, maxAgentCalls, { retries_attempted: retriesAttempted, patch_application: patchApplication });
         }
 
-        // Validate and write each draft
+        // Validate and write each draft (with retry support)
         let allDraftsValid = true;
         for (const draft of agentResult.drafts) {
-          const validation = validateDraft(draft.draftPath, draft.targetArtifact, resolvedFolder);
+          let validation = validateDraft(draft.draftPath, draft.targetArtifact, resolvedFolder);
+
+          // Phase 6: Retry loop for invalid drafts
+          if (!validation.valid && maxRetries > 0) {
+            let retryCount = 0;
+            while (!validation.valid && retryCount < maxRetries) {
+              retryCount++;
+              retriesAttempted++;
+              trace.push(`retry ${retryCount}/${maxRetries} for ${draft.targetArtifact}: ${validation.errors.join('; ')}`);
+              audit.emit(stepsRun, action, currentStage, 'retry_start', `${draft.targetArtifact}: retry ${retryCount}/${maxRetries}`);
+
+              // Read invalid draft content for error feedback
+              let draftContent = '';
+              try { draftContent = fs.readFileSync(draft.draftPath, 'utf8'); } catch {}
+
+              // Delete invalid draft
+              try { fs.unlinkSync(draft.draftPath); } catch {}
+
+              // Build retry prompt and re-invoke adapter
+              try {
+                const { buildRetryPrompt } = require(ADAPTER_PROMPT_BUILDER_PATH);
+                const retryResult = buildRetryPrompt({
+                  draftContent,
+                  validationErrors: validation.errors,
+                  retryNum: retryCount,
+                  maxRetries,
+                  artifactName: draft.targetArtifact,
+                });
+
+                const retryContext = {
+                  ...context,
+                  retryPrompt: retryResult.prompt,
+                  missingArtifacts: [draft.targetArtifact],
+                };
+
+                const retryAgentResult = agentAdapter(retryContext);
+                agentCalls++;
+
+                if (retryAgentResult && retryAgentResult.drafts && retryAgentResult.drafts.length > 0) {
+                  const retryDraft = retryAgentResult.drafts.find(d => d.targetArtifact === draft.targetArtifact);
+                  if (retryDraft) {
+                    draft.draftPath = retryDraft.draftPath;
+                    validation = validateDraft(draft.draftPath, draft.targetArtifact, resolvedFolder);
+                  }
+                }
+              } catch (retryErr) {
+                trace.push(`retry error (non-fatal): ${retryErr.message}`);
+                break;
+              }
+            }
+          }
 
           if (!validation.valid) {
             trace.push(`draft invalid: ${draft.targetArtifact} — ${validation.errors.join('; ')}`);
@@ -610,6 +647,32 @@ function runAutonomous(runFolder, options = {}) {
           trace.push('some drafts were invalid');
         }
 
+        // Phase 6: Post-implement patch application
+        if (currentStage === 'implement' && artifactsWritten.includes('40-dev-patch.diff')) {
+          try {
+            const { applyDevPatch } = require(APPLY_DEV_PATCH_PATH);
+            const relativeRunFolder = path.relative(WORKSPACE_ROOT, resolvedFolder);
+            audit.emit(stepsRun, action, currentStage, 'patch_apply_start', relativeRunFolder);
+
+            // 1. Dry-run validation
+            const dryResult = applyDevPatch({ runFolder: relativeRunFolder }, { workspaceRoot: WORKSPACE_ROOT, dryRun: true });
+            if (dryResult.ok) {
+              // 2. Apply for real
+              const applyResult = applyDevPatch({ runFolder: relativeRunFolder }, { workspaceRoot: WORKSPACE_ROOT, dryRun: false });
+              patchApplication = { applied: applyResult.ok, files_changed: applyResult.files_changed || [], error: applyResult.error || null };
+              trace.push(`patch applied: ${applyResult.ok ? 'success' : applyResult.error}`);
+              audit.emit(stepsRun, action, currentStage, 'patch_apply_result', `applied=${applyResult.ok}`);
+            } else {
+              patchApplication = { applied: false, error: dryResult.error || 'dry-run failed' };
+              trace.push(`patch dry-run failed (non-fatal): ${dryResult.error}`);
+              audit.emit(stepsRun, action, currentStage, 'patch_apply_result', `dry_run_failed: ${dryResult.error}`);
+            }
+          } catch (patchErr) {
+            patchApplication = { applied: false, error: patchErr.message };
+            trace.push(`patch application error (non-fatal): ${patchErr.message}`);
+          }
+        }
+
         // Write memory observation after stage artifact production (if agent_id set)
         if (agentId && artifactsWritten.length > 0) {
           const stageArtifacts = agentResult.drafts
@@ -642,13 +705,13 @@ function runAutonomous(runFolder, options = {}) {
 
       // Unknown action
       trace.push(`unknown action: ${action}`);
-      return _result('error', trace, stepsRun, agentCalls, artifactsWritten, artifactsSkipped, maxSteps, maxAgentCalls);
+      return _result('error', trace, stepsRun, agentCalls, artifactsWritten, artifactsSkipped, maxSteps, maxAgentCalls, { retries_attempted: retriesAttempted, patch_application: patchApplication });
     }
 
     // Max steps reached
     trace.push(`max_steps reached (${maxSteps})`);
     audit.emit(stepsRun, '', '', 'stop', `max_steps reached (${maxSteps})`);
-    return _result('needs_artifacts', trace, stepsRun, agentCalls, artifactsWritten, artifactsSkipped, maxSteps, maxAgentCalls);
+    return _result('needs_artifacts', trace, stepsRun, agentCalls, artifactsWritten, artifactsSkipped, maxSteps, maxAgentCalls, { retries_attempted: retriesAttempted, patch_application: patchApplication });
 
   } finally {
     fs.mkdirSync = origMkdirSync;
@@ -656,14 +719,14 @@ function runAutonomous(runFolder, options = {}) {
   }
 }
 
-function _result(finalAction, trace, stepsRun, agentCalls, artifactsWritten, artifactsSkipped, maxSteps, maxAgentCalls) {
+function _result(finalAction, trace, stepsRun, agentCalls, artifactsWritten, artifactsSkipped, maxSteps, maxAgentCalls, extras) {
   // Safety: verify runs/ unchanged
   const runsDir = safePath('runs');
   const runsDirsAfter = snapshotDir(runsDir);
   // Note: We can't compare to 'before' from this scope directly, but the
   // caller (cmdRunNextAutonomous) does the final assertion. This is a helper.
 
-  return {
+  const result = {
     action: 'autonomous_complete',
     final_action: finalAction,
     steps_run: stepsRun,
@@ -674,6 +737,14 @@ function _result(finalAction, trace, stepsRun, agentCalls, artifactsWritten, art
     artifacts_skipped: artifactsSkipped,
     trace,
   };
+
+  // Phase 6 fields
+  if (extras) {
+    if (extras.retries_attempted !== undefined) result.retries_attempted = extras.retries_attempted;
+    if (extras.patch_application !== undefined) result.patch_application = extras.patch_application;
+  }
+
+  return result;
 }
 
 // ---------------------------------------------------------------------------

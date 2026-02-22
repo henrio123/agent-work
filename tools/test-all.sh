@@ -65,6 +65,10 @@ SUITES=(
   "$TESTS_DIR/test-agent-actuation.js"
   "$TESTS_DIR/test-drive-loop-js.js"
   "$TESTS_DIR/test-dashboard-phase5.js"
+  "$TESTS_DIR/test-dashboard-phase6.js"
+  "$TESTS_DIR/test-adapter-prompt-builder.js"
+  "$TESTS_DIR/test-validation-retry.js"
+  "$TESTS_DIR/test-auto-patch.js"
 )
 
 total_passed=0

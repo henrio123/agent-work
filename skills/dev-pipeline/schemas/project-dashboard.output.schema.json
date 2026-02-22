@@ -172,7 +172,11 @@
         "adaptive_loop_status": {
           "type": "string",
           "enum": ["available", "unavailable"]
-        }
+        },
+        "template_enrichment_enabled": { "type": "boolean" },
+        "artifact_context_enabled": { "type": "boolean" },
+        "retry_loop_enabled": { "type": "boolean" },
+        "auto_patch_enabled": { "type": "boolean" }
       }
     }
   }

@@ -310,6 +310,24 @@ function buildDashboard(options = {}) {
     summary.adaptive_loop_status = 'available';
   } catch { /* Not available */ }
 
+  // Phase 6: template enrichment, artifact context, retry loop, auto-patch
+  summary.template_enrichment_enabled = false;
+  summary.artifact_context_enabled = false;
+  summary.retry_loop_enabled = false;
+  summary.auto_patch_enabled = false;
+
+  try {
+    const apb = require(path.resolve(__dirname, 'adapter-prompt-builder.js'));
+    if (typeof apb.buildAdapterPrompt === 'function') summary.template_enrichment_enabled = true;
+    if (typeof apb.buildArtifactContext === 'function') summary.artifact_context_enabled = true;
+    if (typeof apb.buildRetryPrompt === 'function') summary.retry_loop_enabled = true;
+  } catch { /* Not available */ }
+
+  try {
+    const adp = require(path.resolve(__dirname, 'apply-dev-patch.js'));
+    if (typeof adp.applyDevPatch === 'function') summary.auto_patch_enabled = true;
+  } catch { /* Not available */ }
+
   // Find last self-evaluation from agent memory
   try {
     const memMod = getAgentMemoryModule();

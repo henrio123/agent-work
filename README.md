@@ -69,7 +69,8 @@ A stage advances only when all required artifacts exist and pass schema validati
 | **Level 2** | Structured multi-agent execution | Done |
 | **Level 3** | Autonomous org with memory | Done |
 | **Level 4** | Self-improving AI organization | Done |
-| **Level 5** | Closed-loop adaptive execution | **Current** |
+| **Level 5** | Closed-loop adaptive execution | Done |
+| **Level 6** | Template-enriched agent execution | **Current** |
 
 ### Level 2 (Current) — What's Done
 
@@ -134,6 +135,18 @@ The system provides deterministic multi-agent pipeline execution with full schem
 | Adaptive JS drive loop | Adaptive sleep, post-run hooks, project filtering, graceful stop conditions | DONE |
 | Dashboard Phase 5 fields | Last evaluation, hooks status, loop status in dashboard summary | DONE |
 
+### Level 6 — What's Done
+
+**Phase 6 (Template-Enriched Agent Execution) — Complete.**
+
+| Milestone | Description | Status |
+|-----------|-------------|--------|
+| Template-enriched prompt | `buildAdapterPrompt()` reads stage task files, includes GOAL/STEPS/OUTPUT instructions | DONE |
+| Prior artifact context | `buildArtifactContext()` reads and injects prior artifact content into prompt | DONE |
+| Validation retry loop | `buildRetryPrompt()` provides error feedback, adapter retries up to `maxRetries` times | DONE |
+| Auto-patch application | Post-implement hook applies `40-dev-patch.diff` via `applyDevPatch()` (dry-run first) | DONE |
+| Dashboard Phase 6 fields | 4 feature flags in dashboard summary | DONE |
+
 ---
 
 ## Features
@@ -177,7 +190,11 @@ The system provides deterministic multi-agent pipeline execution with full schem
 - Agent assignment actuation (recommended_agent flows pick → drive → runner → prompt)
 - Adaptive JS drive loop (adaptive sleep, hooks, project filter, graceful stop)
 - Dashboard Phase 5 summary (last evaluation, hooks status, loop status)
-- GitHub Actions CI (1040+ tests, 58 suites)
+- Template-enriched agent prompt (stage task files, prior artifact context, retry feedback)
+- Validation retry loop (maxRetries with error feedback to agent)
+- Auto-patch application (post-implement dry-run + apply, non-fatal)
+- Dashboard Phase 6 feature flags
+- GitHub Actions CI (1090+ tests, 62 suites)
 - Zero external npm dependencies
 
 ---
@@ -193,19 +210,20 @@ The system provides deterministic multi-agent pipeline execution with full schem
 ├── skills/
 │   ├── dev-pipeline/
 │   │   ├── SKILL.md                 # Comprehensive operational reference
-│   │   ├── scripts/                 # 33+ Node.js implementation files
+│   │   ├── scripts/                 # 34+ Node.js implementation files
 │   │   │   ├── dev-pipeline.js      # Core pipeline engine (state machine, schema validation, stage gates)
 │   │   │   ├── capability-registry.js # Capability loader, stage injection, template/schema resolution
 │   │   │   ├── goal-selector.js     # Deterministic intent + stack → capability mapping
 │   │   │   ├── create-mission.js    # CLI: goal → mission + capabilities.json
-│   │   │   ├── autonomous-runner.js # Multi-agent autonomous execution loop
+│   │   │   ├── autonomous-runner.js # Multi-agent autonomous execution loop (Phase 6: template-enriched)
+│   │   │   ├── adapter-prompt-builder.js # Template-enriched prompt assembly (Phase 6)
 │   │   │   ├── project-next-pick.js # Deterministic task picker
 │   │   │   ├── project-next-drive.js # One-shot project driver with preflight validation
 │   │   │   ├── validate-backlog-graph.js  # DAG validator (cycles, parents, epic completion)
 │   │   │   └── ...                  # Index, dashboard, task-pack, ticket-store, agent-state
 │   │   ├── schemas/                 # 26 JSON Schema files (input + output schemas)
 │   │   ├── references/              # 7 artifact schemas (pm-brief, arch-design, dev-notes, etc.)
-│   │   └── tests/                   # 58 test suites, ~1040 tests
+│   │   └── tests/                   # 62 test suites, ~1090 tests
 │   └── capabilities/               # Pluggable capability extensions
 │       ├── ux_audit/                # UX audit stage (after analyze)
 │       ├── security_audit/          # Security audit stage (after analyze)
@@ -245,7 +263,7 @@ The system provides deterministic multi-agent pipeline execution with full schem
 bash tools/test-all.sh
 ```
 
-Expected output: `TOTAL: N passed, 0 failed (58 suites)` (N ~1040)
+Expected output: `TOTAL: N passed, 0 failed (62 suites)` (N ~1090)
 
 ### Initialize a Target Repo
 
@@ -351,7 +369,7 @@ Timestamps and git HEAD are the only sources of non-determinism.
 
 ### Testing Strategy
 
-- **58 test suites** with **~1040 individual tests** covering:
+- **62 test suites** with **~1090 individual tests** covering:
   - State machine transitions and gate enforcement
   - Schema validation round-trips for all artifact types
   - Picker determinism and graph-aware constraint enforcement
@@ -488,3 +506,8 @@ git status
 - [x] Phase 5: Agent assignment actuation (recommended_agent pick → drive → runner)
 - [x] Phase 5: Adaptive JS drive loop (sleep, hooks, project filter, stop conditions)
 - [x] Phase 5: Dashboard closed-loop status fields
+- [x] Phase 6: Template-enriched adapter prompt (stage task files as primary instructions)
+- [x] Phase 6: Prior artifact context injection (STAGE_ARTIFACT_DEPS, per-artifact truncation)
+- [x] Phase 6: Validation retry loop (maxRetries with error feedback)
+- [x] Phase 6: Post-implement auto-patch application (dry-run first, non-fatal)
+- [x] Phase 6: Dashboard feature flags (4 booleans)
