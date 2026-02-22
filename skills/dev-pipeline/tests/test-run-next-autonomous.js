@@ -16,6 +16,8 @@ const DP = path.resolve(__dirname, '..', 'scripts', 'dev-pipeline.js');
 const WORKSPACE_ROOT = process.env.WORKSPACE_ROOT || path.resolve(os.homedir(), 'dev', 'agent-work');
 const RUNS_DIR = path.join(WORKSPACE_ROOT, '.claw', 'runs');
 fs.mkdirSync(RUNS_DIR, { recursive: true });
+const baselineRuns = new Set(fs.readdirSync(RUNS_DIR, { withFileTypes: true })
+  .filter((e) => e.isDirectory()).map((e) => e.name));
 
 // Import autonomous runner and pipeline for direct function testing
 const { runAutonomous, scaffoldAdapter, validateDraft, AUDIT_FILENAME, STOP_FILENAME } = require(path.resolve(__dirname, '..', 'scripts', 'autonomous-runner.js'));
@@ -306,10 +308,9 @@ test('no new run folders created outside test dirs', () => {
   const allRuns = fs.readdirSync(RUNS_DIR, { withFileTypes: true })
     .filter((e) => e.isDirectory())
     .map((e) => e.name);
-  const nonTest = allRuns.filter((n) => !n.startsWith('_test_'));
-  // After all tests, non-test run count should not have grown
-  if (nonTest.length > 0) {
-    throw new Error(`unexpected non-test runs: ${nonTest.join(', ')}`);
+  const newNonTest = allRuns.filter((n) => !n.startsWith('_test_') && !baselineRuns.has(n));
+  if (newNonTest.length > 0) {
+    throw new Error(`unexpected non-test runs: ${newNonTest.join(', ')}`);
   }
 });
 

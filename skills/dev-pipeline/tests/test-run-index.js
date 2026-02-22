@@ -14,6 +14,8 @@ const os = require('node:os');
 const WORKSPACE_ROOT = process.env.WORKSPACE_ROOT || path.resolve(os.homedir(), 'dev', 'agent-work');
 const RUNS_DIR = path.join(WORKSPACE_ROOT, '.claw', 'runs');
 fs.mkdirSync(RUNS_DIR, { recursive: true });
+const baselineRuns = new Set(fs.readdirSync(RUNS_DIR, { withFileTypes: true })
+  .filter((e) => e.isDirectory()).map((e) => e.name));
 const INDEX_SCRIPT = path.resolve(__dirname, '..', 'scripts', 'run-index.js');
 const INDEX_SHELL = path.join(WORKSPACE_ROOT, 'tools', 'run-index.sh');
 
@@ -312,10 +314,9 @@ test('no new run folders created', () => {
   const allRuns = fs.readdirSync(RUNS_DIR, { withFileTypes: true })
     .filter((e) => e.isDirectory())
     .map((e) => e.name);
-  const nonTest = allRuns.filter((n) => !n.startsWith('_test_'));
-  const originals = nonTest.filter((n) => n.includes('OC-07') || n.includes('OC-08'));
-  if (originals.length !== nonTest.length) {
-    throw new Error(`unexpected non-test runs: ${nonTest.filter(n => !n.includes('OC-07') && !n.includes('OC-08')).join(', ')}`);
+  const newNonTest = allRuns.filter((n) => !n.startsWith('_test_') && !baselineRuns.has(n));
+  if (newNonTest.length > 0) {
+    throw new Error(`unexpected non-test runs: ${newNonTest.join(', ')}`);
   }
 });
 
