@@ -88,13 +88,13 @@ test('creates mission JSON and capabilities.json for UX goal', () => {
   assert.deepStrictEqual(caps.capabilities, ['ux_audit']);
 });
 
-test('creates mission with security capability for CosmWasm', () => {
-  const ws = makeWorkspace({ 'Cargo.toml': '[dependencies]\ncosmwasm-std = "1.0"' });
+test('creates mission with security capability for Solidity', () => {
+  const ws = makeWorkspace({ 'foundry.toml': '[profile.default]' });
   const result = runMission(ws, 'audit security vulnerabilities');
 
   assert.strictEqual(result.ok, true);
   assert.ok(result.capabilities.includes('security_audit'));
-  assert.strictEqual(result.stack, 'cosmwasm');
+  assert.strictEqual(result.stack, 'solidity');
 });
 
 test('creates mission with performance capability', () => {

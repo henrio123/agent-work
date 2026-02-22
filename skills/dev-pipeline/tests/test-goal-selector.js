@@ -144,10 +144,10 @@ test('detects Rust stack from Cargo.toml', () => {
   assert.strictEqual(result.stack, 'rust');
 });
 
-test('detects CosmWasm stack from Cargo.toml with cosmwasm', () => {
+test('Cargo.toml with cosmwasm dep detects as rust (no cosmwasm special-case)', () => {
   const dir = makeFixture({ 'Cargo.toml': '[dependencies]\ncosmwasm-std = "1.0"' });
   const result = detectStack(dir);
-  assert.strictEqual(result.stack, 'cosmwasm');
+  assert.strictEqual(result.stack, 'rust');
 });
 
 test('detects Solidity stack from foundry.toml', () => {
@@ -214,14 +214,14 @@ test('research + security intents select both capabilities (sorted)', () => {
   assert.deepStrictEqual(caps, ['research', 'security_audit']);
 });
 
-test('no intents + CosmWasm stack defaults to security_audit', () => {
-  const caps = selectCapabilities([], { stack: 'cosmwasm' });
+test('no intents + Solidity stack defaults to security_audit', () => {
+  const caps = selectCapabilities([], { stack: 'solidity' });
   assert.deepStrictEqual(caps, ['security_audit']);
 });
 
-test('no intents + Rust stack defaults to security_audit', () => {
+test('no intents + Rust stack returns empty (no default)', () => {
   const caps = selectCapabilities([], { stack: 'rust' });
-  assert.deepStrictEqual(caps, ['security_audit']);
+  assert.deepStrictEqual(caps, []);
 });
 
 test('no intents + Next.js stack returns empty (no default)', () => {
@@ -257,12 +257,12 @@ test('Next.js fixture with UX goal selects ux_audit', () => {
   assert.ok(mission.capabilities.includes('ux_audit'));
 });
 
-test('Rust/CosmWasm fixture with security goal selects security_audit', () => {
+test('Rust fixture with security goal selects security_audit', () => {
   const dir = makeFixture({
-    'Cargo.toml': '[dependencies]\ncosmwasm-std = "1.0"',
+    'Cargo.toml': '[dependencies]\nsome-crate = "1.0"',
   });
   const mission = createMission(dir, 'audit for security vulnerabilities');
-  assert.strictEqual(mission.stack.stack, 'cosmwasm');
+  assert.strictEqual(mission.stack.stack, 'rust');
   assert.ok(mission.intents.includes('security'));
   assert.ok(mission.capabilities.includes('security_audit'));
 });

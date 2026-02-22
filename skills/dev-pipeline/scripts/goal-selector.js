@@ -60,7 +60,6 @@ const STACK_SIGNALS = [
   { stack: 'vue', files: ['package.json'], test: (content) => /"vue"/.test(content) },
   { stack: 'angular', files: ['angular.json'] },
   { stack: 'rust', files: ['Cargo.toml'] },
-  { stack: 'cosmwasm', files: ['Cargo.toml'], test: (content) => /cosmwasm/.test(content) },
   { stack: 'solidity', files: ['foundry.toml', 'hardhat.config.js', 'hardhat.config.ts'] },
   { stack: 'python', files: ['pyproject.toml', 'setup.py', 'requirements.txt'] },
   { stack: 'go', files: ['go.mod'] },
@@ -99,8 +98,8 @@ function detectStack(workspaceRoot) {
   }
 
   // Determine primary stack (most specific wins)
-  // Priority: cosmwasm > solidity > nextjs > react > vue > angular > rust > python > go
-  const priority = ['cosmwasm', 'solidity', 'nextjs', 'react', 'vue', 'angular', 'rust', 'python', 'go'];
+  // Priority: solidity > nextjs > react > vue > angular > rust > python > go
+  const priority = ['solidity', 'nextjs', 'react', 'vue', 'angular', 'rust', 'python', 'go'];
   let primary = 'unknown';
   for (const s of priority) {
     if (stacks.has(s)) {
@@ -131,10 +130,7 @@ const STACK_CAPABILITY_MAP = {
   'react': { defaultIntents: [] },
   'vue': { defaultIntents: [] },
   // Smart contract stacks get security_audit by default
-  'cosmwasm': { defaultIntents: ['security'] },
   'solidity': { defaultIntents: ['security'] },
-  // Rust projects get security_audit by default
-  'rust': { defaultIntents: ['security'] },
 };
 
 /**

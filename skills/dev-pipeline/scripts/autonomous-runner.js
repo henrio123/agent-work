@@ -419,8 +419,8 @@ function runAutonomous(runFolder, options = {}) {
   const progress = createProgressLogger(progressEnabled);
   progress.header(runFolder);
 
-  // Safety: snapshot runs/ directory
-  const runsDir = safePath('runs');
+  // Safety: snapshot .claw/runs/ directory
+  const runsDir = safePath('.claw/runs');
   const runsDirsBefore = snapshotDir(runsDir);
 
   // Safety: snapshot run folder files
@@ -776,8 +776,8 @@ function runAutonomous(runFolder, options = {}) {
 }
 
 function _result(finalAction, trace, stepsRun, agentCalls, artifactsWritten, artifactsSkipped, maxSteps, maxAgentCalls, extras) {
-  // Safety: verify runs/ unchanged
-  const runsDir = safePath('runs');
+  // Safety: verify .claw/runs/ unchanged
+  const runsDir = safePath('.claw/runs');
   const runsDirsAfter = snapshotDir(runsDir);
   // Note: We can't compare to 'before' from this scope directly, but the
   // caller (cmdRunNextAutonomous) does the final assertion. This is a helper.

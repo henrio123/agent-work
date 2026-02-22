@@ -46,7 +46,7 @@ function normalizeStatus(s) {
 }
 
 function getAllRuns() {
-  const runsDir = safePath('runs');
+  const runsDir = safePath('.claw/runs');
   if (!fs.existsSync(runsDir)) return [];
   return fs.readdirSync(runsDir, { withFileTypes: true })
     .filter((e) => e.isDirectory())
@@ -216,7 +216,7 @@ const server = http.createServer((req, res) => {
   if (match) {
     const folder = decodeURIComponent(match[1]);
     try {
-      const runsDir = safePath('runs');
+      const runsDir = safePath('.claw/runs');
       const statusPath = path.join(runsDir, folder, 'status.json');
       if (!fs.existsSync(statusPath)) {
         res.writeHead(404, { 'Content-Type': 'application/json' });

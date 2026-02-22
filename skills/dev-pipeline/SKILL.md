@@ -977,11 +977,11 @@ Output:
 | Stack | Signal Files |
 |-------|-------------|
 | `nextjs` | `next.config.js`, `next.config.ts`, `next.config.mjs` |
-| `cosmwasm` | `Cargo.toml` with `cosmwasm-std` |
-| `rust` | `Cargo.toml` (without cosmwasm) |
-| `solidity` | `hardhat.config.*`, `foundry.toml`, `truffle-config.js` |
+| `rust` | `Cargo.toml` |
+| `solidity` | `hardhat.config.*`, `foundry.toml` |
 | `python` | `pyproject.toml`, `setup.py`, `requirements.txt` |
-| `generic` | fallback |
+| `go` | `go.mod` |
+| `unknown` | fallback |
 
 ## Schemas
 
@@ -1101,7 +1101,7 @@ node skills/dev-pipeline/tests/test-security-audit-e2e.js  # security audit capa
 node skills/dev-pipeline/tests/test-performance-audit-e2e.js # performance audit capability e2e tests (16 tests)
 ```
 
-**Total: 41 suites, 773 tests.**
+Run `bash tools/test-all.sh` for current totals.
 
 ## Security
 
