@@ -204,7 +204,7 @@
   │  ✓ Deterministic — same filesystem → same output                   │
   │  ✓ Role-enforced — wrong role cannot produce artifacts             │
   │  ✓ Capability system — extend without modifying core               │
-  │  ✓ 773 tests, 41 suites, 0 failures                               │
+  │  ✓ 1090 tests, 62 suites, 0 failures                              │
   └──────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -220,19 +220,19 @@
   │   ├── project-next-drive.sh     #   Project-level driver
   │   ├── project-dashboard.sh      #   Read-only dashboard JSON
   │   ├── dashboard-start.sh        #   HTTP UI on :18790
-  │   └── test-all.sh               #   773 tests, single gate
+  │   └── test-all.sh               #   1090 tests, single gate
   │
   ├── skills/
   │   ├── dev-pipeline/
-  │   │   ├── scripts/              # Core engine (25 modules)
+  │   │   ├── scripts/              # Core engine (37 modules)
   │   │   │   ├── dev-pipeline.js   #   State machine + stage config
   │   │   │   ├── capability-registry.js  # Capability loader
   │   │   │   ├── goal-selector.js  #   Intent → capability mapping
   │   │   │   ├── autonomous-runner.js    # Agent loop
   │   │   │   └── ...
-  │   │   ├── schemas/              # Tool I/O schemas (15)
+  │   │   ├── schemas/              # Tool I/O schemas (27)
   │   │   ├── references/           # Artifact schemas (7)
-  │   │   └── tests/                # Test suites (41)
+  │   │   └── tests/                # Test suites (62)
   │   │
   │   └── capabilities/             # Pluggable extensions
   │       ├── ux_audit/
@@ -267,8 +267,23 @@
   Epic hierarchy, dependency DAG,
   cycle detection, graph-aware picker
 
-  Phase 3: Knowledge & Artifact Layer  ░░░░░░░░░░░░░░░░░░░░  NEXT
+  Phase 3: Knowledge & Artifact Layer  ████████████████████  DONE
   ───────────────────────────────────
   Artifact classification, global index,
   research workflows, agent memory
+
+  Phase 4: Self-Improving AI Org       ████████████████████  DONE
+  ──────────────────────────────
+  Run analytics, self-evaluation,
+  workflow suggestions, gap scanner
+
+  Phase 5: Closed-Loop Adaptive        ████████████████████  DONE
+  ─────────────────────────────
+  Post-run hooks, adaptive prompts,
+  agent actuation, adaptive drive loop
+
+  Phase 6: Template-Enriched Exec      ████████████████████  CURRENT
+  ────────────────────────────────
+  Template prompts, artifact context,
+  validation retry, auto-patch
 ```

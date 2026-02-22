@@ -8,11 +8,11 @@ A deterministic, role-based orchestration system that turns unstructured AI work
 
 **Problem.** AI agents lose work. Conversations get compacted. Context windows overflow. Terminal scrollback disappears. There is no persistent record of what was decided, who did it, or why.
 
-**Solution.** This system replaces ad-hoc AI usage with a structured execution pipeline. Tickets enter the system. A deterministic scheduler picks the next task. A fixed sequence of role stages (PM, Architect, Dev, QA, Review) executes the work. Each stage produces schema-validated artifacts. Gates prevent advancement until quality checks pass. Everything is written to disk.
+**Solution.** This system replaces ad-hoc AI usage with a structured execution pipeline. Tickets enter the system. A deterministic scheduler picks the next task. A fixed sequence of role stages (Analyst, Architect, Dev, QA, Review) executes the work. Each stage produces schema-validated artifacts. Gates prevent advancement until quality checks pass. Everything is written to disk.
 
 **Typical outcomes:**
 - Every ticket has a complete audit trail from intake through review.
-- Role boundaries are enforced: a QA agent cannot write code, a PM cannot modify architecture.
+- Role boundaries are enforced: a QA agent cannot write code, an Analyst cannot modify architecture.
 - Schema validation catches structural errors before they propagate.
 - Work survives agent restarts, context compaction, and session loss.
 - The entire system runs on Node.js built-ins with zero npm dependencies.
@@ -55,7 +55,7 @@ Ticket  -->  Backlog Item  -->  Task Pack  -->  Run Creation  -->  Pipeline Stag
 | validate | QA | `50-qa-report.json` | `qa-report.schema.json` |
 | review | Review | `60-review-report.json` | `review-report.schema.json` |
 
-A stage advances only when all required artifacts exist and pass schema validation. Roles are enforced at runtime: a Dev agent cannot produce a PM brief.
+A stage advances only when all required artifacts exist and pass schema validation. Roles are enforced at runtime: a Dev agent cannot produce an Analyst brief.
 
 ---
 
@@ -72,7 +72,7 @@ A stage advances only when all required artifacts exist and pass schema validati
 | **Level 5** | Closed-loop adaptive execution | Done |
 | **Level 6** | Template-enriched agent execution | **Current** |
 
-### Level 2 (Current) — What's Done
+### Levels 1–2 — What's Done
 
 The system provides deterministic multi-agent pipeline execution with full schema enforcement, role boundaries, and a structured work graph.
 
@@ -94,8 +94,8 @@ The system provides deterministic multi-agent pipeline execution with full schem
 - Dashboard dependency chain visualization.
 
 **Hardening & Ops — Complete.**
-- `additionalProperties: false` enforced on all 20+ schemas (output, input, reference).
-- GitHub Actions CI gate running 980+ tests on every push and PR.
+- `additionalProperties: false` enforced on all 34 schemas (output, input, reference).
+- GitHub Actions CI gate running 1090+ tests on every push and PR.
 - Preflight graph validation before creating or driving runs.
 - Cron-friendly drive loop wrapper with safe stop.
 
@@ -154,7 +154,7 @@ The system provides deterministic multi-agent pipeline execution with full schem
 ### Implemented
 
 - Deterministic pipeline with 8-stage state machine (intake through done)
-- 5 role stages (PM, Architect, Dev, QA, Review) with enforced boundaries
+- 5 role stages (Analyst, Architect, Dev, QA, Review) with enforced boundaries
 - Schema-validated artifacts with `additionalProperties: false` on all schemas
 - Deterministic project scheduler with priority buckets and stable sort
 - One-shot and loop project drivers with preflight graph validation
@@ -174,7 +174,7 @@ The system provides deterministic multi-agent pipeline execution with full schem
 - Workspace bootstrap and patch application tools
 - Pluggable capability system (capability registry, manifest-driven stage injection)
 - Goal-driven mission layer (deterministic intent + stack detection, capability activation)
-- 3 capabilities: UX audit, security audit, performance audit
+- 4 capabilities: UX audit, security audit, performance audit, research
 - Artifact classification with semantic types and global artifact index
 - Research workflow with structured findings schema
 - Agent memory (append-only, schema-validated, cross-run)
@@ -206,11 +206,14 @@ The system provides deterministic multi-agent pipeline execution with full schem
 ├── docs/
 │   ├── ARCHITECTURE.md          # System design, state machine, determinism model, evolution roadmap
 │   ├── GOVERNANCE.md            # Golden rules: schema enforcement, testing, no external deps
-│   └── ux-spec-autonomous-runner.md  # CLI contract for autonomous runner
+│   ├── ux-spec-autonomous-runner.md  # CLI contract for autonomous runner
+│   ├── product-diagram.md       # System overview diagram
+│   ├── drift-report.md          # Domain leakage verification report
+│   └── phase{3,4,5,6}-plan.md   # Phase plan documents
 ├── skills/
 │   ├── dev-pipeline/
 │   │   ├── SKILL.md                 # Comprehensive operational reference
-│   │   ├── scripts/                 # 34+ Node.js implementation files
+│   │   ├── scripts/                 # 37 Node.js implementation files
 │   │   │   ├── dev-pipeline.js      # Core pipeline engine (state machine, schema validation, stage gates)
 │   │   │   ├── capability-registry.js # Capability loader, stage injection, template/schema resolution
 │   │   │   ├── goal-selector.js     # Deterministic intent + stack → capability mapping
@@ -221,13 +224,14 @@ The system provides deterministic multi-agent pipeline execution with full schem
 │   │   │   ├── project-next-drive.js # One-shot project driver with preflight validation
 │   │   │   ├── validate-backlog-graph.js  # DAG validator (cycles, parents, epic completion)
 │   │   │   └── ...                  # Index, dashboard, task-pack, ticket-store, agent-state
-│   │   ├── schemas/                 # 26 JSON Schema files (input + output schemas)
+│   │   ├── schemas/                 # 27 JSON Schema files (input + output schemas)
 │   │   ├── references/              # 7 artifact schemas (pm-brief, arch-design, dev-notes, etc.)
 │   │   └── tests/                   # 62 test suites, ~1090 tests
 │   └── capabilities/               # Pluggable capability extensions
 │       ├── ux_audit/                # UX audit stage (after analyze)
 │       ├── security_audit/          # Security audit stage (after analyze)
-│       └── performance_audit/       # Performance audit stage (after analyze)
+│       ├── performance_audit/       # Performance audit stage (after analyze)
+│       └── research/               # Research workflow (after analyze)
 ├── tools/                       # shell wrappers (the public CLI surface)
 │   ├── dp.sh                    # Main CLI entry point
 │   ├── create-mission.sh        # Goal → capability activation
@@ -487,7 +491,7 @@ git status
 - [x] Pluggable capability system with manifest-driven stage injection
 - [x] Goal-driven mission layer (deterministic intent + stack detection)
 - [x] 3 capabilities: UX audit, security audit, performance audit
-- [x] GitHub Actions CI (1040+ tests, 58 suites, 0 failures)
+- [x] GitHub Actions CI (1090+ tests, 62 suites, 0 failures)
 - [x] `additionalProperties: false` on all schemas (governance rule enforced)
 - [x] Cron-friendly drive loop with safe stop
 - [x] Zero external dependencies

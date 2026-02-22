@@ -106,7 +106,7 @@ Each run folder contains:
 - `00-intake.json` — initial ticket context.
 - `run-manifest.json` — ticket_id, created_at, tool_version, schema_version, git_head.
 - `30-dev-claude-task.txt` — generated task pack for the base stage.
-- `3N-<role>-claude-task.txt` — role-specific task files (31 PM, 32 Architect, 33 Dev, 34 QA, 35 Review).
+- `3N-<stage>-task.txt` — role-specific task files (31 analyze, 32 plan, 33 implement, 34 validate, 35 review).
 - Pipeline artifacts: `10-pm-brief.json`, `20-arch-design.json`, `40-dev-patch.diff`, `41-dev-notes.json`, `50-qa-report.json`, `60-review-report.json`.
 - Optional: `.stop` file (stop signal), `autonomous-audit.jsonl` (audit log).
 
@@ -336,7 +336,7 @@ The primary extension mechanism. New audit/analysis stages are added as capabili
 3. Add artifact schema in `skills/capabilities/<name>/references/`.
 4. Activate in workspace via `.claw/capabilities.json`.
 
-Three capabilities ship with the engine: `ux_audit`, `security_audit`, `performance_audit`. All inject after `analyze` and before `plan`.
+Four capabilities ship with the engine: `ux_audit`, `security_audit`, `performance_audit`, and `research`. The first three inject after `analyze` and before `plan`. The `research` capability injects between `analyze` and `plan` for research-type workflows.
 
 **Adding goal-selector support:** Update `parseIntents()` in `goal-selector.js` with keyword patterns, and `selectCapabilities()` with the intent→capability mapping.
 
@@ -357,7 +357,7 @@ This section defines the multi-phase evolution plan for the system. It is the au
 The system currently provides:
 
 - A deterministic run engine that moves tickets through a fixed sequence of role stages (`intake` through `done`).
-- A multi-stage pipeline with five role stages (PM, Architect, Dev, QA, Review), each gated by schema-validated artifacts.
+- A multi-stage pipeline with five role stages (Analyst, Architect, Dev, QA, Review), each gated by schema-validated artifacts.
 - A pluggable capability system (`capability-registry.js`) that injects additional stages (UX audit, security audit, performance audit) into the pipeline via manifest-driven configuration. No core engine changes required to add new capabilities.
 - A goal-driven mission layer (`goal-selector.js`, `create-mission.js`) that translates natural-language goals into deterministic capability activation using keyword matching and stack detection.
 - An external workspace model where all state lives in `<target-repo>/.claw/` (project.json, agents.json, capabilities.json, missions/, backlog/, runs/, tickets/, etc.).

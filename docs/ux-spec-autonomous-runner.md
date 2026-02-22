@@ -147,7 +147,7 @@ The autonomous runner is fully idempotent. Rerunning the same command on the sam
 # First run: writes analysis brief, stops at plan needs_artifacts
 ./tools/run-next-autonomous.sh runs/20260218_150000_TICKET-1
 
-# Second run: skips PM brief (exists), writes arch design, continues
+# Second run: skips Analyst brief (exists), writes arch design, continues
 ./tools/run-next-autonomous.sh runs/20260218_150000_TICKET-1
 ```
 
