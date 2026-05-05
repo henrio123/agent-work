@@ -21,6 +21,35 @@ A deterministic, role-based orchestration system that turns unstructured AI work
 
 ---
 
+## Scope and Limits
+
+What this is, stated honestly:
+
+- **Local-only execution.** Every tool runs against a workspace on the local
+  filesystem. There is no hosted service, no managed runner, no scheduled
+  execution beyond the optional cron-friendly drive loop.
+- **Filesystem-as-API by design.** No database, no queue, no HTTP service surface
+  except the optional read-only dashboard bound to `127.0.0.1`. State is files.
+- **Not a vector store or semantic RAG.** Context retrieval for task packs is
+  filename-, schema-, and graph-based. There is no embedding store.
+- **Not LangChain, LangGraph, or MCP.** The orchestrator drives an agent adapter
+  (the Claude CLI) directly via subprocess. No agent-framework dependency.
+- **The orchestrator dispatches; the LLM does not pick tools.** Stage transitions
+  and tool dispatch are deterministic. The LLM authors artifacts; it does not
+  decide what runs next.
+- **No token or cost telemetry yet.** Stage durations and an append-only audit log
+  are written; per-call token accounting is not.
+- **Single-machine.** Distributed execution is out of scope at the current
+  maturity level.
+
+Run validation at any point with `bash tools/test-all.sh`. Zero failures expected.
+
+For the full design — state machine, determinism model, failure modes — see
+[`ARCHITECTURE.md`](./ARCHITECTURE.md) (overview) and
+[`docs/ARCHITECTURE_DETAILED.md`](./docs/ARCHITECTURE_DETAILED.md) (full).
+
+---
+
 ## How It Works
 
 ### Key Concepts
@@ -223,8 +252,10 @@ The system provides deterministic multi-agent pipeline execution with full schem
 
 ```
 .
+├── ARCHITECTURE.md              # Concise architecture overview (links to detailed)
+├── LICENSE                      # MIT
 ├── docs/
-│   ├── ARCHITECTURE.md          # System design, state machine, determinism model, evolution roadmap
+│   ├── ARCHITECTURE_DETAILED.md # System design, state machine, determinism model, evolution roadmap
 │   ├── GOVERNANCE.md            # Golden rules: schema enforcement, testing, no external deps
 │   ├── ux-spec-autonomous-runner.md  # CLI contract for autonomous runner
 │   ├── product-diagram.md       # System overview diagram
@@ -266,10 +297,29 @@ The system provides deterministic multi-agent pipeline execution with full schem
 ├── openclaw/                    # OpenClaw integration docs and example config
 ├── templates/                   # Core role-specific task pack templates
 ├── .github/workflows/test.yml   # CI: runs test-all.sh on push and PR
-├── SOUL.md                      # Agent personality and principles
+├── SOUL.md                      # Workspace agent contract: principles
+├── BOOTSTRAP.md                 # Workspace agent contract: first-run init
+├── HEARTBEAT.md                 # Workspace agent contract: periodic-check marker
+├── IDENTITY.md                  # Workspace agent contract: identity template
+├── USER.md                      # Workspace agent contract: facts about the human
+├── TOOLS.md                     # Workspace agent contract: local environment notes
 ├── SECURITY.md                  # Security boundaries and access controls
-└── AGENTS.md                    # Workspace orientation for agents
+└── AGENTS.md                    # Workspace orientation for agents (industry standard)
 ```
+
+### Workspace Agent Contracts
+
+The seven root markdown files (`AGENTS.md`, `BOOTSTRAP.md`, `HEARTBEAT.md`,
+`IDENTITY.md`, `SOUL.md`, `USER.md`, `TOOLS.md`) are operating instructions for an
+agent — for example Claude Code — that **visits this workspace as a personal
+assistant**. They are intentionally kept at the workspace root because the
+`AGENTS.md` contract instructs the visiting agent to read them by bare name.
+
+**This is a separate concern from the dev-pipeline orchestrator** described in
+this README. The orchestrator's roles, schemas, and execution surface live in
+`agents.json`, `skills/dev-pipeline/`, and `tools/`. The orchestrator does not
+read `SOUL.md`, `IDENTITY.md`, or `USER.md`. The two layers coexist in the same
+repository but solve different problems.
 
 ---
 
@@ -542,3 +592,9 @@ git status
 - [x] Phase 7: `recommendAgent` fallback in project driver
 - [x] Phase 7: Claude adapter mock-based test coverage
 - [x] Phase 7: Dashboard feature flags
+
+---
+
+## License
+
+MIT — see [`LICENSE`](./LICENSE).
