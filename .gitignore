@@ -3,3 +3,8 @@ node_modules/
 *.log
 .claw/
 tools/.state/
+
+# Local environment
+.env
+.env.*
+!.env.example
