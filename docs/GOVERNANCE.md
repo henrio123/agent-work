@@ -57,7 +57,7 @@ A ticket is done when all of the following are true:
 ## 4. Documentation Update Rules
 
 1. `skills/dev-pipeline/SKILL.md` is the operational reference. Update it when adding tools, commands, schemas, or changing behavior.
-2. `docs/ARCHITECTURE.md` is the structural reference. Update it when adding new concepts, changing the filesystem layout, or modifying the state machine.
+2. `docs/ARCHITECTURE_DETAILED.md` is the structural reference. Update it when adding new concepts, changing the filesystem layout, or modifying the state machine.
 3. `docs/GOVERNANCE.md` is this file. Update it when changing process rules.
 4. Do not add inline documentation that duplicates what is already in these files.
 5. Test counts in SKILL.md are informational. Update them when adding test files.

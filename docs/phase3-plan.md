@@ -4,7 +4,7 @@
 **Date:** 2026-02-21
 **Status:** Draft — pending team review
 **Baseline:** 773 tests, 41 suites, 25 core scripts, 3 capabilities
-**Governance:** All work subject to `docs/ARCHITECTURE.md` Phase 3 stop conditions
+**Governance:** All work subject to `docs/ARCHITECTURE_DETAILED.md` Phase 3 stop conditions
 
 ---
 

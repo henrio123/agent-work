@@ -31,7 +31,7 @@ Phase 6 closes four gaps in the autonomous pipeline:
 | `skills/dev-pipeline/scripts/project-dashboard.js` | Computes 4 Phase 6 feature flags |
 | `skills/dev-pipeline/schemas/project-dashboard.output.schema.json` | Added `template_enrichment_enabled`, `artifact_context_enabled`, `retry_loop_enabled`, `auto_patch_enabled` |
 | `tools/test-all.sh` | Registered 4 new test suites |
-| `docs/ARCHITECTURE.md` | Phase 6 section |
+| `docs/ARCHITECTURE_DETAILED.md` | Phase 6 section |
 | `README.md` | Updated Level 6 status |
 
 ## Key Design Decisions

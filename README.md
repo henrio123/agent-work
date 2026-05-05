@@ -426,7 +426,7 @@ Timestamps and git HEAD are the only sources of non-determinism.
 
 | Document | Purpose |
 |----------|---------|
-| `docs/ARCHITECTURE.md` | System design, state machine, determinism model, and evolution roadmap. Single source of truth for phase scope and stop conditions. |
+| `ARCHITECTURE.md` / `docs/ARCHITECTURE_DETAILED.md` | Concise overview at the root; full design, state machine, determinism model, and evolution roadmap in the detailed doc. Single source of truth for phase scope and stop conditions. |
 | `docs/GOVERNANCE.md` | Golden rules: every change tied to a ticket, every JSON has a schema, every schema has tests, no external dependencies. |
 | `skills/dev-pipeline/SKILL.md` | Operational reference for all tools, commands, schemas, and behaviors. |
 | `.claw/tickets/<ticket_id>.md` | Individual ticket definitions with goals, steps, and acceptance criteria. |
@@ -445,7 +445,7 @@ Timestamps and git HEAD are the only sources of non-determinism.
 - Only one phase may be active at a time.
 - A phase is complete when every stop condition evaluates to true.
 - Every ticket must reference its phase.
-- `docs/ARCHITECTURE.md` is the single source of truth for phase scope. Conflicts between tickets and the architecture doc are resolved in favor of the architecture doc.
+- `docs/ARCHITECTURE_DETAILED.md` is the single source of truth for phase scope. Conflicts between tickets and the architecture doc are resolved in favor of the architecture doc.
 
 ---
 

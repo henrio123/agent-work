@@ -624,7 +624,7 @@ Close the loop from "patch applied" to "backlog item done." Phase 6 stopped at a
 2. A phase is complete when every stop condition listed in its section evaluates to true. Partial completion does not count.
 3. Every ticket must explicitly reference the phase it belongs to (e.g. "Phase 1" in the ticket title or body). Tickets that do not reference a phase are out of scope.
 4. No features outside the declared phase scope. If a ticket introduces functionality that belongs to a later phase, it must be rejected and rewritten.
-5. This section of `docs/ARCHITECTURE.md` is the single source of truth for phase scope and stop conditions. Conflicts between tickets and this document are resolved in favor of this document.
+5. This section of `docs/ARCHITECTURE_DETAILED.md` is the single source of truth for phase scope and stop conditions. Conflicts between tickets and this document are resolved in favor of this document.
 
 ## Evolution Roadmap Version
 
